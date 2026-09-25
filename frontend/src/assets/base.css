@@ -1,0 +1,122 @@
+@import 'tailwindcss';
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+:root {
+  --app-bg: #f9fafb;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f3f4f6;
+  --app-border: #e5e7eb;
+  --app-text: #111827;
+  --app-text-muted: #6b7280;
+}
+
+[data-color-scheme='dark'] {
+  --app-bg: #09090b;
+  --app-surface: #18181b;
+  --app-surface-muted: #27272a;
+  --app-border: #3f3f46;
+  --app-text: #f4f4f5;
+  --app-text-muted: #a1a1aa;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--app-text);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+[data-color-scheme='dark'] .bg-white {
+  background-color: var(--app-surface) !important;
+}
+
+[data-color-scheme='dark'] .bg-gray-50,
+[data-color-scheme='dark'] .bg-gray-100,
+[data-color-scheme='dark'] .disabled\:bg-gray-100:disabled {
+  background-color: var(--app-surface-muted) !important;
+}
+
+[data-color-scheme='dark'] .bg-red-50 {
+  background-color: #450a0a !important;
+}
+
+[data-color-scheme='dark'] .bg-blue-100 {
+  background-color: #1e3a5f !important;
+}
+
+[data-color-scheme='dark'] .text-gray-900,
+[data-color-scheme='dark'] .text-gray-800,
+[data-color-scheme='dark'] .text-gray-700,
+[data-color-scheme='dark'] .text-gray-600 {
+  color: var(--app-text) !important;
+}
+
+[data-color-scheme='dark'] .text-gray-500,
+[data-color-scheme='dark'] .text-gray-400 {
+  color: var(--app-text-muted) !important;
+}
+
+[data-color-scheme='dark'] .border-gray-100,
+[data-color-scheme='dark'] .border-gray-200,
+[data-color-scheme='dark'] .border-gray-300,
+[data-color-scheme='dark'] .border {
+  border-color: var(--app-border) !important;
+}
+
+[data-color-scheme='dark'] .divide-gray-100 > :not(:last-child) {
+  border-color: var(--app-border) !important;
+}
+
+[data-color-scheme='dark'] .hover\:bg-gray-50:hover,
+[data-color-scheme='dark'] .hover\:bg-gray-100:hover {
+  background-color: #3f3f46 !important;
+}
+
+[data-color-scheme='dark'] .hover\:text-gray-600:hover,
+[data-color-scheme='dark'] .hover\:text-gray-700:hover,
+[data-color-scheme='dark'] .hover\:text-gray-800:hover {
+  color: #ffffff !important;
+}
+
+[data-color-scheme='dark'] input:not([type='checkbox']):not([type='radio']):not([type='color']),
+[data-color-scheme='dark'] select,
+[data-color-scheme='dark'] textarea {
+  background-color: #18181b;
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+[data-color-scheme='dark'] input::placeholder,
+[data-color-scheme='dark'] textarea::placeholder {
+  color: #71717a;
+}
+
+[data-color-scheme='dark'] input:-webkit-autofill,
+[data-color-scheme='dark'] input:-webkit-autofill:hover,
+[data-color-scheme='dark'] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--app-text);
+  box-shadow: 0 0 0 1000px #18181b inset;
+}
+
+[data-color-scheme='dark'] code {
+  color: #e4e4e7;
+}
+
+[data-color-scheme='dark'] .modal-backdrop {
+  background-color: rgb(0 0 0 / 0.78) !important;
+}
+
+[data-color-scheme='dark'] .modal-panel {
+  border-color: #52525b !important;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.75);
+}
+
+[data-color-scheme='dark'] .shadow-sm,
+[data-color-scheme='dark'] .shadow-lg,
+[data-color-scheme='dark'] .shadow-xl,
+[data-color-scheme='dark'] .shadow-2xl {
+  --tw-shadow-color: rgb(0 0 0 / 0.55);
+}
