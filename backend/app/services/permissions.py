@@ -1,3 +1,5 @@
+from fastapi import HTTPException, status
+
 from app.models import Calendar, CalendarMember, Role
 
 
@@ -21,9 +23,17 @@ def get_membership(db, calendar_id: str, user_id: str) -> CalendarMember | None:
 
 
 def require_membership(db, calendar_id: str, user_id: str) -> CalendarMember:
+    calendar = db.query(Calendar).filter(Calendar.id == calendar_id).first()
+    if calendar is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Calendar not found"
+        )
     member = get_membership(db, calendar_id, user_id)
     if member is None:
-        raise PermissionError("Not a member of this calendar")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this calendar",
+        )
     return member
 
 

@@ -34,6 +34,10 @@ const weekdayChoices = [
   { value: 5, key: 'friday' },
   { value: 6, key: 'saturday' },
 ]
+const orderedWeekendChoices = computed(() => [
+  ...weekdayChoices.slice(settings.value.default_first_weekday),
+  ...weekdayChoices.slice(0, settings.value.default_first_weekday),
+])
 const users = ref<api.AdminUser[]>([])
 const busy = ref(false)
 const message = ref('')
@@ -58,7 +62,7 @@ async function load() {
   try {
     busy.value = true
     const [_, u] = await Promise.all([
-      settingsStore.load(auth.token),
+      settingsStore.load(),
       api.listAdminUsers(auth.token),
     ])
     if (settingsStore.settings) {
@@ -325,7 +329,7 @@ const isCurrentUser = computed(() => {
           <span class="block text-sm font-medium text-gray-800 mb-2">{{ $t('app.weekendDays') }}</span>
           <div class="flex flex-wrap gap-2">
             <button
-              v-for="day in weekdayChoices"
+              v-for="day in orderedWeekendChoices"
               :key="day.value"
               type="button"
               @click="toggleDefaultWeekendDay(day.value)"

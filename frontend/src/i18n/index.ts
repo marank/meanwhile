@@ -182,6 +182,10 @@ const messages = {
       reject: 'Reject',
       cancel: 'Cancel',
     },
+    approvals: {
+      noPending: 'No pending approvals.',
+      resource: 'Resource',
+    },
   },
   de: {
     app: {
@@ -363,6 +367,10 @@ const messages = {
       approve: 'Genehmigen',
       reject: 'Ablehnen',
       cancel: 'Stornieren',
+    },
+    approvals: {
+      noPending: 'Keine ausstehenden Freigaben.',
+      resource: 'Ressource',
     },
   },
 }

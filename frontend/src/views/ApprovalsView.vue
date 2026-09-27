@@ -15,15 +15,25 @@ async function load() {
 }
 
 async function approve(event: api.Event) {
-  if (!auth.token) return
-  await api.approveEvent(auth.token, event.id)
-  await load()
+  if (!auth.token || busy.value) return
+  busy.value = true
+  try {
+    await api.approveEvent(auth.token, event.id)
+    await load()
+  } finally {
+    busy.value = false
+  }
 }
 
 async function reject(event: api.Event) {
-  if (!auth.token) return
-  await api.rejectEvent(auth.token, event.id)
-  await load()
+  if (!auth.token || busy.value) return
+  busy.value = true
+  try {
+    await api.rejectEvent(auth.token, event.id)
+    await load()
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 
@@ -31,7 +41,7 @@ async function reject(event: api.Event) {
   <div class="max-w-3xl mx-auto p-6">
     <h1 class="text-2xl font-bold text-gray-800 mb-4">{{ $t('app.approvals') }}</h1>
     <div v-if="events.length === 0" class="text-gray-500 bg-white rounded-xl border border-gray-200 p-8 text-center">
-      No pending approvals.
+      {{ $t('approvals.noPending') }}
     </div>
     <ul v-else class="space-y-3">
       <li v-for="event in events" :key="event.id" class="bg-white rounded-xl border border-gray-200 p-4">
@@ -42,7 +52,7 @@ async function reject(event: api.Event) {
               {{ new Date(event.start).toLocaleString() }} — {{ new Date(event.end).toLocaleString() }}
             </p>
             <p class="text-sm text-gray-600 mt-1">
-              Resource: {{ event.resource_name || '—' }} · Calendar: {{ event.calendar_id }}
+              {{ $t('approvals.resource') }}: {{ event.resource_name || '—' }}
             </p>
           </div>
           <div class="flex gap-2">

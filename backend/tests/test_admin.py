@@ -1,78 +1,46 @@
-import pytest
-from fastapi.testclient import TestClient
-
-from app.config import settings
-from app.main import app
-
-
-@pytest.fixture(scope="session")
-def admin_client_session():
-    original_admin_email = settings.admin_email
-    settings.admin_email = "admin@example.com"
-    client = TestClient(app)
-    r = client.post(
-        "/api/auth/register",
-        json={"email": "admin@example.com", "display_name": "Admin", "password": "password123"},
-    )
-    if r.status_code == 400:
-        r = client.post(
-            "/api/auth/login",
-            json={"email": "admin@example.com", "password": "password123"},
-        )
-    token = r.json()["access_token"]
-    client.headers.update({"Authorization": f"Bearer {token}"})
-    yield client
-    settings.admin_email = original_admin_email
-
-
-@pytest.fixture
-def admin_client(admin_client_session):
-    return admin_client_session
-
-
-def test_first_user_is_admin(client):
-    r = client.post(
-        "/api/auth/register",
-        json={"email": "first@example.com", "display_name": "First", "password": "password123"},
-    )
-    assert r.status_code == 201
-    token = r.json()["access_token"]
-
-    r = client.get("/api/users/me", headers={"Authorization": f"Bearer {token}"})
-    assert r.status_code == 200
-    assert r.json()["is_admin"] is True
-    assert r.json()["is_active"] is True
-
-
 def test_admin_can_manage_app_settings(admin_client):
     r = admin_client.get("/api/admin/settings")
     assert r.status_code == 200
-    settings = r.json()
-    assert settings["app_name"] == "Calendar"
+    assert r.json()["app_name"] == "Calendar"
 
     r = admin_client.patch("/api/admin/settings", json={"app_name": "My Calendar"})
     assert r.status_code == 200
     assert r.json()["app_name"] == "My Calendar"
 
+    r = admin_client.get("/api/admin/settings")
+    assert r.json()["app_name"] == "My Calendar"
 
-def test_non_admin_cannot_access_admin(admin_client, user_factory, client):
-    user_factory("user@example.com")
-    auth = TestClient(app)
-    login = auth.post(
-        "/api/auth/login",
-        json={"email": "user@example.com", "password": "password123"},
+
+def test_public_settings_need_no_auth_and_reflect_admin_changes(admin_client, client):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert r.json()["app_name"] == "Calendar"
+
+    admin_client.patch(
+        "/api/admin/settings",
+        json={"app_name": "Company Calendar", "default_first_weekday": 1},
     )
-    token = login.json()["access_token"]
-    auth.headers.update({"Authorization": f"Bearer {token}"})
 
-    r = auth.get("/api/admin/settings")
-    assert r.status_code == 403
-
-    r = auth.get("/api/admin/users")
-    assert r.status_code == 403
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert r.json()["app_name"] == "Company Calendar"
+    assert r.json()["default_first_weekday"] == 1
 
 
-def test_admin_can_crud_users(admin_client):
+def test_public_settings_cannot_be_modified(client):
+    assert client.patch("/api/settings", json={"app_name": "Hacked"}).status_code == 405
+
+
+def test_non_admin_cannot_access_admin(admin_client, user_factory, login):
+    user_factory("user@example.com")
+    user = login("user@example.com")
+
+    assert user.get("/api/admin/settings").status_code == 403
+    assert user.patch("/api/admin/settings", json={"app_name": "X"}).status_code == 403
+    assert user.get("/api/admin/users").status_code == 403
+
+
+def test_admin_can_crud_users(admin_client, client):
     r = admin_client.post(
         "/api/admin/users",
         json={
@@ -87,21 +55,44 @@ def test_admin_can_crud_users(admin_client):
     user_id = r.json()["id"]
 
     r = admin_client.get("/api/admin/users")
-    assert r.status_code == 200
     assert any(u["id"] == user_id for u in r.json())
 
     r = admin_client.patch(f"/api/admin/users/{user_id}", json={"display_name": "Updated"})
     assert r.status_code == 200
     assert r.json()["display_name"] == "Updated"
 
+    # Deactivated users can no longer log in.
+    admin_client.patch(f"/api/admin/users/{user_id}", json={"is_active": False})
+    r = client.post(
+        "/api/auth/login", json={"email": "new@example.com", "password": "password123"}
+    )
+    assert r.status_code == 403
+
     r = admin_client.delete(f"/api/admin/users/{user_id}")
     assert r.status_code == 200
-
     r = admin_client.get("/api/admin/users")
-    assert not any(u["email"] == "new@example.com" for u in r.json())
+    assert not any(u["id"] == user_id for u in r.json())
 
 
 def test_admin_cannot_delete_self(admin_client):
     me = admin_client.get("/api/users/me").json()
     r = admin_client.delete(f"/api/admin/users/{me['id']}")
     assert r.status_code == 400
+
+
+def test_admin_cannot_demote_or_deactivate_self(admin_client):
+    me = admin_client.get("/api/users/me").json()
+
+    assert admin_client.patch(
+        f"/api/admin/users/{me['id']}", json={"is_admin": False}
+    ).status_code == 400
+    assert admin_client.patch(
+        f"/api/admin/users/{me['id']}", json={"is_active": False}
+    ).status_code == 400
+
+    # Unrelated self-edits still work, and the account stays admin.
+    r = admin_client.patch(
+        f"/api/admin/users/{me['id']}", json={"display_name": "New name"}
+    )
+    assert r.status_code == 200
+    assert r.json()["is_admin"] is True

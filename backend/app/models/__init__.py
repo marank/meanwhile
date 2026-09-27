@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import uuid_utils
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -92,7 +93,11 @@ def get_or_create_app_settings(db: Session) -> "AppSettings":
     if settings is None:
         settings = AppSettings()
         db.add(settings)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            settings = db.query(AppSettings).filter(AppSettings.id == 1).one()
         db.refresh(settings)
     return settings
 
@@ -240,6 +245,7 @@ class CalendarApprover(Base):
     )
 
     calendar: Mapped["Calendar"] = relationship(back_populates="approvers")
+    user: Mapped["User"] = relationship()
 
 
 class Resource(Base):
@@ -292,6 +298,7 @@ class ResourceApprover(Base):
     )
 
     resource: Mapped["Resource"] = relationship(back_populates="approvers")
+    user: Mapped["User"] = relationship()
 
 
 class Category(Base):

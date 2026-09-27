@@ -6,16 +6,15 @@ import vobject
 from email.utils import format_datetime
 from radicale import item as radicale_item
 from radicale import pathutils, storage
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
-from app.database import get_engine
+from app.database import get_session_local
 from app.models import Calendar, Event, User
+from app.services.ical import event_ical_text
 
 
 def _session() -> Session:
-    engine = get_engine()
-    SessionLocal = sessionmaker(bind=engine)
-    return SessionLocal()
+    return get_session_local()()
 
 
 def _http_datetime(dt: Optional[datetime]) -> str:
@@ -171,10 +170,7 @@ class Collection(storage.BaseCollection):
             .all()
         )
         for event in events:
-            text = event.raw_ical
-            if not text:
-                from app.services.ical import build_event_ical
-                text = build_event_ical(event).to_ical().decode("utf-8")
+            text = event_ical_text(event)
             href = f"{event.uid}.ics"
             last_modified = _http_datetime(event.updated_at)
             yield radicale_item.Item(
@@ -209,10 +205,7 @@ class Collection(storage.BaseCollection):
             if event is None:
                 yield href, None
                 continue
-            text = event.raw_ical
-            if not text:
-                from app.services.ical import build_event_ical
-                text = build_event_ical(event).to_ical().decode("utf-8")
+            text = event_ical_text(event)
             yield href, radicale_item.Item(
                 text=text,
                 href=href,
@@ -247,10 +240,7 @@ class Collection(storage.BaseCollection):
 
         old_item = None
         if existing:
-            old_text = existing.raw_ical
-            if not old_text:
-                from app.services.ical import build_event_ical
-                old_text = build_event_ical(existing).to_ical().decode("utf-8")
+            old_text = event_ical_text(existing)
             old_item = radicale_item.Item(
                 text=old_text,
                 href=href,

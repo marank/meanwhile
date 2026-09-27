@@ -219,6 +219,7 @@ const contextMenu = ref<{ visible: boolean; x: number; y: number; items: MenuIte
 
 function openMenu(event: MouseEvent, items: MenuItem[]) {
   event.preventDefault()
+  if (items.length === 0) return
   contextMenu.value = { visible: true, x: event.clientX, y: event.clientY, items }
 }
 
@@ -241,14 +242,14 @@ function rootMenuItems(): MenuItem[] {
 }
 
 function calendarMenuItems(item: CalendarListItem): MenuItem[] {
-  const items: MenuItem[] = [
+  if (item.membership.role !== 'owner') {
+    return []
+  }
+  return [
     { label: t('app.rename'), action: () => renameCalendar(item) },
     { label: t('app.delete'), action: () => deleteCalendarWithConfirm(item) },
+    { label: t('app.settings'), action: () => gotoSettings(item) },
   ]
-  if (item.membership.role === 'owner') {
-    items.push({ label: t('app.settings'), action: () => gotoSettings(item) })
-  }
-  return items
 }
 
 async function renameFolder(folder: Folder) {
@@ -328,8 +329,8 @@ function startResize(event: MouseEvent) {
         @select-folder="selectFolder"
         @delete-folder="deleteFolder"
         @goto-settings="gotoSettings"
-        @context-menu-folder="(e: any, f: any) => openMenu(e, folderMenuItems(f))"
-        @context-menu-calendar="(e: any, i: any) => openMenu(e, calendarMenuItems(i))"
+        @context-menu-folder="(e: MouseEvent, f: Folder) => openMenu(e, folderMenuItems(f))"
+        @context-menu-calendar="(e: MouseEvent, i: CalendarListItem) => openMenu(e, calendarMenuItems(i))"
       />
 
       <div

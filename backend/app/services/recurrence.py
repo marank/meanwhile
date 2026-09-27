@@ -6,7 +6,7 @@ from dateutil.rrule import rrulestr
 from app.models import Event
 
 
-def _make_aware(dt: datetime) -> datetime:
+def make_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
@@ -18,9 +18,9 @@ def expand_event(
     range_end: datetime,
     max_occurrences: int = 1000,
 ) -> List[Tuple[datetime, datetime]]:
-    """Return (start, end) tuples for all occurrences of *event* inside [range_start, range_end)."""
-    event_start = _make_aware(event.start)
-    event_end = _make_aware(event.end) + (timedelta(days=1) if event.all_day else timedelta())
+    """Return (start, end) tuples for all occurrences of *event* overlapping [range_start, range_end)."""
+    event_start = make_aware(event.start)
+    event_end = make_aware(event.end) + (timedelta(days=1) if event.all_day else timedelta())
     duration = event_end - event_start
     if event.rrule is None:
         if event_start < range_end and event_end > range_start:
@@ -28,16 +28,24 @@ def expand_event(
         return []
 
     rule = rrulestr(event.rrule, dtstart=event_start)
-    starts = rule.between(range_start, range_end, inc=True)
-    return [(_make_aware(start), _make_aware(start) + duration) for start in starts[:max_occurrences]]
+    # Occurrences that start before range_start can still overlap the window,
+    # so look back by the event duration.
+    starts = rule.between(range_start - duration, range_end, inc=True)
+    occurrences = []
+    for start in starts[:max_occurrences]:
+        occ_start = make_aware(start)
+        occ_end = occ_start + duration
+        if occ_end > range_start:
+            occurrences.append((occ_start, occ_end))
+    return occurrences
 
 
 def recurrence_count(event: Event, occurrence_start: datetime) -> int:
     if event.rrule is None:
         return 0
-    event_start = _make_aware(event.start)
+    event_start = make_aware(event.start)
     rule = rrulestr(event.rrule, dtstart=event_start)
-    return max(0, len(rule.between(event_start, _make_aware(occurrence_start), inc=True)) - 1)
+    return max(0, len(rule.between(event_start, make_aware(occurrence_start), inc=True)) - 1)
 
 
 def expand_events(
@@ -58,8 +66,8 @@ def find_conflicts(
     horizon_end: datetime,
 ) -> List[Event]:
     """Return approved events that overlap *candidate* (or its recurrence series)."""
-    range_start = _make_aware(candidate.start)
-    range_end = _make_aware(horizon_end)
+    range_start = make_aware(candidate.start)
+    range_end = make_aware(horizon_end)
     candidate_starts = expand_event(
         candidate,
         range_start,
@@ -72,7 +80,7 @@ def find_conflicts(
     for existing in existing_events:
         if existing.id == candidate.id:
             continue
-        existing_starts = expand_event(existing, candidate.start, horizon_end)
+        existing_starts = expand_event(existing, range_start, range_end)
         if _series_overlap(candidate_starts, existing_starts):
             conflicting.append(existing)
     return conflicting

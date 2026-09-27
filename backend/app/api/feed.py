@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Calendar, Event
+from app.models import Calendar, Event, EventStatus
 from app.services.ical import build_calendar_feed
 
 router = APIRouter(prefix="", tags=["feed"])
@@ -21,7 +21,12 @@ def calendar_feed(
 
     events = (
         db.query(Event)
-        .filter(Event.calendar_id == calendar.id)
+        .filter(
+            Event.calendar_id == calendar.id,
+            Event.status.in_(
+                {EventStatus.CONFIRMED.value, EventStatus.APPROVED.value}
+            ),
+        )
         .all()
     )
     body = build_calendar_feed(events)

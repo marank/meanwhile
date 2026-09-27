@@ -358,10 +358,10 @@ export const getFeedUrl = (token: string, calendarId: string) =>
 export const rotateFeedToken = (token: string, calendarId: string) =>
   api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST', token })
 
-// Admin
-export const getAppSettings = (token: string) =>
-  api<AppSettings>('/api/admin/settings', { token })
+// App settings (public: app name, logo, favicon, calendar defaults)
+export const getAppSettings = () => api<AppSettings>('/api/settings')
 
+// Admin
 export const updateAppSettings = (token: string, data: AppSettingsUpdate) =>
   api<AppSettings>('/api/admin/settings', { method: 'PATCH', body: data, token })
 

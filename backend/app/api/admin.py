@@ -109,6 +109,13 @@ def update_user(
         user.display_name = data.display_name
     if data.password is not None:
         user.hashed_password = hash_password(data.password)
+    if user.id == current_user.id and (
+        data.is_admin is False or data.is_active is False
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot demote or deactivate your own account",
+        )
     if data.is_admin is not None:
         user.is_admin = data.is_admin
     if data.is_active is not None:

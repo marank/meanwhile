@@ -143,16 +143,6 @@ class FolderOut(BaseModel):
     position: int
 
 
-class FolderReorderItem(BaseModel):
-    id: str
-    parent_id: Optional[str] = None
-    position: int = 0
-
-
-class FolderReorderRequest(BaseModel):
-    items: List[FolderReorderItem]
-
-
 # ---------------------------------------------------------------------------
 # Calendar members
 # ---------------------------------------------------------------------------
@@ -167,16 +157,6 @@ class CalendarMemberUpdate(BaseModel):
     role: Optional[str] = None
     folder_id: Optional[str] = None
     position: Optional[int] = None
-
-
-class CalendarMembershipReorderItem(BaseModel):
-    calendar_id: str
-    folder_id: Optional[str] = None
-    position: int = 0
-
-
-class CalendarMembershipReorderRequest(BaseModel):
-    items: List[CalendarMembershipReorderItem]
 
 
 class CalendarMemberBatchOut(BaseModel):

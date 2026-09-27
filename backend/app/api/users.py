@@ -47,15 +47,16 @@ def search_users(
 ) -> List[User]:
     if len(q) < 2:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Query must be at least 2 characters",
         )
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     users = (
         db.query(User)
         .filter(
             or_(
-                User.email.ilike(f"%{q}%"),
-                User.display_name.ilike(f"%{q}%"),
+                User.email.ilike(f"%{escaped}%", escape="\\"),
+                User.display_name.ilike(f"%{escaped}%", escape="\\"),
             )
         )
         .limit(20)

@@ -11,10 +11,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const logoUrl = computed(() => settings.value?.logo_url ?? null)
   const faviconUrl = computed(() => settings.value?.favicon_url ?? null)
 
-  async function load(token: string) {
+  async function load() {
     loading.value = true
     try {
-      settings.value = await api.getAppSettings(token)
+      settings.value = await api.getAppSettings()
     } catch (e) {
       console.error(e)
     } finally {

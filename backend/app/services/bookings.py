@@ -50,9 +50,13 @@ def find_conflicting_approved_bookings(
     resource: Resource,
     event: Event,
 ) -> List[Event]:
-    from app.services.recurrence import find_conflicts
+    from app.services.recurrence import find_conflicts, make_aware
 
-    horizon = max(event.end, event.start + timedelta(days=730))
+    # Serialize concurrent bookings on the same resource so two approvals
+    # cannot both pass the conflict check (a no-op on SQLite).
+    db.query(Resource).filter(Resource.id == resource.id).with_for_update().first()
+
+    horizon = max(make_aware(event.end), make_aware(event.start) + timedelta(days=730))
     approved = (
         db.query(Event)
         .filter(
@@ -60,6 +64,7 @@ def find_conflicting_approved_bookings(
             Event.status.in_(
                 {EventStatus.APPROVED.value, EventStatus.CONFIRMED.value}
             ),
+            Event.start < horizon,
         )
         .all()
     )

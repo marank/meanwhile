@@ -22,17 +22,27 @@ def _map_status(status: str) -> str:
 
 
 def build_event_ical(event: Event) -> ICalEvent:
+    # Reuse the stored component (e.g. imported via CalDAV) so unknown
+    # properties survive, but always rewrite fields owned by the app.
+    vevent = None
     if event.raw_ical:
         try:
-            component = icalendar.Calendar.from_ical(event.raw_ical)
-            for component in component.walk():
+            parsed = icalendar.Calendar.from_ical(event.raw_ical)
+            for component in parsed.walk():
                 if component.name == "VEVENT":
-                    return component
+                    vevent = component
+                    break
         except Exception:
-            pass
+            vevent = None
 
-    vevent = ICalEvent()
-    vevent.add("uid", event.uid)
+    if vevent is None:
+        vevent = ICalEvent()
+        vevent.add("uid", event.uid)
+        vevent.add("created", event.created_at)
+
+    for key in ("SUMMARY", "DESCRIPTION", "DTSTART", "DTEND", "DTSTAMP", "STATUS", "RRULE"):
+        vevent.pop(key, None)
+
     vevent.add("summary", event.title)
     if event.description:
         vevent.add("description", event.description)
@@ -43,18 +53,38 @@ def build_event_ical(event: Event) -> ICalEvent:
     else:
         vevent.add("dtstart", event.start)
         vevent.add("dtend", event.end)
-    vevent.add("dtstamp", datetime.now(timezone.utc))
-    vevent.add("created", event.created_at)
+    # Derived from updated_at so repeated serialization is stable (CalDAV ETags).
+    vevent.add("dtstamp", event.updated_at or datetime.now(timezone.utc))
     vevent.add("status", _map_status(event.status))
     if event.rrule:
         vevent.add("rrule", event.rrule)
     return vevent
 
 
-def build_calendar_feed(events: List[Event]) -> str:
+def _new_calendar() -> ICalCalendar:
     cal = ICalCalendar()
     cal.add("prodid", PRODID)
     cal.add("version", "2.0")
+    return cal
+
+
+def serialize_event_ical(event: Event) -> str:
+    """Serialize a single event as a complete VCALENDAR object."""
+    cal = _new_calendar()
+    cal.add_component(build_event_ical(event))
+    return cal.to_ical().decode("utf-8")
+
+
+def event_ical_text(event: Event) -> str:
+    """Stored iCalendar text for CalDAV, upgrading legacy bare VEVENT rows."""
+    text = event.raw_ical
+    if text and text.lstrip().startswith("BEGIN:VCALENDAR"):
+        return text
+    return serialize_event_ical(event)
+
+
+def build_calendar_feed(events: List[Event]) -> str:
+    cal = _new_calendar()
     cal.add("calscale", "GREGORIAN")
     cal.add("method", "PUBLISH")
 

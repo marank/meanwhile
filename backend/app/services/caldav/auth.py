@@ -1,16 +1,14 @@
 from radicale import auth as base_auth
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from app.core.security import verify_password
-from app.database import get_engine
+from app.database import get_session_local
 from app.models import AppPassword, User
 
 
 class Auth(base_auth.BaseAuth):
     def _login_ext(self, login: str, password: str, context) -> str:
-        engine = get_engine()
-        SessionLocal = sessionmaker(bind=engine)
-        db: Session = SessionLocal()
+        db: Session = get_session_local()()
         try:
             user = db.query(User).filter(User.email == login).first()
             if user is None:

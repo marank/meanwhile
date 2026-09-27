@@ -32,14 +32,18 @@ const membership = computed(() => items.value.find((i) => i.calendar.id === cale
 const canManage = computed(() => membership.value?.role === 'owner')
 
 const weekdayChoices = [
+  { value: 0, key: 'sunday' },
   { value: 1, key: 'monday' },
   { value: 2, key: 'tuesday' },
   { value: 3, key: 'wednesday' },
   { value: 4, key: 'thursday' },
   { value: 5, key: 'friday' },
   { value: 6, key: 'saturday' },
-  { value: 0, key: 'sunday' },
 ]
+const orderedWeekendChoices = computed(() => {
+  const firstWeekday = calendar.value?.first_weekday ?? 0
+  return [...weekdayChoices.slice(firstWeekday), ...weekdayChoices.slice(0, firstWeekday)]
+})
 
 const categoryFormMode = ref<'list' | 'add' | 'edit'>('list')
 const categoryForm = ref({ id: null as string | null, name: '', description: '', color: '#64748b' })
@@ -334,7 +338,7 @@ const caldavUrl = computed(() => {
           <span class="block text-sm font-medium text-gray-800 mb-2">{{ $t('app.weekendDays') }}</span>
           <div class="flex flex-wrap gap-2">
             <button
-              v-for="day in weekdayChoices"
+              v-for="day in orderedWeekendChoices"
               :key="day.value"
               type="button"
               @click="toggleWeekendDay(day.value)"

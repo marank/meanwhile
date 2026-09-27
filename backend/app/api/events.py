@@ -1,30 +1,25 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List
 
 import uuid_utils
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Calendar, Category, Event, EventStatus, Resource, Role, User
+from app.models import Category, Event, EventStatus, Resource, Role, User
 from app.schemas import EventCreate, EventOut, EventUpdate, OccurrenceOut
 from app.services.bookings import (
     can_modify_event,
     find_conflicting_approved_bookings,
     initial_booking_status,
 )
-from app.services.ical import build_event_ical
+from app.services.ical import serialize_event_ical
 from app.services.permissions import has_at_least_role, require_membership
-from app.services.recurrence import expand_events, recurrence_count
+from app.services.recurrence import expand_events, make_aware, recurrence_count
 
 router = APIRouter(prefix="/calendars", tags=["events"])
-
-
-def _ensure_aware(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def _serialize_event(event: Event) -> EventOut:
@@ -34,8 +29,8 @@ def _serialize_event(event: Event) -> EventOut:
         creator_id=event.creator_id,
         title=event.title,
         description=event.description,
-        start=_ensure_aware(event.start),
-        end=_ensure_aware(event.end),
+        start=make_aware(event.start),
+        end=make_aware(event.end),
         all_day=event.all_day,
         show_recurrence_count=event.show_recurrence_count,
         rrule=event.rrule,
@@ -63,15 +58,34 @@ def list_events(
     current_user: User = Depends(get_current_user),
 ) -> List[OccurrenceOut]:
     require_membership(db, calendar_id, current_user.id)
-    range_start = _ensure_aware(start)
-    range_end = _ensure_aware(end)
+    range_start = make_aware(start)
+    range_end = make_aware(end)
     if range_start >= range_end:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="end must be after start",
         )
 
-    events = db.query(Event).filter(Event.calendar_id == calendar_id).all()
+    events = (
+        db.query(Event)
+        .filter(
+            Event.calendar_id == calendar_id,
+            Event.start < range_end,
+            # All-day ends are inclusive (expanded +1 day), so let
+            # expand_events do the precise overlap check for them.
+            or_(
+                Event.rrule.isnot(None),
+                Event.all_day.is_(True),
+                Event.end > range_start,
+            ),
+        )
+        .options(
+            joinedload(Event.calendar),
+            joinedload(Event.category),
+            joinedload(Event.resource),
+        )
+        .all()
+    )
 
     out = []
     for event, occ_start, occ_end in expand_events(events, range_start, range_end):
@@ -119,15 +133,15 @@ def create_event(
 
     if membership.calendar.force_all_day and not data.all_day:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="This calendar only allows all-day events",
         )
 
-    start = _ensure_aware(data.start)
-    end = _ensure_aware(data.end)
+    start = make_aware(data.start)
+    end = make_aware(data.end)
     if end < start or (end == start and not data.all_day):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="end must not precede start for all-day events and must be after start otherwise",
         )
 
@@ -188,7 +202,7 @@ def create_event(
                 },
             )
 
-    event.raw_ical = build_event_ical(event).to_ical().decode("utf-8")
+    event.raw_ical = serialize_event_ical(event)
     db.commit()
     db.refresh(event)
     return _serialize_event(event)
@@ -238,8 +252,8 @@ def update_event(
             detail="This calendar only allows all-day events",
         )
 
-    start = _ensure_aware(data.start) if data.start else _ensure_aware(event.start)
-    end = _ensure_aware(data.end) if data.end else _ensure_aware(event.end)
+    start = make_aware(data.start) if data.start else make_aware(event.start)
+    end = make_aware(data.end) if data.end else make_aware(event.end)
     all_day = data.all_day if data.all_day is not None else event.all_day
     if data.start is not None or data.end is not None or data.all_day is not None:
         if end < start or (end == start and not all_day):
@@ -260,9 +274,10 @@ def update_event(
             if category is None:
                 raise HTTPException(status_code=404, detail="Category not found")
 
+    resource_changed = "resource_id" in data.model_fields_set
     resource = event.resource
-    if data.resource_id is not None:
-        if data.resource_id == "":
+    if resource_changed:
+        if not data.resource_id:
             resource = None
         else:
             resource = (
@@ -295,9 +310,31 @@ def update_event(
     if "category_id" in data.model_fields_set:
         event.category_id = category.id if category else None
 
-    if data.resource_id is not None:
-        event.resource_id = data.resource_id if data.resource_id else None
+    rescheduled = (
+        data.start is not None
+        or data.end is not None
+        or data.all_day is not None
+        or "rrule" in data.model_fields_set
+    )
+
+    if resource_changed:
+        event.resource_id = resource.id if resource else None
         event.status = initial_booking_status(resource)
+        event.decided_by = None
+        event.decided_at = None
+        event.decision_note = None
+    elif (
+        rescheduled
+        and resource is not None
+        and resource.requires_approval
+        and event.status
+        in {EventStatus.APPROVED.value, EventStatus.CONFIRMED.value}
+    ):
+        # Rescheduling an approved booking requires a fresh approval.
+        event.status = EventStatus.PENDING.value
+        event.decided_by = None
+        event.decided_at = None
+        event.decision_note = None
 
     if resource:
         conflicts = find_conflicting_approved_bookings(db, resource, event)
@@ -311,7 +348,7 @@ def update_event(
                 },
             )
 
-    event.raw_ical = build_event_ical(event).to_ical().decode("utf-8")
+    event.raw_ical = serialize_event_ical(event)
     db.commit()
     db.refresh(event)
     return _serialize_event(event)

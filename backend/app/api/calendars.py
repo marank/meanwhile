@@ -4,6 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import Calendar, CalendarApprover, CalendarMember, Folder, Role, User, get_or_create_app_settings
@@ -31,7 +32,10 @@ router = APIRouter(prefix="/calendars", tags=["calendars"])
 
 
 def _make_feed_url(request: Request, token: str) -> str:
-    return f"{request.url.scheme}://{request.url.netloc}/ics/{token}.ics"
+    base = (settings.base_url or "").rstrip("/")
+    if not base:
+        base = f"{request.url.scheme}://{request.url.netloc}"
+    return f"{base}/ics/{token}.ics"
 
 
 @router.get("", response_model=List[CalendarListOut])
@@ -234,7 +238,7 @@ def add_member(
         )
     if data.role not in {r.value for r in Role}:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid role",
         )
     new_member = CalendarMember(
@@ -311,7 +315,7 @@ def update_member(
     if data.role is not None:
         if data.role not in {r.value for r in Role}:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Invalid role",
             )
         target.role = data.role

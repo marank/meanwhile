@@ -1,7 +1,7 @@
 from radicale import rights as base_rights
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
-from app.database import get_engine
+from app.database import get_session_local
 from app.models import Calendar, CalendarMember, Role, User
 
 
@@ -15,9 +15,7 @@ class Rights(base_rights.BaseRights):
             # Root collection: list principals for authenticated user.
             return "RWrw"
 
-        engine = get_engine()
-        SessionLocal = sessionmaker(bind=engine)
-        db: Session = SessionLocal()
+        db: Session = get_session_local()()
         try:
             user_obj = db.query(User).filter(User.email == user).first()
             if user_obj is None:

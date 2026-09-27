@@ -1,22 +1,6 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-
-def _login(email: str, password: str = "password123") -> TestClient:
-    client = TestClient(app)
-    r = client.post(
-        "/api/auth/login",
-        json={"email": email, "password": password},
-    )
-    assert r.status_code == 200, r.text
-    client.headers.update({"Authorization": f"Bearer {r.json()['access_token']}"})
-    return client
-
-
-def test_create_list_and_delete_folder(auth_client_factory, user_factory):
+def test_create_list_and_delete_folder(user_factory, login):
     user_factory("folder-owner@example.com")
-    auth = auth_client_factory("folder-owner@example.com", "password123")
+    auth = login("folder-owner@example.com")
 
     r = auth.post("/api/folders", json={"name": "Work"})
     assert r.status_code == 201
@@ -70,6 +54,9 @@ def test_move_folder_into_another_folder(make_calendar):
     assert r.status_code == 200
     assert r.json()["parent_id"] == a["id"]
 
+    folders = {f["id"]: f for f in auth.get("/api/folders").json()}
+    assert folders[b["id"]]["parent_id"] == a["id"]
+
 
 def test_folder_cycle_is_rejected(make_calendar):
     auth, _ = make_calendar("cycle@example.com", "Cal")
@@ -99,12 +86,12 @@ def test_folder_self_parent_is_rejected(make_calendar):
     assert r.status_code == 400
 
 
-def test_folder_move_to_other_users_folder_is_rejected(user_factory):
-    owner = user_factory("owner-folder@example.com")
+def test_folder_move_to_other_users_folder_is_rejected(user_factory, login):
+    user_factory("owner-folder@example.com")
     user_factory("intruder-folder@example.com")
 
-    owner_client = _login("owner-folder@example.com")
-    intruder_client = _login("intruder-folder@example.com")
+    owner_client = login("owner-folder@example.com")
+    intruder_client = login("intruder-folder@example.com")
 
     other_folder = owner_client.post("/api/folders", json={"name": "Private"}).json()
     intruder_folder = intruder_client.post(
@@ -202,12 +189,9 @@ def test_reorder_calendars_via_position(make_calendar):
 
     r = auth.get("/api/calendars")
     assert r.status_code == 200
-    names = [
-        item["calendar"]["name"]
-        for item in r.json()
-        if item["calendar"]["name"] in {"A", "B", "C"}
-    ]
-    assert names == ["C", "B", "A"]
+    names = [item["calendar"]["name"] for item in r.json()]
+    # "Cal" from make_calendar keeps its default position 0 and sorts by name.
+    assert names == ["C", "Cal", "B", "A"]
 
 
 def test_batch_reorder_sidebar(make_calendar):

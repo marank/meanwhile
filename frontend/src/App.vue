@@ -9,18 +9,9 @@ import { useSettingsStore } from './stores/settings'
 const auth = useAuthStore()
 const settings = useSettingsStore()
 
-async function loadSettings() {
-  if (auth.token) {
-    await settings.load(auth.token)
-  }
-}
-
 onMounted(async () => {
-  await auth.fetchMe()
-  await loadSettings()
+  await Promise.all([auth.fetchMe(), settings.load()])
 })
-
-watch(() => auth.token, loadSettings)
 
 watch(
   () => settings.faviconUrl,

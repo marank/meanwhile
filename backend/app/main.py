@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from a2wsgi import WSGIMiddleware
 
 from app.api import (
@@ -16,6 +17,9 @@ from app.api import (
     users,
 )
 from app.config import settings
+from app.database import get_db
+from app.models import get_or_create_app_settings
+from app.schemas import AppSettingsOut
 
 app = FastAPI(title="Calendar API", version="0.1.0")
 
@@ -43,6 +47,11 @@ app.include_router(feed.router, prefix="/ics")
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/settings", response_model=AppSettingsOut)
+def public_app_settings(db: Session = Depends(get_db)) -> AppSettingsOut:
+    return get_or_create_app_settings(db)
 
 
 # ---------------------------------------------------------------------------

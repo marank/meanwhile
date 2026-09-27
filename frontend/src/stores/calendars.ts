@@ -19,10 +19,6 @@ export const useCalendarStore = defineStore('calendars', () => {
     return found?.calendar || null
   })
 
-  const visibleCalendars = computed(() => {
-    return items.value.filter((i) => i.membership.role !== 'viewer')
-  })
-
   function select(id: string) {
     selectedId.value = id
   }
@@ -66,7 +62,6 @@ export const useCalendarStore = defineStore('calendars', () => {
     loading,
     allSelected,
     selectedCalendar,
-    visibleCalendars,
     select,
     load,
     create,
