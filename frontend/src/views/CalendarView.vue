@@ -7,16 +7,21 @@ import timeGridPlugin from '@fullcalendar/vue3/timegrid'
 import interactionPlugin from '@fullcalendar/vue3/interaction'
 import classicThemePlugin from '@fullcalendar/vue3/themes/classic'
 import deLocale from '@fullcalendar/vue3/locales/de'
-import type { DateClickInfo, DateSelectInfo, DayCellInfo, EventClickInfo, EventDisplayInfo, DatesSetInfo } from '@fullcalendar/vue3'
+import type { DateClickInfo, DateSelectInfo, DayCellInfo, EventClickInfo, EventDisplayInfo, DatesSetInfo, EventDropInfo, EventResizeDoneInfo } from '@fullcalendar/vue3'
 import '@fullcalendar/vue3/skeleton.css'
 import '@fullcalendar/vue3/themes/classic/theme.css'
 import '@fullcalendar/vue3/themes/classic/palette.css'
 import EventModal from '@/components/EventModal.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useCalendarStore } from '@/stores/calendars'
 import { useEventStore } from '@/stores/events'
 import { useThemeStore } from '@/stores/theme'
+import { alert } from '@/services/dialog'
+import { hour12 } from '@/services/datetime'
+import * as api from '@/api'
 import type { Occurrence } from '@/api'
 
+const auth = useAuthStore()
 const calendarStore = useCalendarStore()
 const eventStore = useEventStore()
 const themeStore = useThemeStore()
@@ -73,6 +78,7 @@ const fcEvents = computed(() =>
       start: occ.start,
       end: occ.end,
       allDay: occ.all_day,
+      editable: occ.can_edit && !occ.is_recurring,
       color,
       contrastColor: contrastColor(color),
       extendedProps: { eventId: occ.event_id, categoryColor: occ.category_color },
@@ -150,6 +156,7 @@ const displaySettings = computed(() => calendarStore.selectedCalendar || {
   first_weekday: 0,
   show_weekends: true,
   weekend_days: [0, 6],
+  show_week_numbers: false,
   today_color: '#eff6ff',
   dark_today_color: '#27272a',
   weekend_color: '#f9fafb',
@@ -164,6 +171,45 @@ const calendarStyle = computed(() => ({
     ? displaySettings.value.dark_weekend_color
     : displaySettings.value.weekend_color,
 }))
+
+function localYMD(d: Date) {
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
+}
+
+async function handleEventChange(info: EventDropInfo | EventResizeDoneInfo) {
+  const event = info.event
+  if (!event.start || !auth.token) {
+    info.revert()
+    return
+  }
+  let start: string
+  let end: string
+  if (event.allDay) {
+    start = `${localYMD(event.start)}T00:00:00.000Z`
+    end = event.end
+      ? `${localYMD(new Date(event.end.getTime() - 24 * 60 * 60 * 1000))}T00:00:00.000Z`
+      : start
+  } else {
+    start = event.start.toISOString()
+    end = event.end
+      ? event.end.toISOString()
+      : new Date(event.start.getTime() + 60 * 60 * 1000).toISOString()
+  }
+  try {
+    await api.updateEvent(auth.token, event.extendedProps.eventId as string, {
+      start,
+      end,
+      all_day: event.allDay,
+    })
+    reloadVisibleRange(true)
+  } catch (e: any) {
+    info.revert()
+    const detail = e.detail?.detail
+    await alert(typeof detail === 'string' ? detail : detail?.message || e.message)
+  }
+}
 
 function dayCellClass(info: DayCellInfo) {
   const classes = []
@@ -185,6 +231,13 @@ const calendarOptions = computed(() => ({
   firstDay: displaySettings.value.first_weekday,
   weekends: true,
   hiddenDays: displaySettings.value.show_weekends ? [] : displaySettings.value.weekend_days,
+  weekNumbers: displaySettings.value.show_week_numbers,
+  weekNumberCalculation: displaySettings.value.first_weekday === 1 ? 'ISO' as const : 'local' as const,
+  editable: true,
+  eventDrop: handleEventChange,
+  eventResize: handleEventChange,
+  eventTimeFormat: { hour: 'numeric', minute: '2-digit', hour12: hour12() } as Intl.DateTimeFormatOptions,
+  slotLabelFormat: { hour: 'numeric', minute: '2-digit', hour12: hour12() } as Intl.DateTimeFormatOptions,
   dayCellClass,
   datesSet: handleDatesSet,
   dateClick: (info: DateClickInfo) => openCreateModal(info.date),

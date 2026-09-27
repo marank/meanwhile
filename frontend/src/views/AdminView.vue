@@ -24,6 +24,7 @@ const settings = ref<api.AppSettings>({
   default_first_weekday: 0,
   default_show_weekends: true,
   default_weekend_days: [0, 6],
+  default_show_week_numbers: false,
 })
 const weekdayChoices = [
   { value: 0, key: 'sunday' },
@@ -87,6 +88,7 @@ async function saveSettings() {
       default_first_weekday: settings.value.default_first_weekday,
       default_show_weekends: settings.value.default_show_weekends,
       default_weekend_days: settings.value.default_weekend_days,
+      default_show_week_numbers: settings.value.default_show_week_numbers,
     })
     message.value = 'Settings saved'
   } catch (e) {
@@ -323,6 +325,13 @@ const isCurrentUser = computed(() => {
           <span>
             <span class="block text-sm font-medium text-gray-800">{{ $t('app.showWeekends') }}</span>
             <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.showWeekendsHelp') }}</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3">
+          <input v-model="settings.default_show_week_numbers" type="checkbox" class="mt-1" />
+          <span>
+            <span class="block text-sm font-medium text-gray-800">{{ $t('app.showWeekNumbers') }}</span>
+            <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.showWeekNumbersHelp') }}</span>
           </span>
         </label>
         <div>

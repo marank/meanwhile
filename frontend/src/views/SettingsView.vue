@@ -98,6 +98,7 @@ async function updateCalendarSettings() {
     first_weekday: calendar.value.first_weekday,
     show_weekends: calendar.value.show_weekends,
     weekend_days: calendar.value.weekend_days,
+    show_week_numbers: calendar.value.show_week_numbers,
     today_color: calendar.value.today_color,
     dark_today_color: calendar.value.dark_today_color,
     weekend_color: calendar.value.weekend_color,
@@ -356,6 +357,13 @@ const caldavUrl = computed(() => {
           <span>
             <span class="block text-sm font-medium text-gray-800">{{ $t('app.showWeekends') }}</span>
             <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.showWeekendsHelp') }}</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3" :class="canManage ? 'cursor-pointer' : 'opacity-60'">
+          <input v-model="calendar.show_week_numbers" @change="updateCalendarSettings" type="checkbox" :disabled="!canManage" class="mt-1" />
+          <span>
+            <span class="block text-sm font-medium text-gray-800">{{ $t('app.showWeekNumbers') }}</span>
+            <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.showWeekNumbersHelp') }}</span>
           </span>
         </label>
       </div>

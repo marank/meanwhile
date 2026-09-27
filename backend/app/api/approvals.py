@@ -23,8 +23,18 @@ from app.services.bookings import (
     get_resource_approvers,
     is_in_approver_pool,
 )
+from app.services.activity import record_activity
+from app.services.notifications import notify
 from app.services.permissions import has_at_least_role, require_membership
 from app.services.recurrence import make_aware
+
+
+def _approval_recipients(db: Session, event: Event) -> List[str]:
+    recipients = []
+    if event.resource is not None:
+        recipients += [a.id for a in get_resource_approvers(db, event.resource)]
+    recipients.append(event.calendar.owner_id)
+    return recipients
 
 router = APIRouter(prefix="", tags=["approvals"])
 
@@ -140,6 +150,23 @@ def approve_event(
     event.decided_by = current_user.id
     event.decided_at = datetime.now(timezone.utc)
     event.decision_note = action.note
+    record_activity(
+        db,
+        event,
+        current_user.id,
+        "approved",
+        {"note": action.note} if action.note else None,
+    )
+    notify(
+        db,
+        [event.creator_id],
+        "booking_approved",
+        current_user.id,
+        event.title,
+        calendar_id=event.calendar_id,
+        event_id=event.id,
+        data={"note": action.note} if action.note else None,
+    )
     db.commit()
     db.refresh(event)
     return _serialize_approval(db, event)
@@ -165,6 +192,23 @@ def reject_event(
     event.decided_by = current_user.id
     event.decided_at = datetime.now(timezone.utc)
     event.decision_note = action.note
+    record_activity(
+        db,
+        event,
+        current_user.id,
+        "rejected",
+        {"note": action.note} if action.note else None,
+    )
+    notify(
+        db,
+        [event.creator_id],
+        "booking_rejected",
+        current_user.id,
+        event.title,
+        calendar_id=event.calendar_id,
+        event_id=event.id,
+        data={"note": action.note} if action.note else None,
+    )
     db.commit()
     db.refresh(event)
     return _serialize_approval(db, event)
@@ -188,9 +232,24 @@ def cancel_event(
             detail="You cannot cancel this event",
         )
 
+    had_booking = event.status in {
+        EventStatus.PENDING.value,
+        EventStatus.APPROVED.value,
+    } and event.resource is not None
     event.status = EventStatus.CANCELLED.value
     event.decided_by = current_user.id
     event.decided_at = datetime.now(timezone.utc)
+    record_activity(db, event, current_user.id, "cancelled")
+    if had_booking:
+        notify(
+            db,
+            _approval_recipients(db, event),
+            "booking_cancelled",
+            current_user.id,
+            event.title,
+            calendar_id=event.calendar_id,
+            event_id=event.id,
+        )
     db.commit()
     db.refresh(event)
     return _serialize_approval(db, event)

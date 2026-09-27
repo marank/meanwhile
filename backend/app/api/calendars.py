@@ -21,6 +21,7 @@ from app.schemas import (
     FeedUrlOut,
     MyMembershipOut,
 )
+from app.services.notifications import notify
 from app.services.permissions import (
     get_membership,
     has_at_least_role,
@@ -69,6 +70,7 @@ def create_calendar(
     first_weekday = data.first_weekday if data.first_weekday is not None else app_settings.default_first_weekday
     show_weekends = data.show_weekends if data.show_weekends is not None else app_settings.default_show_weekends
     weekend_days = data.weekend_days if data.weekend_days is not None else app_settings.default_weekend_days
+    show_week_numbers = data.show_week_numbers if data.show_week_numbers is not None else app_settings.default_show_week_numbers
     calendar = Calendar(
         name=data.name,
         description=data.description,
@@ -78,6 +80,7 @@ def create_calendar(
         first_weekday=first_weekday,
         show_weekends=show_weekends,
         weekend_days=sorted(set(weekend_days)),
+        show_week_numbers=show_week_numbers,
         today_color=data.today_color,
         weekend_color=data.weekend_color,
         owner_id=current_user.id,
@@ -154,6 +157,8 @@ def update_calendar(
         calendar.show_weekends = data.show_weekends
     if data.weekend_days is not None:
         calendar.weekend_days = sorted(set(data.weekend_days))
+    if data.show_week_numbers is not None:
+        calendar.show_week_numbers = data.show_week_numbers
     if data.today_color is not None:
         calendar.today_color = data.today_color
     if data.dark_today_color is not None:
@@ -247,6 +252,15 @@ def add_member(
         role=data.role,
     )
     db.add(new_member)
+    notify(
+        db,
+        [data.user_id],
+        "member_added",
+        current_user.id,
+        membership.calendar.name,
+        calendar_id=calendar_id,
+        data={"role": data.role},
+    )
     db.commit()
     db.refresh(new_member)
     return _serialize_membership(new_member)
@@ -318,7 +332,17 @@ def update_member(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Invalid role",
             )
-        target.role = data.role
+        if target.role != data.role:
+            target.role = data.role
+            notify(
+                db,
+                [user_id],
+                "member_role_changed",
+                current_user.id,
+                membership.calendar.name,
+                calendar_id=calendar_id,
+                data={"role": data.role},
+            )
     db.commit()
     db.refresh(target)
     return _serialize_membership(target)

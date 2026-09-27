@@ -13,10 +13,17 @@ from app.schemas import EventCreate, EventOut, EventUpdate, OccurrenceOut
 from app.services.bookings import (
     can_modify_event,
     find_conflicting_approved_bookings,
+    get_resource_approvers,
     initial_booking_status,
 )
+from app.services.activity import record_activity
 from app.services.ical import serialize_event_ical
-from app.services.permissions import has_at_least_role, require_membership
+from app.services.notifications import notify
+from app.services.permissions import (
+    get_visible_event,
+    has_at_least_role,
+    require_membership,
+)
 from app.services.recurrence import expand_events, make_aware, recurrence_count
 
 router = APIRouter(prefix="/calendars", tags=["events"])
@@ -57,7 +64,7 @@ def list_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[OccurrenceOut]:
-    require_membership(db, calendar_id, current_user.id)
+    membership = require_membership(db, calendar_id, current_user.id)
     range_start = make_aware(start)
     range_end = make_aware(end)
     if range_start >= range_end:
@@ -111,6 +118,10 @@ def list_events(
                 resource_id=event.resource_id,
                 resource_name=event.resource.name if event.resource else None,
                 creator_id=event.creator_id,
+                can_edit=can_modify_event(
+                    event, current_user.id, Role(membership.role)
+                ),
+                is_recurring=bool(event.rrule),
             )
         )
     out.sort(key=lambda x: x.start)
@@ -203,6 +214,18 @@ def create_event(
             )
 
     event.raw_ical = serialize_event_ical(event)
+    record_activity(db, event, current_user.id, "created")
+    if event.status == EventStatus.PENDING.value and resource is not None:
+        notify(
+            db,
+            [a.id for a in get_resource_approvers(db, resource)]
+            + [membership.calendar.owner_id],
+            "approval_requested",
+            current_user.id,
+            event.title,
+            calendar_id=calendar_id,
+            event_id=event.id,
+        )
     db.commit()
     db.refresh(event)
     return _serialize_event(event)
@@ -214,20 +237,8 @@ def get_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> EventOut:
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
-    membership = require_membership(db, event.calendar_id, current_user.id)
-    if event.status not in {
-        EventStatus.CANCELLED.value,
-        EventStatus.REJECTED.value,
-    }:
-        return _serialize_event(event)
-    if event.creator_id == current_user.id or has_at_least_role(
-        membership, Role.EDITOR
-    ):
-        return _serialize_event(event)
-    raise HTTPException(status_code=404, detail="Event not found")
+    event, _ = get_visible_event(db, event_id, current_user)
+    return _serialize_event(event)
 
 
 @router.patch("/events/{event_id}", response_model=EventOut)
@@ -251,6 +262,19 @@ def update_event(
             status_code=422,
             detail="This calendar only allows all-day events",
         )
+
+    old_status = event.status
+    old_values = {
+        "title": event.title,
+        "description": event.description,
+        "start": make_aware(event.start),
+        "end": make_aware(event.end),
+        "all_day": event.all_day,
+        "rrule": event.rrule,
+        "category": event.category_id,
+        "resource": event.resource_id,
+        "show_recurrence_count": event.show_recurrence_count,
+    }
 
     start = make_aware(data.start) if data.start else make_aware(event.start)
     end = make_aware(data.end) if data.end else make_aware(event.end)
@@ -348,7 +372,45 @@ def update_event(
                 },
             )
 
+    changed = []
+    for field, attr in (
+        ("title", "title"),
+        ("description", "description"),
+        ("start", "start"),
+        ("end", "end"),
+        ("all_day", "all_day"),
+        ("rrule", "rrule"),
+        ("category", "category_id"),
+        ("resource", "resource_id"),
+        ("show_recurrence_count", "show_recurrence_count"),
+    ):
+        value = getattr(event, attr)
+        if attr in ("start", "end"):
+            value = make_aware(value)
+        if value != old_values[field]:
+            changed.append(field)
+
     event.raw_ical = serialize_event_ical(event)
+    status_reset = (
+        event.status == EventStatus.PENDING.value
+        and old_status != EventStatus.PENDING.value
+    )
+    if changed:
+        details = {"fields": changed}
+        if status_reset:
+            details["status"] = "pending"
+        record_activity(db, event, current_user.id, "updated", details)
+    if status_reset and resource is not None:
+        notify(
+            db,
+            [a.id for a in get_resource_approvers(db, resource)]
+            + [membership.calendar.owner_id],
+            "approval_requested",
+            current_user.id,
+            event.title,
+            calendar_id=event.calendar_id,
+            event_id=event.id,
+        )
     db.commit()
     db.refresh(event)
     return _serialize_event(event)

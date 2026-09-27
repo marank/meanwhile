@@ -49,6 +49,8 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    time_format: Mapped[str] = mapped_column(String(10), default="auto", nullable=False)
+    date_format: Mapped[str] = mapped_column(String(10), default="auto", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
@@ -80,6 +82,7 @@ class AppSettings(Base):
     default_first_weekday: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     default_show_weekends: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     default_weekend_days: Mapped[List[int]] = mapped_column(JSON, default=lambda: [0, 6], nullable=False)
+    default_show_week_numbers: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -165,6 +168,7 @@ class Calendar(Base):
     first_weekday: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     show_weekends: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     weekend_days: Mapped[List[int]] = mapped_column(JSON, default=lambda: [0, 6], nullable=False)
+    show_week_numbers: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     today_color: Mapped[str] = mapped_column(String(7), default="#eff6ff", nullable=False)
     dark_today_color: Mapped[str] = mapped_column(String(7), default="#27272a", nullable=False)
     weekend_color: Mapped[str] = mapped_column(String(7), default="#f9fafb", nullable=False)
@@ -387,3 +391,78 @@ class Event(Base):
     __table_args__ = (
         UniqueConstraint("calendar_id", "uid", name="uq_event_calendar_uid"),
     )
+
+
+class EventComment(Base):
+    __tablename__ = "event_comments"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid_utils.uuid7())
+    )
+    event_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("events.id", ondelete="CASCADE"), index=True
+    )
+    author_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+    event: Mapped["Event"] = relationship()
+    author: Mapped["User"] = relationship()
+
+
+class EventActivity(Base):
+    __tablename__ = "event_activity"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid_utils.uuid7())
+    )
+    event_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("events.id", ondelete="CASCADE"), index=True
+    )
+    actor_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    action: Mapped[str] = mapped_column(String(32))
+    details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+    event: Mapped["Event"] = relationship()
+    actor: Mapped[Optional["User"]] = relationship()
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid_utils.uuid7())
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    type: Mapped[str] = mapped_column(String(40))
+    actor_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    calendar_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("calendars.id", ondelete="CASCADE"), nullable=True
+    )
+    event_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("events.id", ondelete="SET NULL"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    actor: Mapped[Optional["User"]] = relationship(foreign_keys=[actor_id])

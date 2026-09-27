@@ -34,6 +34,10 @@ def update_current_user(
 ) -> User:
     if data.display_name:
         current_user.display_name = data.display_name
+    if data.time_format is not None:
+        current_user.time_format = data.time_format
+    if data.date_format is not None:
+        current_user.date_format = data.date_format
     db.commit()
     db.refresh(current_user)
     return current_user

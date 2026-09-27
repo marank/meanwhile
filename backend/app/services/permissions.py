@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 
-from app.models import Calendar, CalendarMember, Role
+from app.models import Calendar, CalendarMember, Event, EventStatus, Role, User
 
 
 ROLE_ORDER = [Role.VIEWER, Role.CONTRIBUTOR, Role.EDITOR, Role.OWNER]
@@ -39,3 +39,16 @@ def require_membership(db, calendar_id: str, user_id: str) -> CalendarMember:
 
 def is_owner(member: CalendarMember) -> bool:
     return member.role == Role.OWNER.value
+
+
+def get_visible_event(db, event_id: str, user: User) -> tuple[Event, CalendarMember]:
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    membership = require_membership(db, event.calendar_id, user.id)
+    if event.status in {EventStatus.CANCELLED.value, EventStatus.REJECTED.value}:
+        if event.creator_id != user.id and not has_at_least_role(
+            membership, Role.EDITOR
+        ):
+            raise HTTPException(status_code=404, detail="Event not found")
+    return event, membership

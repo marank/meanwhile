@@ -9,9 +9,11 @@ from app.api import (
     auth,
     calendars,
     categories,
+    comments,
     events,
     feed,
     folders,
+    notifications,
     resources,
     sidebar,
     users,
@@ -40,6 +42,8 @@ app.include_router(folders.router, prefix="/api")
 app.include_router(sidebar.router, prefix="/api")
 app.include_router(resources.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
+app.include_router(comments.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 app.include_router(approvals.router, prefix="/api")
 app.include_router(feed.router, prefix="/ics")
 

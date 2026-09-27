@@ -46,6 +46,8 @@ def update_app_settings(
         settings.default_show_weekends = data.default_show_weekends
     if data.default_weekend_days is not None:
         settings.default_weekend_days = sorted(set(data.default_weekend_days))
+    if data.default_show_week_numbers is not None:
+        settings.default_show_week_numbers = data.default_show_week_numbers
     db.commit()
     db.refresh(settings)
     return settings

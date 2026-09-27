@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import * as api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { confirm } from '@/services/dialog'
+import { formatDateTime } from '@/services/datetime'
 import { buildRrule as serializeRrule, parseRrule as parseRruleValue, type RecurrenceEnd, type RecurrenceFrequency, type RecurrenceMonthMode } from '@/services/rrule'
 import { useI18n } from 'vue-i18n'
 
@@ -27,6 +28,7 @@ const error = ref('')
 const resources = ref<api.Resource[]>([])
 const categories = ref<api.Category[]>([])
 const forceAllDay = ref(false)
+const calendar = ref<api.Calendar | null>(null)
 
 const title = ref('')
 const description = ref('')
@@ -37,7 +39,7 @@ const endDate = ref('')
 const endTime = ref('10:00')
 const resourceId = ref('')
 const categoryId = ref('')
-const activeTab = ref<'details' | 'recurrence'>('details')
+const activeTab = ref<'details' | 'recurrence' | 'activity'>('details')
 const recurrenceEnabled = ref(false)
 const showRecurrenceCount = ref(false)
 const recurrenceFrequency = ref<RecurrenceFrequency>('WEEKLY')
@@ -53,7 +55,106 @@ const recurrenceUntil = ref('')
 const recurrenceCount = ref(10)
 const extraRuleParts = ref<string[]>([])
 
-const tabs = ['details', 'recurrence'] as const
+const tabs = computed(() =>
+  props.eventId ? (['details', 'recurrence', 'activity'] as const) : (['details', 'recurrence'] as const),
+)
+
+const comments = ref<api.EventComment[]>([])
+const activityEntries = ref<api.EventActivity[]>([])
+const activityLoaded = ref(false)
+const activityBusy = ref(false)
+const newComment = ref('')
+
+const myRole = computed(() => calendar.value?.my_membership?.role || '')
+
+interface TimelineItem {
+  key: string
+  at: string
+  text: string | null
+  comment: api.EventComment | null
+  canDelete: boolean
+}
+
+const timeline = computed<TimelineItem[]>(() => [
+  ...activityEntries.value.map((entry) => ({
+    key: `a-${entry.id}`,
+    at: entry.created_at,
+    text: activityText(entry),
+    comment: null,
+    canDelete: false,
+  })),
+  ...comments.value.map((comment) => ({
+    key: `c-${comment.id}`,
+    at: comment.created_at,
+    text: null,
+    comment,
+    canDelete: canDeleteComment(comment),
+  })),
+].sort((a, b) => a.at.localeCompare(b.at)))
+
+function activityText(entry: api.EventActivity): string {
+  const name = entry.actor_name || t('app.someone')
+  const fields = (entry.details?.fields || []).map((f) => t(`activity.field.${f}`)).join(', ')
+  const note = entry.details?.note
+  switch (entry.action) {
+    case 'created':
+      return t('activity.created', { name })
+    case 'updated':
+      return entry.details?.status === 'pending'
+        ? t('activity.updatedPending', { name, fields })
+        : t('activity.updated', { name, fields })
+    case 'approved':
+      return note ? t('activity.approvedWithNote', { name, note }) : t('activity.approved', { name })
+    case 'rejected':
+      return note ? t('activity.rejectedWithNote', { name, note }) : t('activity.rejected', { name })
+    case 'cancelled':
+      return t('activity.cancelled', { name })
+    default:
+      return entry.action
+  }
+}
+
+function canDeleteComment(comment: api.EventComment): boolean {
+  return comment.author_id === auth.user?.id || ['owner', 'editor'].includes(myRole.value)
+}
+
+async function loadActivity() {
+  if (!auth.token || !props.eventId || activityLoaded.value) return
+  activityBusy.value = true
+  try {
+    const [c, a] = await Promise.all([
+      api.listComments(auth.token, props.eventId),
+      api.listActivity(auth.token, props.eventId),
+    ])
+    comments.value = c
+    activityEntries.value = a
+    activityLoaded.value = true
+  } finally {
+    activityBusy.value = false
+  }
+}
+
+async function postComment() {
+  if (!auth.token || !props.eventId || !newComment.value.trim()) return
+  activityBusy.value = true
+  try {
+    await api.addComment(auth.token, props.eventId, newComment.value)
+    newComment.value = ''
+    comments.value = await api.listComments(auth.token, props.eventId)
+  } finally {
+    activityBusy.value = false
+  }
+}
+
+async function removeComment(comment: api.EventComment) {
+  if (!auth.token) return
+  await api.deleteComment(auth.token, comment.id)
+  comments.value = comments.value.filter((c) => c.id !== comment.id)
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'activity') loadActivity()
+})
 const weekdays = [
   { value: 'MO', key: 'monday' },
   { value: 'TU', key: 'tuesday' },
@@ -114,14 +215,15 @@ function selectStartWeekday() {
 
 onMounted(async () => {
   if (!auth.token) return
-  const [calendar, calendarResources, calendarCategories] = await Promise.all([
+  const [cal, calendarResources, calendarCategories] = await Promise.all([
     api.getCalendar(auth.token, props.calendarId),
     api.listResources(auth.token, props.calendarId),
     api.listCategories(auth.token, props.calendarId),
   ])
   resources.value = calendarResources
   categories.value = calendarCategories
-  forceAllDay.value = calendar.force_all_day
+  calendar.value = cal
+  forceAllDay.value = cal.force_all_day
   if (forceAllDay.value) allDay.value = true
   if (props.eventId) {
     const event = await api.getEvent(auth.token, props.eventId)
@@ -295,7 +397,7 @@ function cancel() {
           </div>
         </div>
 
-        <div v-else class="space-y-5">
+        <div v-else-if="activeTab === 'recurrence'" class="space-y-5">
           <label class="flex items-start gap-3 rounded-lg border border-gray-200 p-4 cursor-pointer">
             <input type="checkbox" v-model="recurrenceEnabled" class="mt-0.5" />
             <span>
@@ -389,6 +491,50 @@ function cancel() {
                 </label>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div v-else-if="activeTab === 'activity'" class="space-y-4">
+          <p v-if="activityBusy && !timeline.length" class="text-sm text-gray-500">{{ $t('app.loading') }}</p>
+          <p v-else-if="!timeline.length" class="text-sm text-gray-500">{{ $t('activity.empty') }}</p>
+          <ul class="space-y-3">
+            <li v-for="item in timeline" :key="item.key">
+              <div v-if="item.comment === null" class="text-sm text-gray-600">
+                <span>{{ item.text }}</span>
+                <span class="text-xs text-gray-400 ml-2">{{ formatDateTime(item.at) }}</span>
+              </div>
+              <div v-else class="rounded-lg border border-gray-200 p-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-gray-800">{{ item.comment.author_name }}</span>
+                  <span class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400">{{ formatDateTime(item.comment.created_at) }}</span>
+                    <button
+                      v-if="item.canDelete"
+                      @click="removeComment(item.comment)"
+                      class="text-xs text-red-600 hover:underline"
+                    >
+                      {{ $t('app.delete') }}
+                    </button>
+                  </span>
+                </div>
+                <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{{ item.comment.body }}</p>
+              </div>
+            </li>
+          </ul>
+          <div v-if="myRole && myRole !== 'viewer'" class="flex gap-2 items-end">
+            <textarea
+              v-model="newComment"
+              rows="2"
+              :placeholder="$t('activity.commentPlaceholder')"
+              class="flex-1 border rounded-lg px-3 py-2 text-sm"
+            ></textarea>
+            <button
+              @click="postComment"
+              :disabled="activityBusy || !newComment.trim()"
+              class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {{ $t('activity.comment') }}
+            </button>
           </div>
         </div>
 

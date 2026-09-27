@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { formatDateTime } from '@/services/datetime'
 import * as api from '@/api'
 
 const auth = useAuthStore()
@@ -49,7 +50,7 @@ async function reject(event: api.Event) {
           <div>
             <h3 class="font-semibold text-gray-800">{{ event.title }}</h3>
             <p class="text-sm text-gray-500">
-              {{ new Date(event.start).toLocaleString() }} — {{ new Date(event.end).toLocaleString() }}
+              {{ formatDateTime(event.start) }} — {{ formatDateTime(event.end) }}
             </p>
             <p class="text-sm text-gray-600 mt-1">
               {{ $t('approvals.resource') }}: {{ event.resource_name || '—' }}

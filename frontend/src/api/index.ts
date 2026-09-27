@@ -13,6 +13,8 @@ export interface User {
   display_name: string
   is_admin: boolean
   is_active: boolean
+  time_format: 'auto' | '24h' | '12h'
+  date_format: 'auto' | 'dmy' | 'mdy' | 'ymd'
   created_at: string
 }
 
@@ -50,6 +52,7 @@ export interface AppSettings {
   default_first_weekday: number
   default_show_weekends: boolean
   default_weekend_days: number[]
+  default_show_week_numbers: boolean
 }
 
 export interface AppSettingsUpdate {
@@ -59,6 +62,7 @@ export interface AppSettingsUpdate {
   default_first_weekday?: number
   default_show_weekends?: boolean
   default_weekend_days?: number[]
+  default_show_week_numbers?: boolean
 }
 
 export interface CalendarMember {
@@ -82,6 +86,7 @@ export interface Calendar {
   first_weekday: number
   show_weekends: boolean
   weekend_days: number[]
+  show_week_numbers: boolean
   today_color: string
   dark_today_color: string
   weekend_color: string
@@ -173,6 +178,40 @@ export interface Occurrence {
   resource_id: string | null
   resource_name: string | null
   creator_id: string
+  can_edit: boolean
+  is_recurring: boolean
+}
+
+export interface EventComment {
+  id: string
+  event_id: string
+  author_id: string
+  author_name: string
+  body: string
+  created_at: string
+}
+
+export interface EventActivity {
+  id: string
+  event_id: string
+  actor_id: string | null
+  actor_name: string | null
+  action: string
+  details: { fields?: string[]; status?: string; note?: string } | null
+  created_at: string
+}
+
+export interface AppNotification {
+  id: string
+  type: string
+  actor_id: string | null
+  actor_name: string | null
+  calendar_id: string | null
+  event_id: string | null
+  title: string
+  data: { note?: string; role?: string } | null
+  read_at: string | null
+  created_at: string
 }
 
 export interface AppPassword {
@@ -205,8 +244,14 @@ export const createAppPassword = (token: string, label: string) =>
 export const deleteAppPassword = (token: string, id: string) =>
   api<void>(`/api/users/me/app-passwords/${id}`, { method: 'DELETE', token })
 
-export const updateProfile = (token: string, display_name: string) =>
-  api<User>('/api/users/me', { method: 'PATCH', body: { display_name }, token })
+export const updateProfile = (
+  token: string,
+  data: {
+    display_name?: string
+    time_format?: 'auto' | '24h' | '12h'
+    date_format?: 'auto' | 'dmy' | 'mdy' | 'ymd'
+  },
+) => api<User>('/api/users/me', { method: 'PATCH', body: data, token })
 
 // Calendars
 export const listCalendars = (token: string) =>
@@ -337,6 +382,36 @@ export const updateEvent = (token: string, eventId: string, data: Partial<Event>
 
 export const deleteEvent = (token: string, eventId: string) =>
   api<void>(`/api/calendars/events/${eventId}`, { method: 'DELETE', token })
+
+// Comments & activity
+export const listComments = (token: string, eventId: string) =>
+  api<EventComment[]>(`/api/calendars/events/${eventId}/comments`, { token })
+
+export const addComment = (token: string, eventId: string, body: string) =>
+  api<EventComment>(`/api/calendars/events/${eventId}/comments`, {
+    method: 'POST',
+    body: { body },
+    token,
+  })
+
+export const deleteComment = (token: string, commentId: string) =>
+  api<void>(`/api/calendars/events/comments/${commentId}`, { method: 'DELETE', token })
+
+export const listActivity = (token: string, eventId: string) =>
+  api<EventActivity[]>(`/api/calendars/events/${eventId}/activity`, { token })
+
+// Notifications
+export const listNotifications = (token: string, limit = 50) =>
+  api<AppNotification[]>(`/api/notifications?limit=${limit}`, { token })
+
+export const getUnreadCount = (token: string) =>
+  api<{ count: number }>('/api/notifications/unread-count', { token })
+
+export const markNotificationRead = (token: string, id: string) =>
+  api<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST', token })
+
+export const markAllNotificationsRead = (token: string) =>
+  api<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST', token })
 
 // Approvals
 export const listPendingApprovals = (token: string) =>

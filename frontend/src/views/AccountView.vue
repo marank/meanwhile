@@ -2,9 +2,10 @@
 import { onMounted, ref } from 'vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import { useAuthStore } from '@/stores/auth'
+import { formatDateTime } from '@/services/datetime'
 import * as api from '@/api'
 
-type Tab = 'profile' | 'language' | 'appPasswords'
+type Tab = 'profile' | 'language' | 'dateTime' | 'appPasswords'
 const tab = ref<Tab>('profile')
 
 const auth = useAuthStore()
@@ -31,10 +32,16 @@ async function loadAppPasswords() {
 async function saveProfile() {
   if (!auth.token) return
   busy.value = true
-  await api.updateProfile(auth.token, displayName.value)
+  await api.updateProfile(auth.token, { display_name: displayName.value })
   await auth.fetchMe()
   message.value = 'Profile saved'
   busy.value = false
+}
+
+async function saveFormat(field: 'time_format' | 'date_format', value: string) {
+  if (!auth.token) return
+  await api.updateProfile(auth.token, { [field]: value } as any)
+  await auth.fetchMe()
 }
 
 async function createAppPassword() {
@@ -58,7 +65,7 @@ async function revoke(id: string) {
 
     <div class="flex gap-2 mb-4 border-b border-gray-200">
       <button
-        v-for="t in ['profile', 'language', 'appPasswords']"
+        v-for="t in ['profile', 'language', 'dateTime', 'appPasswords']"
         :key="t"
         @click="tab = t as Tab"
         :class="{ 'border-b-2 border-blue-600 text-blue-600': tab === t }"
@@ -89,6 +96,35 @@ async function revoke(id: string) {
       <LanguageSwitcher />
     </div>
 
+    <div v-if="tab === 'dateTime'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <h2 class="font-semibold text-gray-700">{{ $t('app.dateTime') }}</h2>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.timeFormat') }}</label>
+        <select
+          :value="auth.user?.time_format"
+          @change="saveFormat('time_format', ($event.target as HTMLSelectElement).value)"
+          class="w-full border rounded-lg px-3 py-2"
+        >
+          <option value="auto">{{ $t('app.formatAuto') }}</option>
+          <option value="24h">{{ $t('app.format24h') }}</option>
+          <option value="12h">{{ $t('app.format12h') }}</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.dateFormat') }}</label>
+        <select
+          :value="auth.user?.date_format"
+          @change="saveFormat('date_format', ($event.target as HTMLSelectElement).value)"
+          class="w-full border rounded-lg px-3 py-2"
+        >
+          <option value="auto">{{ $t('app.formatAuto') }}</option>
+          <option value="dmy">31.12.2026</option>
+          <option value="mdy">12/31/2026</option>
+          <option value="ymd">2026-12-31</option>
+        </select>
+      </div>
+    </div>
+
     <div v-if="tab === 'appPasswords'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
       <h2 class="font-semibold text-gray-700">{{ $t('app.appPasswords') }}</h2>
       <p class="text-sm text-gray-500">
@@ -112,7 +148,7 @@ async function revoke(id: string) {
           <div>
             <div class="font-medium text-gray-800">{{ ap.label }}</div>
             <div class="text-xs text-gray-500">
-              Last used: {{ ap.last_used_at ? new Date(ap.last_used_at).toLocaleString() : 'Never' }}
+              {{ $t('app.lastUsed') }}: {{ ap.last_used_at ? formatDateTime(ap.last_used_at) : $t('app.never') }}
             </div>
           </div>
           <button @click="revoke(ap.id)" class="text-red-600 hover:underline text-sm">{{ $t('app.delete') }}</button>

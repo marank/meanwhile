@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -36,11 +36,15 @@ class UserOut(BaseModel):
     display_name: str
     is_admin: bool
     is_active: bool
+    time_format: str
+    date_format: str
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    time_format: Optional[Literal["auto", "24h", "12h"]] = None
+    date_format: Optional[Literal["auto", "dmy", "mdy", "ymd"]] = None
 
 
 class AppPasswordCreate(BaseModel):
@@ -106,6 +110,7 @@ class AppSettingsOut(BaseModel):
     default_first_weekday: int
     default_show_weekends: bool
     default_weekend_days: List[int]
+    default_show_week_numbers: bool
 
 
 class AppSettingsUpdate(BaseModel):
@@ -115,6 +120,7 @@ class AppSettingsUpdate(BaseModel):
     default_first_weekday: Optional[int] = Field(None, ge=0, le=6)
     default_show_weekends: Optional[bool] = None
     default_weekend_days: Optional[List[int]] = None
+    default_show_week_numbers: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +207,7 @@ class CalendarCreate(BaseModel):
     first_weekday: Optional[int] = Field(None, ge=0, le=6)
     show_weekends: Optional[bool] = None
     weekend_days: Optional[List[Weekday]] = None
+    show_week_numbers: Optional[bool] = None
     today_color: str = "#eff6ff"
     dark_today_color: str = "#27272a"
     weekend_color: str = "#f9fafb"
@@ -216,6 +223,7 @@ class CalendarUpdate(BaseModel):
     first_weekday: Optional[int] = Field(None, ge=0, le=6)
     show_weekends: Optional[bool] = None
     weekend_days: Optional[List[Weekday]] = None
+    show_week_numbers: Optional[bool] = None
     today_color: Optional[str] = None
     dark_today_color: Optional[str] = None
     weekend_color: Optional[str] = None
@@ -234,6 +242,7 @@ class CalendarOut(BaseModel):
     first_weekday: int
     show_weekends: bool
     weekend_days: List[Weekday]
+    show_week_numbers: bool
     today_color: str
     dark_today_color: str
     weekend_color: str
@@ -391,6 +400,54 @@ class OccurrenceOut(BaseModel):
     resource_id: Optional[str]
     resource_name: Optional[str]
     creator_id: str
+    can_edit: bool
+    is_recurring: bool
+
+
+# ---------------------------------------------------------------------------
+# Event comments & activity
+# ---------------------------------------------------------------------------
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+
+
+class CommentOut(BaseModel):
+    id: str
+    event_id: str
+    author_id: str
+    author_name: str
+    body: str
+    created_at: datetime
+
+
+class ActivityOut(BaseModel):
+    id: str
+    event_id: str
+    actor_id: Optional[str]
+    actor_name: Optional[str]
+    action: str
+    details: Optional[dict]
+    created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+
+class NotificationOut(BaseModel):
+    id: str
+    type: str
+    actor_id: Optional[str]
+    actor_name: Optional[str]
+    calendar_id: Optional[str]
+    event_id: Optional[str]
+    title: str
+    data: Optional[dict]
+    read_at: Optional[datetime]
+    created_at: datetime
 
 
 # ---------------------------------------------------------------------------
