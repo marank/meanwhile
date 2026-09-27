@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import { Moon, Sun } from 'lucide-vue-next'
 import IconButton from '@/components/IconButton.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
+const settings = useSettingsStore()
 const router = useRouter()
 const open = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
@@ -42,15 +44,29 @@ function gotoAccount() {
 function gotoProfile() {
   gotoAccount()
 }
+
+function gotoAdmin() {
+  router.push('/admin')
+  open.value = false
+}
 </script>
 
 <template>
   <header class="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold">
+      <div
+        v-if="settings.logoUrl"
+        class="w-8 h-8 rounded-lg bg-white flex items-center justify-center overflow-hidden"
+      >
+        <img :src="settings.logoUrl" alt="App logo" class="max-w-full max-h-full object-contain" />
+      </div>
+      <div
+        v-else
+        class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold"
+      >
         C
       </div>
-      <span class="text-lg font-semibold text-gray-800">{{ $t('app.name') }}</span>
+      <span class="text-lg font-semibold text-gray-800">{{ settings.appName || $t('app.name') }}</span>
     </div>
 
     <div ref="menuRef" class="relative flex items-center gap-3">
@@ -86,6 +102,13 @@ function gotoProfile() {
         </button>
         <button @click="gotoAccount" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50">
           {{ $t('app.account') }}
+        </button>
+        <button
+          v-if="auth.isAdmin"
+          @click="gotoAdmin"
+          class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+        >
+          {{ $t('app.administration') }}
         </button>
         <div class="border-t border-gray-100 my-1"></div>
         <button @click="logout" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50">

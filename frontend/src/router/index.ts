@@ -41,6 +41,12 @@ const router = createRouter({
       name: 'account',
       component: () => import('@/views/AccountView.vue'),
     },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('@/views/AdminView.vue'),
+      meta: { admin: true },
+    },
   ],
 })
 
@@ -49,6 +55,7 @@ router.beforeEach((to) => {
   const hasToken = !!auth.token
   if (!to.meta.public && !hasToken) return '/login'
   if (to.meta.public && hasToken) return '/calendar'
+  if (to.meta.admin && !auth.isAdmin) return '/calendar'
 })
 
 export default router

@@ -11,7 +11,54 @@ export interface User {
   id: string
   email: string
   display_name: string
+  is_admin: boolean
+  is_active: boolean
   created_at: string
+}
+
+export interface AdminUser {
+  id: string
+  email: string
+  display_name: string
+  is_admin: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminUserCreate {
+  email: string
+  display_name: string
+  password: string
+  is_admin?: boolean
+  is_active?: boolean
+}
+
+export interface AdminUserUpdate {
+  email?: string
+  display_name?: string
+  password?: string
+  is_admin?: boolean
+  is_active?: boolean
+}
+
+export interface AppSettings {
+  id: number
+  app_name: string
+  logo_url: string | null
+  favicon_url: string | null
+  default_first_weekday: number
+  default_show_weekends: boolean
+  default_weekend_days: number[]
+}
+
+export interface AppSettingsUpdate {
+  app_name?: string
+  logo_url?: string | null
+  favicon_url?: string | null
+  default_first_weekday?: number
+  default_show_weekends?: boolean
+  default_weekend_days?: number[]
 }
 
 export interface CalendarMember {
@@ -205,17 +252,22 @@ export const updateMyMembership = (
 ) =>
   api<CalendarMember>(`/api/calendars/${calendarId}/members/me`, { method: 'PATCH', body: data, token })
 
+export const reorderSidebar = (
+  token: string,
+  items: { type: 'folder' | 'calendar'; id: string; parent_id?: string | null; position: number }[],
+) => api<void>('/api/sidebar/reorder', { method: 'POST', body: { items }, token })
+
 // Folders
-export const listFolders = (token: string) => api<Folder[]>('/api/users/me/folders', { token })
+export const listFolders = (token: string) => api<Folder[]>('/api/folders', { token })
 
 export const createFolder = (token: string, name: string, parent_id?: string | null) =>
-  api<Folder>('/api/users/me/folders', { method: 'POST', body: { name, parent_id }, token })
+  api<Folder>('/api/folders', { method: 'POST', body: { name, parent_id }, token })
 
 export const updateFolder = (token: string, id: string, data: Partial<Folder>) =>
-  api<Folder>(`/api/users/me/folders/${id}`, { method: 'PATCH', body: data, token })
+  api<Folder>(`/api/folders/${id}`, { method: 'PATCH', body: data, token })
 
 export const deleteFolder = (token: string, id: string) =>
-  api<void>(`/api/users/me/folders/${id}`, { method: 'DELETE', token })
+  api<void>(`/api/folders/${id}`, { method: 'DELETE', token })
 
 // Categories
 export const listCategories = (token: string, calendarId: string) =>
@@ -305,3 +357,25 @@ export const getFeedUrl = (token: string, calendarId: string) =>
 
 export const rotateFeedToken = (token: string, calendarId: string) =>
   api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST', token })
+
+// Admin
+export const getAppSettings = (token: string) =>
+  api<AppSettings>('/api/admin/settings', { token })
+
+export const updateAppSettings = (token: string, data: AppSettingsUpdate) =>
+  api<AppSettings>('/api/admin/settings', { method: 'PATCH', body: data, token })
+
+export const listAdminUsers = (token: string) =>
+  api<AdminUser[]>('/api/admin/users', { token })
+
+export const createAdminUser = (token: string, data: AdminUserCreate) =>
+  api<AdminUser>('/api/admin/users', { method: 'POST', body: data, token })
+
+export const updateAdminUser = (token: string, userId: string, data: AdminUserUpdate) =>
+  api<AdminUser>(`/api/admin/users/${userId}`, { method: 'PATCH', body: data, token })
+
+export const deleteAdminUser = (token: string, userId: string) =>
+  api<void>(`/api/admin/users/${userId}`, { method: 'DELETE', token })
+
+export const resetAdminUserPassword = (token: string, userId: string) =>
+  api<{ password: string }>(`/api/admin/users/${userId}/reset-password`, { method: 'POST', token })

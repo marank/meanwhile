@@ -23,10 +23,15 @@ def register(data: UserRegister, db: Session = Depends(get_db)) -> Token:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
+    is_first_user = db.query(User).first() is None
+    is_admin = is_first_user or (
+        settings.admin_email is not None and data.email.lower() == settings.admin_email.lower()
+    )
     user = User(
         email=data.email,
         display_name=data.display_name,
         hashed_password=hash_password(data.password),
+        is_admin=is_admin,
     )
     db.add(user)
     db.commit()
@@ -42,6 +47,12 @@ def login(data: UserLogin, db: Session = Depends(get_db)) -> Token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token({"sub": user.id})

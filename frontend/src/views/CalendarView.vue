@@ -7,7 +7,7 @@ import timeGridPlugin from '@fullcalendar/vue3/timegrid'
 import interactionPlugin from '@fullcalendar/vue3/interaction'
 import classicThemePlugin from '@fullcalendar/vue3/themes/classic'
 import deLocale from '@fullcalendar/vue3/locales/de'
-import type { DateClickInfo, DayCellInfo, EventClickInfo, EventDisplayInfo, DatesSetInfo } from '@fullcalendar/vue3'
+import type { DateClickInfo, DateSelectInfo, DayCellInfo, EventClickInfo, EventDisplayInfo, DatesSetInfo } from '@fullcalendar/vue3'
 import '@fullcalendar/vue3/skeleton.css'
 import '@fullcalendar/vue3/themes/classic/theme.css'
 import '@fullcalendar/vue3/themes/classic/palette.css'
@@ -99,10 +99,14 @@ function reloadVisibleRange(force = false) {
 const showModal = ref(false)
 const modalEventId = ref<string | null>(null)
 const modalDate = ref<Date>(new Date())
+const modalEndDate = ref<Date | undefined>(undefined)
+const modalAllDay = ref<boolean | undefined>(undefined)
 
-function openCreateModal(day: Date) {
+function openCreateModal(start: Date, end?: Date, allDay?: boolean) {
   modalEventId.value = null
-  modalDate.value = day
+  modalDate.value = start
+  modalEndDate.value = end
+  modalAllDay.value = allDay
   showModal.value = true
 }
 
@@ -114,6 +118,8 @@ function openEditModal(eventId: string) {
 function closeModal() {
   showModal.value = false
   modalEventId.value = null
+  modalEndDate.value = undefined
+  modalAllDay.value = undefined
 }
 
 function saved() {
@@ -182,6 +188,14 @@ const calendarOptions = computed(() => ({
   dayCellClass,
   datesSet: handleDatesSet,
   dateClick: (info: DateClickInfo) => openCreateModal(info.date),
+  selectable: true,
+  selectMirror: true,
+  select: (info: DateSelectInfo) => {
+    const end = info.allDay
+      ? new Date(info.end.getTime() - 24 * 60 * 60 * 1000)
+      : info.end
+    openCreateModal(info.start, end, info.allDay)
+  },
   eventClick: (info: EventClickInfo) =>
     openEditModal(info.event.extendedProps.eventId as string),
   eventContent: renderEventContent,
@@ -205,6 +219,8 @@ const calendarOptions = computed(() => ({
       :calendarId="activeCalendarId"
       :eventId="modalEventId"
       :defaultStart="modalDate"
+      :defaultEnd="modalEndDate"
+      :defaultAllDay="modalAllDay"
       @saved="saved"
       @cancel="closeModal"
       @deleted="saved"
@@ -237,7 +253,8 @@ const calendarOptions = computed(() => ({
 }
 
 .fc-event {
-  font-size: 0.7rem;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.35rem;
   cursor: pointer;
   border-radius: 0.375rem;
 }
@@ -260,10 +277,18 @@ const calendarOptions = computed(() => ({
 }
 
 .fc-event-category-marker {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.625rem;
+  height: 0.625rem;
   border-radius: 0.125rem;
   flex: 0 0 auto;
+}
+
+.fc .fc-daygrid-day-frame {
+  min-height: 6rem;
+}
+
+.fc .fc-timegrid-slot {
+  height: 3rem;
 }
 
 .calendar-weekend {

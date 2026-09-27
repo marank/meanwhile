@@ -10,6 +10,8 @@ const props = defineProps<{
   calendarId: string
   eventId?: string | null
   defaultStart?: Date
+  defaultEnd?: Date
+  defaultAllDay?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -139,11 +141,21 @@ onMounted(async () => {
     applyRrule(event.rrule || '')
   } else if (props.defaultStart) {
     const s = props.defaultStart
-    const e = new Date(s.getTime() + 60 * 60 * 1000)
-    startDate.value = toDateInput(s)
-    endDate.value = toDateInput(e)
-    startTime.value = toTimeInput(s)
-    endTime.value = toTimeInput(e)
+    const isAllDay = props.defaultAllDay !== undefined ? props.defaultAllDay : false
+    allDay.value = forceAllDay.value || isAllDay
+    if (props.defaultEnd) {
+      const e = props.defaultEnd
+      startDate.value = allDay.value ? toAllDayDateInput(s.toISOString()) : toDateInput(s)
+      endDate.value = allDay.value ? toAllDayDateInput(e.toISOString()) : toDateInput(e)
+      startTime.value = allDay.value ? '00:00' : toTimeInput(s)
+      endTime.value = allDay.value ? '00:00' : toTimeInput(e)
+    } else {
+      const e = new Date(s.getTime() + 60 * 60 * 1000)
+      startDate.value = toDateInput(s)
+      endDate.value = toDateInput(e)
+      startTime.value = toTimeInput(s)
+      endTime.value = toTimeInput(e)
+    }
     recurrenceMonthDay.value = Number(startDate.value.slice(8, 10))
   }
   selectStartWeekday()
@@ -380,7 +392,7 @@ function cancel() {
           </div>
         </div>
 
-        <p v-if="error" class="text-sm text-red-600 bg-red-50 p-2 rounded mt-4">{{ error }}</p>
+        <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded mt-4">{{ error }}</p>
       </div>
 
       <div class="flex items-center justify-between mt-6">

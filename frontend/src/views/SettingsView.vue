@@ -6,7 +6,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useCalendarStore } from '@/stores/calendars'
 import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/IconButton.vue'
-import Modal from '@/components/Modal.vue'
 import { confirm } from '@/services/dialog'
 import * as api from '@/api'
 
@@ -42,9 +41,9 @@ const weekdayChoices = [
   { value: 0, key: 'sunday' },
 ]
 
-const categoryModalOpen = ref(false)
+const categoryFormMode = ref<'list' | 'add' | 'edit'>('list')
 const categoryForm = ref({ id: null as string | null, name: '', description: '', color: '#64748b' })
-const resourceModalOpen = ref(false)
+const resourceFormMode = ref<'list' | 'add' | 'edit'>('list')
 const resourceForm = ref({
   id: null as string | null,
   name: '',
@@ -79,6 +78,11 @@ async function toggleWeekendDay(day: number) {
     ? calendar.value.weekend_days.filter((value) => value !== day)
     : [...calendar.value.weekend_days, day]
   await updateCalendarSettings()
+}
+
+function goToCalendar() {
+  calendarStore.select(calendarId.value)
+  router.push('/calendar')
 }
 
 async function updateCalendarSettings() {
@@ -119,11 +123,24 @@ async function removeMember(userId: string) {
   await load()
 }
 
-function openCategoryModal(category?: api.Category) {
-  categoryForm.value = category
-    ? { id: category.id, name: category.name, description: category.description || '', color: category.color }
-    : { id: null, name: '', description: '', color: '#64748b' }
-  categoryModalOpen.value = true
+function startAddCategory() {
+  categoryForm.value = { id: null, name: '', description: '', color: '#64748b' }
+  categoryFormMode.value = 'add'
+}
+
+function startEditCategory(category: api.Category) {
+  categoryForm.value = {
+    id: category.id,
+    name: category.name,
+    description: category.description || '',
+    color: category.color,
+  }
+  categoryFormMode.value = 'edit'
+}
+
+function cancelCategoryForm() {
+  categoryFormMode.value = 'list'
+  categoryForm.value = { id: null, name: '', description: '', color: '#64748b' }
 }
 
 async function saveCategory() {
@@ -138,7 +155,8 @@ async function saveCategory() {
   } else {
     await api.createCategory(auth.token, calendarId.value, data)
   }
-  categoryModalOpen.value = false
+  categoryFormMode.value = 'list'
+  categoryForm.value = { id: null, name: '', description: '', color: '#64748b' }
   await load()
 }
 
@@ -150,25 +168,40 @@ async function deleteCategory(id: string) {
   await load()
 }
 
-function openResourceModal(resource?: api.Resource) {
-  resourceForm.value = resource
-    ? {
-        id: resource.id,
-        name: resource.name,
-        description: resource.description || '',
-        color: resource.color,
-        requires_approval: resource.requires_approval,
-        is_active: resource.is_active,
-      }
-    : {
-        id: null,
-        name: '',
-        description: '',
-        color: '#f59e0b',
-        requires_approval: false,
-        is_active: true,
-      }
-  resourceModalOpen.value = true
+function startAddResource() {
+  resourceForm.value = {
+    id: null,
+    name: '',
+    description: '',
+    color: '#f59e0b',
+    requires_approval: false,
+    is_active: true,
+  }
+  resourceFormMode.value = 'add'
+}
+
+function startEditResource(resource: api.Resource) {
+  resourceForm.value = {
+    id: resource.id,
+    name: resource.name,
+    description: resource.description || '',
+    color: resource.color,
+    requires_approval: resource.requires_approval,
+    is_active: resource.is_active,
+  }
+  resourceFormMode.value = 'edit'
+}
+
+function cancelResourceForm() {
+  resourceFormMode.value = 'list'
+  resourceForm.value = {
+    id: null,
+    name: '',
+    description: '',
+    color: '#f59e0b',
+    requires_approval: false,
+    is_active: true,
+  }
 }
 
 async function saveResource() {
@@ -185,7 +218,15 @@ async function saveResource() {
   } else {
     await api.createResource(auth.token, calendarId.value, data)
   }
-  resourceModalOpen.value = false
+  resourceFormMode.value = 'list'
+  resourceForm.value = {
+    id: null,
+    name: '',
+    description: '',
+    color: '#f59e0b',
+    requires_approval: false,
+    is_active: true,
+  }
   await load()
 }
 
@@ -225,7 +266,7 @@ const caldavUrl = computed(() => {
 <template>
   <div class="max-w-4xl mx-auto p-6">
     <div class="flex items-center gap-3 mb-2">
-      <IconButton @click="router.back()" :label="$t('app.back')" bordered>
+      <IconButton @click="goToCalendar" :label="$t('app.back')" bordered>
         <ChevronLeft :size="20" :stroke-width="2.25" />
       </IconButton>
       <h1 class="text-2xl font-bold text-gray-800">
@@ -364,81 +405,143 @@ const caldavUrl = computed(() => {
     </div>
 
     <div v-if="tab === 'categories'" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
-        <h2 class="font-semibold text-gray-700">{{ $t('app.categories') }}</h2>
-        <button v-if="canManage" @click="openCategoryModal()" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">{{ $t('app.add') }}</button>
+      <div v-if="categoryFormMode === 'list'">
+        <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
+          <h2 class="font-semibold text-gray-700">{{ $t('app.categories') }}</h2>
+          <button v-if="canManage" @click="startAddCategory" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">{{ $t('app.add') }}</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th class="px-4 py-2 w-16">{{ $t('app.color') }}</th>
+                <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
+                <th class="px-4 py-2">{{ $t('event.description') }}</th>
+                <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="category in categories" :key="category.id" class="group hover:bg-gray-50">
+                <td class="px-4 py-2"><span class="block w-5 h-5 rounded" :style="{ backgroundColor: category.color }"></span></td>
+                <td class="px-4 py-2 font-medium text-gray-800">{{ category.name }}</td>
+                <td class="px-4 py-2 text-gray-500">{{ category.description || '—' }}</td>
+                <td class="px-4 py-2">
+                  <div v-if="canManage" class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <IconButton @click="startEditCategory(category)" :label="$t('app.edit')" tone="primary">
+                      <Pencil :size="18" :stroke-width="2.25" />
+                    </IconButton>
+                    <IconButton @click="deleteCategory(category.id)" :label="$t('app.delete')" tone="danger">
+                      <Trash2 :size="18" :stroke-width="2.25" />
+                    </IconButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!categories.length"><td colspan="4" class="px-6 py-8 text-center text-gray-500">{{ $t('app.noCategories') }}</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
-            <tr>
-              <th class="px-4 py-2 w-16">{{ $t('app.color') }}</th>
-              <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
-              <th class="px-4 py-2">{{ $t('event.description') }}</th>
-              <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="category in categories" :key="category.id" class="group hover:bg-gray-50">
-              <td class="px-4 py-2"><span class="block w-5 h-5 rounded" :style="{ backgroundColor: category.color }"></span></td>
-              <td class="px-4 py-2 font-medium text-gray-800">{{ category.name }}</td>
-              <td class="px-4 py-2 text-gray-500">{{ category.description || '—' }}</td>
-              <td class="px-4 py-2">
-                <div v-if="canManage" class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <IconButton @click="openCategoryModal(category)" :label="$t('app.edit')" tone="primary">
-                    <Pencil :size="18" :stroke-width="2.25" />
-                  </IconButton>
-                  <IconButton @click="deleteCategory(category.id)" :label="$t('app.delete')" tone="danger">
-                    <Trash2 :size="18" :stroke-width="2.25" />
-                  </IconButton>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!categories.length"><td colspan="4" class="px-6 py-8 text-center text-gray-500">{{ $t('app.noCategories') }}</td></tr>
-          </tbody>
-        </table>
+
+      <div v-else>
+        <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
+          <h2 class="font-semibold text-gray-700">{{ categoryForm.id ? $t('app.editCategory') : $t('app.addCategory') }}</h2>
+          <div class="h-9" aria-hidden="true"></div>
+        </div>
+        <div class="p-6 space-y-4">
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.nameLabel') }}</span>
+            <input v-model="categoryForm.name" class="w-full border border-gray-300 rounded-lg px-3 py-2" />
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('event.description') }}</span>
+            <textarea v-model="categoryForm.description" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.color') }}</span>
+            <input v-model="categoryForm.color" type="color" class="h-10 w-16 rounded border border-gray-300" />
+          </label>
+          <div class="flex justify-end gap-3">
+            <button @click="cancelCategoryForm" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">{{ $t('app.cancel') }}</button>
+            <button @click="saveCategory" :disabled="!categoryForm.name" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ $t('app.save') }}</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Resources -->
     <div v-if="tab === 'resources'" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
-        <h2 class="font-semibold text-gray-700">{{ $t('app.resources') }}</h2>
-        <button v-if="canManage" @click="openResourceModal()" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">{{ $t('app.add') }}</button>
+      <div v-if="resourceFormMode === 'list'">
+        <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
+          <h2 class="font-semibold text-gray-700">{{ $t('app.resources') }}</h2>
+          <button v-if="canManage" @click="startAddResource" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">{{ $t('app.add') }}</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th class="px-4 py-2 w-16">{{ $t('app.color') }}</th>
+                <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
+                <th class="px-4 py-2">{{ $t('event.description') }}</th>
+                <th class="px-4 py-2">{{ $t('app.approval') }}</th>
+                <th class="px-4 py-2">{{ $t('app.status') }}</th>
+                <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="resource in resources" :key="resource.id" class="group hover:bg-gray-50">
+                <td class="px-4 py-2"><span class="block w-5 h-5 rounded" :style="{ backgroundColor: resource.color }"></span></td>
+                <td class="px-4 py-2 font-medium text-gray-800">{{ resource.name }}</td>
+                <td class="px-4 py-2 text-gray-500">{{ resource.description || '—' }}</td>
+                <td class="px-4 py-2">{{ resource.requires_approval ? $t('app.required') : $t('app.notRequired') }}</td>
+                <td class="px-4 py-2">{{ resource.is_active ? $t('app.active') : $t('app.inactive') }}</td>
+                <td class="px-4 py-2">
+                  <div v-if="canManage" class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <IconButton @click="startEditResource(resource)" :label="$t('app.edit')" tone="primary">
+                      <Pencil :size="18" :stroke-width="2.25" />
+                    </IconButton>
+                    <IconButton @click="deleteResource(resource.id)" :label="$t('app.delete')" tone="danger">
+                      <Trash2 :size="18" :stroke-width="2.25" />
+                    </IconButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!resources.length"><td colspan="6" class="px-6 py-8 text-center text-gray-500">{{ $t('app.noResources') }}</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
-            <tr>
-              <th class="px-4 py-2 w-16">{{ $t('app.color') }}</th>
-              <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
-              <th class="px-4 py-2">{{ $t('event.description') }}</th>
-              <th class="px-4 py-2">{{ $t('app.approval') }}</th>
-              <th class="px-4 py-2">{{ $t('app.status') }}</th>
-              <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="resource in resources" :key="resource.id" class="group hover:bg-gray-50">
-              <td class="px-4 py-2"><span class="block w-5 h-5 rounded" :style="{ backgroundColor: resource.color }"></span></td>
-              <td class="px-4 py-2 font-medium text-gray-800">{{ resource.name }}</td>
-              <td class="px-4 py-2 text-gray-500">{{ resource.description || '—' }}</td>
-              <td class="px-4 py-2">{{ resource.requires_approval ? $t('app.required') : $t('app.notRequired') }}</td>
-              <td class="px-4 py-2">{{ resource.is_active ? $t('app.active') : $t('app.inactive') }}</td>
-              <td class="px-4 py-2">
-                <div v-if="canManage" class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <IconButton @click="openResourceModal(resource)" :label="$t('app.edit')" tone="primary">
-                    <Pencil :size="18" :stroke-width="2.25" />
-                  </IconButton>
-                  <IconButton @click="deleteResource(resource.id)" :label="$t('app.delete')" tone="danger">
-                    <Trash2 :size="18" :stroke-width="2.25" />
-                  </IconButton>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!resources.length"><td colspan="6" class="px-6 py-8 text-center text-gray-500">{{ $t('app.noResources') }}</td></tr>
-          </tbody>
-        </table>
+
+      <div v-else>
+        <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
+          <h2 class="font-semibold text-gray-700">{{ resourceForm.id ? $t('app.editResource') : $t('app.addResource') }}</h2>
+          <div class="h-9" aria-hidden="true"></div>
+        </div>
+        <div class="p-6 space-y-4">
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.nameLabel') }}</span>
+            <input v-model="resourceForm.name" class="w-full border border-gray-300 rounded-lg px-3 py-2" />
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('event.description') }}</span>
+            <textarea v-model="resourceForm.description" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
+          </label>
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.color') }}</span>
+            <input v-model="resourceForm.color" type="color" class="h-10 w-16 rounded border border-gray-300" />
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="resourceForm.requires_approval" type="checkbox" />
+            {{ $t('app.requiresApproval') }}
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="resourceForm.is_active" type="checkbox" />
+            {{ $t('app.active') }}
+          </label>
+          <div class="flex justify-end gap-3">
+            <button @click="cancelResourceForm" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">{{ $t('app.cancel') }}</button>
+            <button @click="saveResource" :disabled="!resourceForm.name" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ $t('app.save') }}</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -475,58 +578,5 @@ const caldavUrl = computed(() => {
       </div>
     </div>
 
-    <Modal :open="categoryModalOpen" :title="categoryForm.id ? $t('app.editCategory') : $t('app.addCategory')" @close="categoryModalOpen = false">
-      <div class="space-y-4">
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.nameLabel') }}</span>
-          <input v-model="categoryForm.name" class="w-full border border-gray-300 rounded-lg px-3 py-2" />
-        </label>
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('event.description') }}</span>
-          <textarea v-model="categoryForm.description" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
-        </label>
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.color') }}</span>
-          <input v-model="categoryForm.color" type="color" class="h-10 w-16 rounded border border-gray-300" />
-        </label>
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <button @click="categoryModalOpen = false" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">{{ $t('app.cancel') }}</button>
-          <button @click="saveCategory" :disabled="!categoryForm.name" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ $t('app.save') }}</button>
-        </div>
-      </template>
-    </Modal>
-
-    <Modal :open="resourceModalOpen" :title="resourceForm.id ? $t('app.editResource') : $t('app.addResource')" @close="resourceModalOpen = false">
-      <div class="space-y-4">
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.nameLabel') }}</span>
-          <input v-model="resourceForm.name" class="w-full border border-gray-300 rounded-lg px-3 py-2" />
-        </label>
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('event.description') }}</span>
-          <textarea v-model="resourceForm.description" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
-        </label>
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.color') }}</span>
-          <input v-model="resourceForm.color" type="color" class="h-10 w-16 rounded border border-gray-300" />
-        </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="resourceForm.requires_approval" type="checkbox" />
-          {{ $t('app.requiresApproval') }}
-        </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="resourceForm.is_active" type="checkbox" />
-          {{ $t('app.active') }}
-        </label>
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <button @click="resourceModalOpen = false" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">{{ $t('app.cancel') }}</button>
-          <button @click="saveResource" :disabled="!resourceForm.name" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{{ $t('app.save') }}</button>
-        </div>
-      </template>
-    </Modal>
   </div>
 </template>

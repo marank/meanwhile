@@ -85,7 +85,7 @@ function toggleMode() {
           />
         </div>
 
-        <p v-if="error" class="text-sm text-red-600 bg-red-50 p-2 rounded">{{ error }}</p>
+        <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded">{{ error }}</p>
 
         <button
           type="submit"

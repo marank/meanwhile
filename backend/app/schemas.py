@@ -34,6 +34,8 @@ class UserOut(BaseModel):
     id: str
     email: str
     display_name: str
+    is_admin: bool
+    is_active: bool
     created_at: datetime
 
 
@@ -66,6 +68,55 @@ class UserSearchResult(BaseModel):
     display_name: str
 
 
+class AdminUserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    display_name: str
+    is_admin: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminUserCreate(BaseModel):
+    email: EmailStr
+    display_name: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=8)
+    is_admin: bool = False
+    is_active: bool = True
+
+
+class AdminUserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    display_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    password: Optional[str] = Field(None, min_length=8)
+    is_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+class AppSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    app_name: str
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    default_first_weekday: int
+    default_show_weekends: bool
+    default_weekend_days: List[int]
+
+
+class AppSettingsUpdate(BaseModel):
+    app_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    logo_url: Optional[str] = Field(None, max_length=1_000_000)
+    favicon_url: Optional[str] = Field(None, max_length=1_000_000)
+    default_first_weekday: Optional[int] = Field(None, ge=0, le=6)
+    default_show_weekends: Optional[bool] = None
+    default_weekend_days: Optional[List[int]] = None
+
+
 # ---------------------------------------------------------------------------
 # Calendar folders
 # ---------------------------------------------------------------------------
@@ -92,6 +143,16 @@ class FolderOut(BaseModel):
     position: int
 
 
+class FolderReorderItem(BaseModel):
+    id: str
+    parent_id: Optional[str] = None
+    position: int = 0
+
+
+class FolderReorderRequest(BaseModel):
+    items: List[FolderReorderItem]
+
+
 # ---------------------------------------------------------------------------
 # Calendar members
 # ---------------------------------------------------------------------------
@@ -108,12 +169,28 @@ class CalendarMemberUpdate(BaseModel):
     position: Optional[int] = None
 
 
-class CalendarMemberOut(BaseModel):
+class CalendarMembershipReorderItem(BaseModel):
+    calendar_id: str
+    folder_id: Optional[str] = None
+    position: int = 0
+
+
+class CalendarMembershipReorderRequest(BaseModel):
+    items: List[CalendarMembershipReorderItem]
+
+
+class CalendarMemberBatchOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     calendar_id: str
     user_id: str
+    role: str
+    folder_id: Optional[str]
+    position: int
+
+
+class CalendarMemberOut(CalendarMemberBatchOut):
     email: str
     display_name: str
     role: str
@@ -141,9 +218,9 @@ class CalendarCreate(BaseModel):
     color: Optional[str] = "#3b82f6"
     dark_color: str = "#60a5fa"
     force_all_day: bool = False
-    first_weekday: int = Field(0, ge=0, le=6)
-    show_weekends: bool = True
-    weekend_days: List[Weekday] = Field(default_factory=lambda: [0, 6])
+    first_weekday: Optional[int] = Field(None, ge=0, le=6)
+    show_weekends: Optional[bool] = None
+    weekend_days: Optional[List[Weekday]] = None
     today_color: str = "#eff6ff"
     dark_today_color: str = "#27272a"
     weekend_color: str = "#f9fafb"

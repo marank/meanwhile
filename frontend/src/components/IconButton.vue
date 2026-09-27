@@ -20,12 +20,12 @@ const toneClass = computed(() => ({
 <template>
   <button
     type="button"
-    class="group inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+    class="group/icon inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
     :class="[toneClass, bordered ? 'border border-gray-300 rounded-lg p-2' : 'p-1']"
     :title="label"
     :aria-label="label"
   >
-    <span class="inline-flex transition duration-150 group-hover:scale-110 group-hover:drop-shadow-sm group-focus-visible:scale-110">
+    <span class="inline-flex transition duration-150 group-hover/icon:scale-110 group-hover/icon:drop-shadow-sm group-focus-visible/icon:scale-110">
       <slot />
     </span>
   </button>

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from a2wsgi import WSGIMiddleware
 
 from app.api import (
+    admin,
     approvals,
     auth,
     calendars,
@@ -11,6 +12,7 @@ from app.api import (
     feed,
     folders,
     resources,
+    sidebar,
     users,
 )
 from app.config import settings
@@ -26,10 +28,12 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(calendars.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(folders.router, prefix="/api")
+app.include_router(sidebar.router, prefix="/api")
 app.include_router(resources.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 app.include_router(approvals.router, prefix="/api")

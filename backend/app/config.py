@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-change-me-in-production-needs-32-bytes"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     allow_registration: bool = True
+    admin_email: str | None = None
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
 
     caldav_path: str = "/caldav"

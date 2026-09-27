@@ -13,7 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.database import Base
 
@@ -46,6 +46,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
@@ -65,6 +67,34 @@ class User(Base):
     created_events: Mapped[List["Event"]] = relationship(
         back_populates="creator", foreign_keys="Event.creator_id"
     )
+
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    app_name: Mapped[str] = mapped_column(String(255), default="Calendar", nullable=False)
+    logo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    favicon_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    default_first_weekday: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    default_show_weekends: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    default_weekend_days: Mapped[List[int]] = mapped_column(JSON, default=lambda: [0, 6], nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+def get_or_create_app_settings(db: Session) -> "AppSettings":
+    settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
+    if settings is None:
+        settings = AppSettings()
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
 
 
 class AppPassword(Base):

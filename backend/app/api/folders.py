@@ -1,27 +1,40 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Folder, User
+from app.models import CalendarMember, Folder, User
 from app.schemas import FolderCreate, FolderOut, FolderUpdate
 
-router = APIRouter(prefix="/users/me/folders", tags=["folders"])
+router = APIRouter(prefix="/folders", tags=["folders"])
 
 
-def _is_descendant(db: Session, parent: Folder, candidate_id: str) -> bool:
-    if candidate_id is None:
+def _is_descendant(
+    db: Session, user_id: str, ancestor_id: str | None, candidate_id: str | None
+) -> bool:
+    if candidate_id is None or ancestor_id is None:
         return False
-    current = parent
-    while current.parent_id is not None:
-        if current.parent_id == candidate_id:
-            return True
-        current = db.query(Folder).filter(Folder.id == current.parent_id).first()
-        if current is None:
-            return False
-    return False
+    if candidate_id == ancestor_id:
+        return True
+    sql = text(
+        """
+        WITH RECURSIVE descendants(id) AS (
+            SELECT id FROM folders WHERE parent_id = :ancestor_id AND user_id = :user_id
+            UNION ALL
+            SELECT f.id FROM folders f
+            JOIN descendants d ON f.parent_id = d.id
+            WHERE f.user_id = :user_id
+        )
+        SELECT 1 FROM descendants WHERE id = :candidate_id LIMIT 1
+        """
+    )
+    result = db.execute(
+        sql, {"ancestor_id": ancestor_id, "candidate_id": candidate_id, "user_id": user_id}
+    ).first()
+    return result is not None
 
 
 @router.get("", response_model=List[FolderOut])
@@ -84,8 +97,10 @@ def update_folder(
             detail="Folder not found",
         )
 
-    if data.parent_id is not None:
-        new_parent_id = data.parent_id if data.parent_id else None
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "parent_id" in update_data:
+        new_parent_id = update_data["parent_id"] or None
         if new_parent_id == folder_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -102,17 +117,17 @@ def update_folder(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Parent folder not found",
                 )
-            if _is_descendant(folder, new_parent_id):
+            if _is_descendant(db, current_user.id, folder.id, new_parent_id):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Cannot create a folder cycle",
                 )
         folder.parent_id = new_parent_id
 
-    if data.name is not None:
-        folder.name = data.name
-    if data.position is not None:
-        folder.position = data.position
+    if "name" in update_data:
+        folder.name = update_data["name"]
+    if "position" in update_data:
+        folder.position = update_data["position"]
 
     db.commit()
     db.refresh(folder)

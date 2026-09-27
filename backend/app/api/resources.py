@@ -86,7 +86,7 @@ def create_resource(
     return _serialize_resource(resource)
 
 
-@router.get("/{resource_id}", response_model=ResourceOut)
+@router.get("/resources/{resource_id}", response_model=ResourceOut)
 def get_resource(
     resource_id: str,
     db: Session = Depends(get_db),
@@ -102,7 +102,7 @@ def get_resource(
     return _serialize_resource(resource)
 
 
-@router.patch("/{resource_id}", response_model=ResourceOut)
+@router.patch("/resources/{resource_id}", response_model=ResourceOut)
 def update_resource(
     resource_id: str,
     data: ResourceUpdate,
@@ -136,7 +136,7 @@ def update_resource(
     return _serialize_resource(resource)
 
 
-@router.delete("/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resource(
     resource_id: str,
     db: Session = Depends(get_db),
@@ -158,7 +158,7 @@ def delete_resource(
     db.commit()
 
 
-@router.get("/{resource_id}/approvers", response_model=List[ApproverOut])
+@router.get("/resources/{resource_id}/approvers", response_model=List[ApproverOut])
 def list_resource_approvers(
     resource_id: str,
     db: Session = Depends(get_db),
@@ -186,7 +186,7 @@ def list_resource_approvers(
     ]
 
 
-@router.post("/{resource_id}/approvers", response_model=ApproverOut, status_code=201)
+@router.post("/resources/{resource_id}/approvers", response_model=ApproverOut, status_code=201)
 def add_resource_approver(
     resource_id: str,
     data: ApproverCreate,
@@ -232,7 +232,7 @@ def add_resource_approver(
     )
 
 
-@router.delete("/{resource_id}/approvers/{user_id}", status_code=204)
+@router.delete("/resources/{resource_id}/approvers/{user_id}", status_code=204)
 def remove_resource_approver(
     resource_id: str,
     user_id: str,

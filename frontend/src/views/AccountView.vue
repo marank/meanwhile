@@ -4,6 +4,9 @@ import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as api from '@/api'
 
+type Tab = 'profile' | 'language' | 'appPasswords'
+const tab = ref<Tab>('profile')
+
 const auth = useAuthStore()
 const displayName = ref('')
 const busy = ref(false)
@@ -50,11 +53,23 @@ async function revoke(id: string) {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto p-6 space-y-6">
-    <h1 class="text-2xl font-bold text-gray-800">{{ $t('app.account') }}</h1>
+  <div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-2xl font-bold text-gray-800 mb-2">{{ $t('app.account') }}</h1>
 
-    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-gray-700">{{ $t('app.profile') }}</h2>
+    <div class="flex gap-2 mb-4 border-b border-gray-200">
+      <button
+        v-for="t in ['profile', 'language', 'appPasswords']"
+        :key="t"
+        @click="tab = t as Tab"
+        :class="{ 'border-b-2 border-blue-600 text-blue-600': tab === t }"
+        class="px-4 py-2 text-sm font-medium text-gray-600 capitalize"
+      >
+        {{ $t(`app.${t}`) }}
+      </button>
+    </div>
+
+    <div v-if="tab === 'profile'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <h2 class="font-semibold text-gray-700">{{ $t('app.profile') }}</h2>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.displayName') }}</label>
         <input v-model="displayName" class="w-full border rounded-lg px-3 py-2" />
@@ -67,15 +82,15 @@ async function revoke(id: string) {
         {{ $t('app.save') }}
       </button>
       <p v-if="message" class="text-green-600 text-sm">{{ message }}</p>
-    </section>
+    </div>
 
-    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-gray-700">Language</h2>
+    <div v-if="tab === 'language'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <h2 class="font-semibold text-gray-700">{{ $t('app.language') }}</h2>
       <LanguageSwitcher />
-    </section>
+    </div>
 
-    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-gray-700">{{ $t('app.appPasswords') }}</h2>
+    <div v-if="tab === 'appPasswords'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <h2 class="font-semibold text-gray-700">{{ $t('app.appPasswords') }}</h2>
       <p class="text-sm text-gray-500">
         Use app passwords for CalDAV clients. Once you create one, your normal account password will no longer work for CalDAV.
       </p>
@@ -103,6 +118,6 @@ async function revoke(id: string) {
           <button @click="revoke(ap.id)" class="text-red-600 hover:underline text-sm">{{ $t('app.delete') }}</button>
         </li>
       </ul>
-    </section>
+    </div>
   </div>
 </template>

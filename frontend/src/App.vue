@@ -1,15 +1,50 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch, computed } from 'vue'
 import AppNavbar from './components/AppNavbar.vue'
 import CalendarSidebar from './components/CalendarSidebar.vue'
 import DialogHost from './components/DialogHost.vue'
 import { useAuthStore } from './stores/auth'
+import { useSettingsStore } from './stores/settings'
 
 const auth = useAuthStore()
+const settings = useSettingsStore()
 
-onMounted(() => {
-  auth.fetchMe()
+async function loadSettings() {
+  if (auth.token) {
+    await settings.load(auth.token)
+  }
+}
+
+onMounted(async () => {
+  await auth.fetchMe()
+  await loadSettings()
 })
+
+watch(() => auth.token, loadSettings)
+
+watch(
+  () => settings.faviconUrl,
+  (url) => {
+    if (!url) return
+    let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.href = url
+  },
+  { immediate: true },
+)
+
+const pageTitle = computed(() => (settings.appName ? `${settings.appName}` : 'Calendar'))
+watch(
+  pageTitle,
+  (title) => {
+    document.title = title
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

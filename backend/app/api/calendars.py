@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Calendar, CalendarApprover, CalendarMember, Folder, Role, User
+from app.models import Calendar, CalendarApprover, CalendarMember, Folder, Role, User, get_or_create_app_settings
 from app.schemas import (
     ApproverCreate,
     CalendarCreate,
@@ -61,15 +61,19 @@ def create_calendar(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Calendar:
+    app_settings = get_or_create_app_settings(db)
+    first_weekday = data.first_weekday if data.first_weekday is not None else app_settings.default_first_weekday
+    show_weekends = data.show_weekends if data.show_weekends is not None else app_settings.default_show_weekends
+    weekend_days = data.weekend_days if data.weekend_days is not None else app_settings.default_weekend_days
     calendar = Calendar(
         name=data.name,
         description=data.description,
         color=data.color,
         dark_color=data.dark_color,
         force_all_day=data.force_all_day,
-        first_weekday=data.first_weekday,
-        show_weekends=data.show_weekends,
-        weekend_days=sorted(set(data.weekend_days)),
+        first_weekday=first_weekday,
+        show_weekends=show_weekends,
+        weekend_days=sorted(set(weekend_days)),
         today_color=data.today_color,
         weekend_color=data.weekend_color,
         owner_id=current_user.id,
@@ -244,6 +248,41 @@ def add_member(
     return _serialize_membership(new_member)
 
 
+@router.patch("/{calendar_id}/members/me", response_model=MyMembershipOut)
+def update_my_membership(
+    calendar_id: str,
+    data: CalendarMemberUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalendarMember:
+    membership = require_membership(db, calendar_id, current_user.id)
+    if data.role is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot change your own role",
+        )
+    update_data = data.model_dump(exclude_unset=True)
+    if "folder_id" in update_data:
+        if update_data["folder_id"]:
+            folder = db.query(Folder).filter(
+                Folder.id == update_data["folder_id"],
+                Folder.user_id == current_user.id,
+            ).first()
+            if folder is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Folder not found",
+                )
+            membership.folder_id = folder.id
+        else:
+            membership.folder_id = None
+    if "position" in update_data:
+        membership.position = update_data["position"]
+    db.commit()
+    db.refresh(membership)
+    return MyMembershipOut.model_validate(membership)
+
+
 @router.patch("/{calendar_id}/members/{user_id}", response_model=CalendarMemberOut)
 def update_member(
     calendar_id: str,
@@ -307,40 +346,6 @@ def remove_member(
         )
     db.delete(target)
     db.commit()
-
-
-@router.patch("/{calendar_id}/members/me", response_model=MyMembershipOut)
-def update_my_membership(
-    calendar_id: str,
-    data: CalendarMemberUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> CalendarMember:
-    membership = require_membership(db, calendar_id, current_user.id)
-    if data.role is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You cannot change your own role",
-        )
-    if data.folder_id is not None:
-        if data.folder_id != "":
-            folder = db.query(Folder).filter(
-                Folder.id == data.folder_id,
-                Folder.user_id == current_user.id,
-            ).first()
-            if folder is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Folder not found",
-                )
-            membership.folder_id = folder.id
-        else:
-            membership.folder_id = None
-    if data.position is not None:
-        membership.position = data.position
-    db.commit()
-    db.refresh(membership)
-    return MyMembershipOut.model_validate(membership)
 
 
 # ---------------------------------------------------------------------------
