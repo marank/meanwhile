@@ -18,12 +18,40 @@ export interface User {
   created_at: string
 }
 
+export interface UserGroup {
+  id: string
+  name: string
+  description: string | null
+  member_count?: number
+}
+
+export interface UserGroupMember {
+  id: string
+  email: string
+  display_name: string
+}
+
+export interface UserGroupDetail extends UserGroup {
+  members: UserGroupMember[]
+}
+
+export interface UserGroupCreate {
+  name: string
+  description?: string | null
+}
+
+export interface UserGroupUpdate {
+  name?: string
+  description?: string | null
+}
+
 export interface AdminUser {
   id: string
   email: string
   display_name: string
   is_admin: boolean
   is_active: boolean
+  groups: UserGroup[]
   created_at: string
   updated_at: string
 }
@@ -34,6 +62,7 @@ export interface AdminUserCreate {
   password: string
   is_admin?: boolean
   is_active?: boolean
+  group_ids?: string[]
 }
 
 export interface AdminUserUpdate {
@@ -42,6 +71,7 @@ export interface AdminUserUpdate {
   password?: string
   is_admin?: boolean
   is_active?: boolean
+  group_ids?: string[]
 }
 
 export interface AppSettings {
@@ -92,9 +122,26 @@ export interface Calendar {
   weekend_color: string
   dark_weekend_color: string
   owner_id: string
+  is_public: boolean
+  public_role: 'viewer' | 'contributor' | 'editor'
   created_at: string
   updated_at: string
   my_membership: CalendarMember | null
+}
+
+export interface CalendarGroupLink {
+  id: string
+  group: { id: string; name: string }
+  role: 'viewer' | 'contributor' | 'editor'
+}
+
+export interface CalendarGroupLinkCreate {
+  group_id: string
+  role: string
+}
+
+export interface CalendarGroupLinkUpdate {
+  role: string
 }
 
 export interface CalendarListItem {
@@ -140,6 +187,8 @@ export interface Event {
   id: string
   calendar_id: string
   creator_id: string
+  creator_name: string | null
+  creator_email: string | null
   title: string
   description: string | null
   start: string
@@ -201,6 +250,35 @@ export interface EventActivity {
   created_at: string
 }
 
+export interface EventParticipant {
+  id: string
+  event_id: string
+  user_id: string | null
+  email: string
+  display_name: string | null
+  status: 'needs_action' | 'accepted' | 'declined' | 'tentative'
+  created_at: string
+  updated_at: string
+}
+
+export interface EventParticipantCreate {
+  user_id?: string
+  email?: string
+  status?: EventParticipant['status']
+}
+
+export interface SearchResult {
+  id: string
+  type: string
+  label: string
+  subtitle: string | null
+  meta: Record<string, unknown> | null
+}
+
+export interface EventParticipantUpdate {
+  status: EventParticipant['status']
+}
+
 export interface AppNotification {
   id: string
   type: string
@@ -231,8 +309,18 @@ export const login = (data: { email: string; password: string }) =>
 
 export const me = (token: string) => api<User>('/api/users/me', { token })
 
-export const searchUsers = (token: string, q: string) =>
-  api<User[]>(`/api/users/search?q=${encodeURIComponent(q)}`, { token })
+// Search
+export const searchEntities = (
+  token: string,
+  entity: 'users' | 'groups' | 'resources' | 'categories' | string,
+  q: string,
+  options: { limit?: number; calendarId?: string } = {},
+) => {
+  const params = new URLSearchParams({ entity, q })
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.calendarId) params.set('calendar_id', options.calendarId)
+  return api<SearchResult[]>(`/api/search?${params.toString()}`, { token })
+}
 
 // Users / app passwords
 export const listAppPasswords = (token: string) =>
@@ -289,6 +377,31 @@ export const updateMember = (token: string, calendarId: string, userId: string, 
 
 export const removeMember = (token: string, calendarId: string, userId: string) =>
   api<void>(`/api/calendars/${calendarId}/members/${userId}`, { method: 'DELETE', token })
+
+// Calendar group access
+export const listCalendarGroups = (token: string, calendarId: string) =>
+  api<CalendarGroupLink[]>(`/api/calendars/${calendarId}/groups`, { token })
+
+export const addCalendarGroup = (
+  token: string,
+  calendarId: string,
+  data: CalendarGroupLinkCreate,
+) => api<CalendarGroupLink>(`/api/calendars/${calendarId}/groups`, { method: 'POST', body: data, token })
+
+export const updateCalendarGroup = (
+  token: string,
+  calendarId: string,
+  linkId: string,
+  data: CalendarGroupLinkUpdate,
+) =>
+  api<CalendarGroupLink>(`/api/calendars/${calendarId}/groups/${linkId}`, {
+    method: 'PATCH',
+    body: data,
+    token,
+  })
+
+export const removeCalendarGroup = (token: string, calendarId: string, linkId: string) =>
+  api<void>(`/api/calendars/${calendarId}/groups/${linkId}`, { method: 'DELETE', token })
 
 export const updateMyMembership = (
   token: string,
@@ -400,6 +513,34 @@ export const deleteComment = (token: string, commentId: string) =>
 export const listActivity = (token: string, eventId: string) =>
   api<EventActivity[]>(`/api/calendars/events/${eventId}/activity`, { token })
 
+// Event participants
+export const listEventParticipants = (token: string, eventId: string) =>
+  api<EventParticipant[]>(`/api/calendars/events/${eventId}/participants`, { token })
+
+export const addEventParticipant = (token: string, eventId: string, data: EventParticipantCreate) =>
+  api<EventParticipant>(`/api/calendars/events/${eventId}/participants`, {
+    method: 'POST',
+    body: data,
+    token,
+  })
+
+export const updateEventParticipant = (
+  token: string,
+  eventId: string,
+  participantId: string,
+  data: EventParticipantUpdate,
+) => api<EventParticipant>(`/api/calendars/events/${eventId}/participants/${participantId}`, {
+  method: 'PATCH',
+  body: data,
+  token,
+})
+
+export const removeEventParticipant = (token: string, eventId: string, participantId: string) =>
+  api<void>(`/api/calendars/events/${eventId}/participants/${participantId}`, {
+    method: 'DELETE',
+    token,
+  })
+
 // Notifications
 export const listNotifications = (token: string, limit = 50) =>
   api<AppNotification[]>(`/api/notifications?limit=${limit}`, { token })
@@ -412,6 +553,9 @@ export const markNotificationRead = (token: string, id: string) =>
 
 export const markAllNotificationsRead = (token: string) =>
   api<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST', token })
+
+export const deleteNotification = (token: string, id: string) =>
+  api<void>(`/api/notifications/${id}`, { method: 'DELETE', token })
 
 // Approvals
 export const listPendingApprovals = (token: string) =>
@@ -454,3 +598,25 @@ export const deleteAdminUser = (token: string, userId: string) =>
 
 export const resetAdminUserPassword = (token: string, userId: string) =>
   api<{ password: string }>(`/api/admin/users/${userId}/reset-password`, { method: 'POST', token })
+
+// Admin user groups
+export const listUserGroups = (token: string) =>
+  api<UserGroup[]>('/api/groups', { token })
+
+export const createUserGroup = (token: string, data: UserGroupCreate) =>
+  api<UserGroupDetail>('/api/groups', { method: 'POST', body: data, token })
+
+export const getUserGroup = (token: string, groupId: string) =>
+  api<UserGroupDetail>(`/api/groups/${groupId}`, { token })
+
+export const updateUserGroup = (token: string, groupId: string, data: UserGroupUpdate) =>
+  api<UserGroupDetail>(`/api/groups/${groupId}`, { method: 'PATCH', body: data, token })
+
+export const deleteUserGroup = (token: string, groupId: string) =>
+  api<void>(`/api/groups/${groupId}`, { method: 'DELETE', token })
+
+export const addUserGroupMember = (token: string, groupId: string, userId: string) =>
+  api<void>(`/api/groups/${groupId}/members/${userId}`, { method: 'POST', token })
+
+export const removeUserGroupMember = (token: string, groupId: string, userId: string) =>
+  api<void>(`/api/groups/${groupId}/members/${userId}`, { method: 'DELETE', token })

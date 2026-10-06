@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Union
 
 import uuid_utils
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,8 +8,17 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Category, Event, EventStatus, Resource, Role, User
-from app.schemas import EventCreate, EventOut, EventUpdate, OccurrenceOut
+from app.models import Category, Event, EventParticipant, EventStatus, Resource, Role, User
+from app.schemas import (
+    EventCreate,
+    EventOut,
+    EventParticipantCreate,
+    EventParticipantInvite,
+    EventParticipantOut,
+    EventParticipantUpdate,
+    EventUpdate,
+    OccurrenceOut,
+)
 from app.services.bookings import (
     can_modify_event,
     find_conflicting_approved_bookings,
@@ -20,6 +29,7 @@ from app.services.activity import record_activity
 from app.services.ical import serialize_event_ical
 from app.services.notifications import notify
 from app.services.permissions import (
+    get_membership,
     get_visible_event,
     has_at_least_role,
     require_membership,
@@ -34,6 +44,8 @@ def _serialize_event(event: Event) -> EventOut:
         id=event.id,
         calendar_id=event.calendar_id,
         creator_id=event.creator_id,
+        creator_name=event.creator_name,
+        creator_email=event.creator_email,
         title=event.title,
         description=event.description,
         start=make_aware(event.start),
@@ -94,8 +106,11 @@ def list_events(
         .all()
     )
 
+    hidden_statuses = {EventStatus.REJECTED.value, EventStatus.CANCELLED.value}
     out = []
     for event, occ_start, occ_end in expand_events(events, range_start, range_end):
+        if event.status in hidden_statuses and event.creator_id != current_user.id:
+            continue
         out.append(
             OccurrenceOut(
                 event_id=event.id,
@@ -186,7 +201,7 @@ def create_event(
         id=event_id,
         calendar_id=calendar_id,
         creator_id=current_user.id,
-        title=data.title,
+        title=data.title if data.title is not None else '',
         description=data.description,
         start=start,
         end=end,
@@ -215,6 +230,9 @@ def create_event(
 
     event.raw_ical = serialize_event_ical(event)
     record_activity(db, event, current_user.id, "created")
+    if data.participants:
+        for invite in data.participants:
+            _create_participant(db, event, current_user, invite)
     if event.status == EventStatus.PENDING.value and resource is not None:
         notify(
             db,
@@ -317,9 +335,9 @@ def update_event(
                     status_code=404, detail="Resource not found"
                 )
 
-    if data.title is not None:
-        event.title = data.title
-    if data.description is not None:
+    if "title" in data.model_fields_set:
+        event.title = data.title or ''
+    if "description" in data.model_fields_set:
         event.description = data.description
     if data.start is not None:
         event.start = start
@@ -414,6 +432,165 @@ def update_event(
     db.commit()
     db.refresh(event)
     return _serialize_event(event)
+
+
+PARTICIPANT_STATUSES = {"needs_action", "accepted", "declined", "tentative"}
+
+
+def _serialize_participant(participant: EventParticipant) -> EventParticipantOut:
+    return EventParticipantOut(
+        id=participant.id,
+        event_id=participant.event_id,
+        user_id=participant.user_id,
+        email=participant.email,
+        display_name=participant.user.display_name if participant.user else None,
+        status=participant.status,
+        created_at=participant.created_at,
+        updated_at=participant.updated_at,
+    )
+
+
+def _participant_event(db: Session, event_id: str, current_user: User):
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    membership = require_membership(db, event.calendar_id, current_user.id)
+    if not has_at_least_role(membership, Role.VIEWER):
+        raise HTTPException(status_code=403, detail="You cannot view this event")
+    return event, membership
+
+
+def _create_participant(
+    db: Session,
+    event: Event,
+    current_user: User,
+    data: Union[EventParticipantCreate, EventParticipantInvite],
+) -> EventParticipant:
+    participant_status = data.status or "needs_action"
+    if participant_status not in PARTICIPANT_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid participant status")
+    if data.user_id is not None:
+        user = db.query(User).filter(User.id == data.user_id).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        email = user.email.lower()
+    else:
+        email = str(data.email).lower()
+        user = db.query(User).filter(User.email == email).first()
+    duplicate_conditions = [EventParticipant.email == email]
+    if user is not None:
+        duplicate_conditions.append(EventParticipant.user_id == user.id)
+    duplicate = db.query(EventParticipant).filter(
+        EventParticipant.event_id == event.id,
+        or_(*duplicate_conditions),
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Participant already exists")
+    participant = EventParticipant(
+        event_id=event.id, user_id=user.id if user else None, email=email, status=participant_status
+    )
+    db.add(participant)
+    db.flush()
+    if user:
+        notify(
+            db,
+            [user.id],
+            "participant_added",
+            current_user.id,
+            event.title or "Untitled event",
+            calendar_id=event.calendar_id,
+            event_id=event.id,
+            data={"email": email},
+        )
+    return participant
+
+
+@router.get("/events/{event_id}/participants", response_model=List[EventParticipantOut])
+def list_event_participants(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[EventParticipantOut]:
+    event, _ = _participant_event(db, event_id, current_user)
+    participants = (
+        db.query(EventParticipant)
+        .options(joinedload(EventParticipant.user))
+        .filter(EventParticipant.event_id == event.id)
+        .order_by(EventParticipant.created_at)
+        .all()
+    )
+    return [_serialize_participant(participant) for participant in participants]
+
+
+@router.post(
+    "/events/{event_id}/participants",
+    response_model=EventParticipantOut,
+    status_code=201,
+)
+def add_event_participant(
+    event_id: str,
+    data: EventParticipantCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EventParticipantOut:
+    event, membership = _participant_event(db, event_id, current_user)
+    if not can_modify_event(event, current_user.id, Role(membership.role)):
+        raise HTTPException(status_code=403, detail="You cannot modify this event")
+    participant = _create_participant(db, event, current_user, data)
+    db.commit()
+    db.refresh(participant)
+    return _serialize_participant(participant)
+
+
+@router.patch("/events/{event_id}/participants/{participant_id}", response_model=EventParticipantOut)
+def update_event_participant(
+    event_id: str,
+    participant_id: str,
+    data: EventParticipantUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EventParticipantOut:
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    participant = db.query(EventParticipant).filter_by(id=participant_id, event_id=event.id).first()
+    if participant is None:
+        raise HTTPException(status_code=404, detail="Participant not found")
+    membership = get_membership(db, event.calendar_id, current_user.id)
+    can_modify = membership is not None and can_modify_event(
+        event, current_user.id, Role(membership.role)
+    )
+    if not (can_modify or participant.user_id == current_user.id):
+        raise HTTPException(status_code=403, detail="You cannot update this participant")
+    if data.status is None or data.status not in PARTICIPANT_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid participant status")
+    participant.status = data.status
+    db.commit()
+    db.refresh(participant)
+    return _serialize_participant(participant)
+
+
+@router.delete("/events/{event_id}/participants/{participant_id}", status_code=204)
+def delete_event_participant(
+    event_id: str,
+    participant_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    participant = db.query(EventParticipant).filter_by(id=participant_id, event_id=event.id).first()
+    if participant is None:
+        raise HTTPException(status_code=404, detail="Participant not found")
+    membership = get_membership(db, event.calendar_id, current_user.id)
+    can_modify = membership is not None and can_modify_event(
+        event, current_user.id, Role(membership.role)
+    )
+    if not (can_modify or participant.user_id == current_user.id):
+        raise HTTPException(status_code=403, detail="You cannot remove this participant")
+    db.delete(participant)
+    db.commit()
 
 
 @router.delete("/events/{event_id}", status_code=204)

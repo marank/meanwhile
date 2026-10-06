@@ -6,6 +6,16 @@ import { confirm } from '@/services/dialog'
 import { formatDateTime } from '@/services/datetime'
 import { buildRrule as serializeRrule, parseRrule as parseRruleValue, type RecurrenceEnd, type RecurrenceFrequency, type RecurrenceMonthMode } from '@/services/rrule'
 import { useI18n } from 'vue-i18n'
+import { Plus } from 'lucide-vue-next'
+import SearchableSelect from '@/components/SearchableSelect.vue'
+
+interface PendingParticipant {
+  tempId: string
+  user_id?: string
+  email: string
+  display_name: string
+  status: api.EventParticipant['status']
+}
 
 const props = defineProps<{
   calendarId: string
@@ -25,8 +35,7 @@ const auth = useAuthStore()
 const { t } = useI18n()
 const busy = ref(false)
 const error = ref('')
-const resources = ref<api.Resource[]>([])
-const categories = ref<api.Category[]>([])
+const selectedResourceOption = ref<api.SearchResult | null>(null)
 const forceAllDay = ref(false)
 const calendar = ref<api.Calendar | null>(null)
 
@@ -37,9 +46,9 @@ const startDate = ref('')
 const startTime = ref('09:00')
 const endDate = ref('')
 const endTime = ref('10:00')
-const resourceId = ref('')
-const categoryId = ref('')
-const activeTab = ref<'details' | 'recurrence' | 'activity'>('details')
+const resourceId = ref<string | null>(null)
+const categoryId = ref<string | null>(null)
+const activeTab = ref<'details' | 'recurrence' | 'participants' | 'activity'>('details')
 const recurrenceEnabled = ref(false)
 const showRecurrenceCount = ref(false)
 const recurrenceFrequency = ref<RecurrenceFrequency>('WEEKLY')
@@ -56,7 +65,9 @@ const recurrenceCount = ref(10)
 const extraRuleParts = ref<string[]>([])
 
 const tabs = computed(() =>
-  props.eventId ? (['details', 'recurrence', 'activity'] as const) : (['details', 'recurrence'] as const),
+  props.eventId
+    ? (['details', 'recurrence', 'participants', 'activity'] as const)
+    : (['details', 'recurrence', 'participants'] as const),
 )
 
 const comments = ref<api.EventComment[]>([])
@@ -64,8 +75,80 @@ const activityEntries = ref<api.EventActivity[]>([])
 const activityLoaded = ref(false)
 const activityBusy = ref(false)
 const newComment = ref('')
+const participants = ref<api.EventParticipant[]>([])
+const pendingParticipants = ref<PendingParticipant[]>([])
+const participantValue = ref<string | null>(null)
+const participantIsUser = ref(false)
+const selectedParticipantOption = ref<api.SearchResult | null>(null)
+const participantsBusy = ref(false)
+const eventCreatorId = ref('')
+const eventCreatorName = ref('')
+const eventCreatedAt = ref('')
+const eventUpdatedAt = ref('')
 
 const myRole = computed(() => calendar.value?.my_membership?.role || '')
+const canModifyEvent = computed(() =>
+  ['owner', 'editor'].includes(myRole.value) || eventCreatorId.value === auth.user?.id,
+)
+const isReadonly = computed(() => props.eventId ? !canModifyEvent.value : false)
+const canManageParticipants = computed(() => !props.eventId || canModifyEvent.value)
+const participantStatuses: api.EventParticipant['status'][] = [
+  'needs_action',
+  'accepted',
+  'declined',
+  'tentative',
+]
+const resourceRequiresApproval = computed(
+  () => selectedResourceOption.value?.meta?.requires_approval === true,
+)
+
+interface ParticipantListItem {
+  key: string
+  id?: string
+  tempId?: string
+  user_id?: string | null
+  email: string
+  display_name: string | null
+  status: api.EventParticipant['status']
+}
+
+const participantItems = computed<ParticipantListItem[]>(() => [
+  ...participants.value.map((p) => ({
+    key: p.id,
+    id: p.id,
+    user_id: p.user_id,
+    email: p.email,
+    display_name: p.display_name,
+    status: p.status,
+  })),
+  ...pendingParticipants.value.map((p) => ({
+    key: p.tempId,
+    tempId: p.tempId,
+    user_id: p.user_id || null,
+    email: p.email,
+    display_name: p.display_name,
+    status: p.status,
+  })),
+])
+
+const groupedParticipants = computed(() => {
+  const groups: Record<api.EventParticipant['status'], ParticipantListItem[]> = {
+    needs_action: [],
+    accepted: [],
+    declined: [],
+    tentative: [],
+  }
+  for (const item of participantItems.value) {
+    groups[item.status].push(item)
+  }
+  return participantStatuses
+    .map((status) => ({ status, items: groups[status] }))
+    .filter((g) => g.items.length)
+})
+
+function onResourceSelect(_value: string | null, option: api.SearchResult | null) {
+  selectedResourceOption.value = option
+}
 
 interface TimelineItem {
   key: string
@@ -152,8 +235,123 @@ async function removeComment(comment: api.EventComment) {
   comments.value = comments.value.filter((c) => c.id !== comment.id)
 }
 
+function participantStatusLabel(status: api.EventParticipant['status']) {
+  const keys: Record<api.EventParticipant['status'], string> = {
+    needs_action: 'statusNeedsAction',
+    accepted: 'statusAccepted',
+    declined: 'statusDeclined',
+    tentative: 'statusTentative',
+  }
+  return t(`event.${keys[status]}`)
+}
+
+function participantStatusClass(status: api.EventParticipant['status']) {
+  return {
+    needs_action: 'bg-gray-100 text-gray-700',
+    accepted: 'bg-green-100 text-green-700',
+    declined: 'bg-red-100 text-red-700',
+    tentative: 'bg-amber-100 text-amber-700',
+  }[status]
+}
+
+function participantError(e: unknown) {
+  const apiError = e as { detail?: { detail?: string }; message?: string }
+  error.value = apiError.detail?.detail || apiError.message || 'Participant update failed'
+}
+
+async function loadParticipants() {
+  if (!auth.token || !props.eventId) return
+  participantsBusy.value = true
+  error.value = ''
+  try {
+    participants.value = await api.listEventParticipants(auth.token, props.eventId)
+  } catch (e: unknown) {
+    participantError(e)
+  } finally {
+    participantsBusy.value = false
+  }
+}
+
+const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
+function onParticipantSelect(_value: string | null, option: api.SearchResult | null) {
+  participantIsUser.value = !!option
+  selectedParticipantOption.value = option
+}
+
+async function addParticipant() {
+  const value = participantValue.value?.trim()
+  if (!auth.token || !value) return
+  const email = participantIsUser.value
+    ? (selectedParticipantOption.value?.subtitle || value)
+    : value
+  const displayName = participantIsUser.value
+    ? selectedParticipantOption.value?.label || email
+    : email
+  if (pendingParticipants.value.some((p) => p.email.toLowerCase() === email.toLowerCase())) return
+  if (participants.value.some((p) => p.email.toLowerCase() === email.toLowerCase())) return
+
+  if (!props.eventId) {
+    pendingParticipants.value.push({
+      tempId: crypto.randomUUID(),
+      user_id: participantIsUser.value ? value : undefined,
+      email,
+      display_name: displayName,
+      status: 'needs_action',
+    })
+    participantValue.value = null
+    participantIsUser.value = false
+    selectedParticipantOption.value = null
+    return
+  }
+
+  participantsBusy.value = true
+  error.value = ''
+  try {
+    const data: api.EventParticipantCreate = { status: 'needs_action' }
+    if (participantIsUser.value) {
+      data.user_id = value
+    } else {
+      data.email = value
+    }
+    await api.addEventParticipant(auth.token, props.eventId, data)
+    participantValue.value = null
+    participantIsUser.value = false
+    selectedParticipantOption.value = null
+    await loadParticipants()
+  } catch (e: unknown) {
+    participantError(e)
+  } finally {
+    participantsBusy.value = false
+  }
+}
+
+async function removeParticipant(participant: api.EventParticipant) {
+  if (!auth.token || !props.eventId) return
+  participantsBusy.value = true
+  error.value = ''
+  try {
+    await api.removeEventParticipant(auth.token, props.eventId, participant.id)
+    await loadParticipants()
+  } catch (e: unknown) {
+    participantError(e)
+  } finally {
+    participantsBusy.value = false
+  }
+}
+
+function removePendingParticipant(tempId: string) {
+  pendingParticipants.value = pendingParticipants.value.filter((p) => p.tempId !== tempId)
+}
+
+function removeParticipantItem(item: ParticipantListItem) {
+  if (item.tempId) removePendingParticipant(item.tempId)
+  else if (item.id) removeParticipant(item as unknown as api.EventParticipant)
+}
+
 watch(activeTab, (tab) => {
   if (tab === 'activity') loadActivity()
+  if (tab === 'participants') loadParticipants()
 })
 const weekdays = [
   { value: 'MO', key: 'monday' },
@@ -215,18 +413,16 @@ function selectStartWeekday() {
 
 onMounted(async () => {
   if (!auth.token) return
-  const [cal, calendarResources, calendarCategories] = await Promise.all([
-    api.getCalendar(auth.token, props.calendarId),
-    api.listResources(auth.token, props.calendarId),
-    api.listCategories(auth.token, props.calendarId),
-  ])
-  resources.value = calendarResources
-  categories.value = calendarCategories
+  const cal = await api.getCalendar(auth.token, props.calendarId)
   calendar.value = cal
   forceAllDay.value = cal.force_all_day
   if (forceAllDay.value) allDay.value = true
   if (props.eventId) {
     const event = await api.getEvent(auth.token, props.eventId)
+    eventCreatorId.value = event.creator_id
+    eventCreatorName.value = event.creator_name || event.creator_email || ''
+    eventCreatedAt.value = event.created_at
+    eventUpdatedAt.value = event.updated_at
     title.value = event.title
     description.value = event.description || ''
     allDay.value = forceAllDay.value || event.all_day
@@ -236,8 +432,8 @@ onMounted(async () => {
     endDate.value = allDay.value ? toAllDayDateInput(event.end) : toDateInput(e)
     startTime.value = allDay.value ? '00:00' : toTimeInput(s)
     endTime.value = allDay.value ? '00:00' : toTimeInput(e)
-    resourceId.value = event.resource_id || ''
-    categoryId.value = event.category_id || ''
+    resourceId.value = event.resource_id || null
+    categoryId.value = event.category_id || null
     showRecurrenceCount.value = event.show_recurrence_count
     recurrenceMonthDay.value = Number(startDate.value.slice(8, 10))
     applyRrule(event.rrule || '')
@@ -304,6 +500,13 @@ async function save() {
     if (props.eventId) {
       await api.updateEvent(auth.token, props.eventId, body)
     } else {
+      if (pendingParticipants.value.length) {
+        body.participants = pendingParticipants.value.map((p) => ({
+          user_id: p.user_id,
+          email: p.email,
+          status: p.status,
+        }))
+      }
       await api.createEvent(auth.token, props.calendarId, body)
     }
     emit('saved')
@@ -348,10 +551,11 @@ function cancel() {
       </div>
 
       <div class="overflow-y-auto px-1">
-        <div v-if="activeTab === 'details'" class="space-y-3">
+        <fieldset class="contents" :disabled="isReadonly">
+          <div v-if="activeTab === 'details'" class="space-y-3">
           <div>
             <label class="block text-sm font-medium text-gray-700">{{ $t('event.title') }}</label>
-            <input v-model="title" class="w-full border rounded-lg px-3 py-2 mt-1" required />
+            <input v-model="title" class="w-full border rounded-lg px-3 py-2 mt-1" />
           </div>
 
           <div>
@@ -382,18 +586,34 @@ function cancel() {
 
           <div>
             <label class="block text-sm font-medium text-gray-700">{{ $t('event.category') }}</label>
-            <select v-model="categoryId" class="w-full border rounded-lg px-3 py-2 mt-1">
-              <option value="">{{ $t('event.noCategory') }}</option>
-              <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-            </select>
+            <SearchableSelect
+              v-model="categoryId"
+              entity="categories"
+              :calendar-id="calendarId"
+              :default-limit="20"
+              open-on-focus
+              clearable
+              class="mt-1"
+              :placeholder="$t('event.noCategory')"
+            />
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-700">{{ $t('event.bookResource') }}</label>
-            <select v-model="resourceId" class="w-full border rounded-lg px-3 py-2 mt-1">
-              <option value="">{{ $t('event.noResource') }}</option>
-              <option v-for="res in resources" :key="res.id" :value="res.id">{{ res.name }}</option>
-            </select>
+            <SearchableSelect
+              v-model="resourceId"
+              entity="resources"
+              :calendar-id="calendarId"
+              :default-limit="20"
+              open-on-focus
+              clearable
+              class="mt-1"
+              :placeholder="$t('event.noResource')"
+              @select="onResourceSelect"
+            />
+            <p v-if="resourceRequiresApproval" class="text-xs text-amber-600 mt-1">
+              {{ $t('event.resourceRequiresApproval') }}
+            </p>
           </div>
         </div>
 
@@ -494,6 +714,60 @@ function cancel() {
           </div>
         </div>
 
+        <div v-else-if="activeTab === 'participants'" class="space-y-4 pb-4">
+          <p v-if="participantsBusy && !participantItems.length" class="text-sm text-gray-500">{{ $t('app.loading') }}</p>
+          <p v-else-if="!participantItems.length" class="text-sm text-gray-500">{{ $t('event.noParticipants') }}</p>
+          <div v-else class="space-y-3">
+            <div v-for="group in groupedParticipants" :key="group.status">
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                {{ participantStatusLabel(group.status) }}
+              </p>
+              <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200">
+                <li v-for="participant in group.items" :key="participant.key" class="flex items-center justify-between gap-3 p-3">
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-medium text-gray-800">
+                      {{ participant.display_name || participant.email }}
+                    </p>
+                    <p v-if="participant.display_name && participant.display_name !== participant.email" class="truncate text-xs text-gray-500">{{ participant.email }}</p>
+                  </div>
+                  <button
+                    v-if="canManageParticipants"
+                    type="button"
+                    :disabled="participantsBusy"
+                    class="text-xs text-red-600 hover:underline disabled:opacity-50"
+                    @click="removeParticipantItem(participant)"
+                  >
+                    {{ $t('app.delete') }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <form v-if="canManageParticipants" class="flex items-end gap-2 border-t border-gray-200 pt-4" @submit.prevent="addParticipant">
+            <label class="min-w-0 flex-1 text-xs font-medium text-gray-700">
+              {{ $t('event.participantEmail') }}
+              <SearchableSelect
+                v-model="participantValue"
+                entity="users"
+                :min-search-length="2"
+                allow-free-text
+                :free-text-validator="isEmail"
+                class="mt-1"
+                @select="onParticipantSelect"
+              />
+            </label>
+            <button
+              type="submit"
+              :disabled="participantsBusy || !participantValue?.trim()"
+              :aria-label="$t('event.addParticipant')"
+              class="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Plus :size="18" />
+            </button>
+          </form>
+        </div>
+
         <div v-else-if="activeTab === 'activity'" class="space-y-4">
           <p v-if="activityBusy && !timeline.length" class="text-sm text-gray-500">{{ $t('app.loading') }}</p>
           <p v-else-if="!timeline.length" class="text-sm text-gray-500">{{ $t('activity.empty') }}</p>
@@ -539,14 +813,23 @@ function cancel() {
         </div>
 
         <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded mt-4">{{ error }}</p>
+        </fieldset>
+      </div>
+
+      <div v-if="eventId && eventCreatedAt" class="mt-4 text-xs text-gray-500">
+        {{ t('event.createdBy', { name: eventCreatorName, date: formatDateTime(eventCreatedAt) }) }}
+        <span v-if="eventUpdatedAt && eventUpdatedAt !== eventCreatedAt">
+          , {{ t('event.editedBy', { date: formatDateTime(eventUpdatedAt) }) }}
+        </span>
       </div>
 
       <div class="flex items-center justify-between mt-6">
-        <button v-if="eventId" @click="remove" class="text-red-600 hover:underline text-sm">{{ $t('app.delete') }}</button>
+        <button v-if="eventId && canModifyEvent" @click="remove" class="text-red-600 hover:underline text-sm">{{ $t('app.delete') }}</button>
         <div v-else></div>
         <div class="flex gap-3">
           <button @click="cancel" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">{{ $t('app.cancel') }}</button>
           <button
+            v-if="!eventId || canModifyEvent"
             @click="save"
             :disabled="busy"
             class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"

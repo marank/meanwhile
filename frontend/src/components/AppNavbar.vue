@@ -75,7 +75,12 @@ async function toggleNotifications() {
 async function openNotification(n: AppNotification) {
   await notifications.markRead(n.id)
   notifOpen.value = false
-  router.push(n.type === 'approval_requested' ? '/approvals' : '/calendar')
+  router.push('/notifications')
+}
+
+function gotoNotifications() {
+  notifOpen.value = false
+  router.push('/notifications')
 }
 
 async function markAllRead() {
@@ -170,6 +175,15 @@ function gotoAdmin() {
               </button>
             </li>
           </ul>
+          <div class="px-4 py-2 border-t border-gray-100 text-center">
+            <button
+              type="button"
+              class="text-xs text-blue-600 hover:underline"
+              @click="gotoNotifications"
+            >
+              {{ $t('notifications.viewAll') }}
+            </button>
+          </div>
         </div>
       </div>
       <IconButton @click="theme.toggle" :label="$t('app.toggleTheme')">

@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ChevronLeft, Pencil, Trash2, KeyRound } from 'lucide-vue-next'
+import { ChevronLeft, Eye, EyeOff, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import Modal from '@/components/Modal.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { confirm } from '@/services/dialog'
 
 const auth = useAuthStore()
 const settingsStore = useSettingsStore()
 const router = useRouter()
 
-type Tab = 'general' | 'users'
+type Tab = 'general' | 'users' | 'groups'
 const tab = ref<Tab>('general')
 
 const settings = ref<api.AppSettings>({
@@ -40,6 +41,7 @@ const orderedWeekendChoices = computed(() => [
   ...weekdayChoices.slice(0, settings.value.default_first_weekday),
 ])
 const users = ref<api.AdminUser[]>([])
+const groups = ref<api.UserGroup[]>([])
 const busy = ref(false)
 const message = ref('')
 
@@ -51,8 +53,21 @@ const userForm = ref({
   password: '',
   is_admin: false,
   is_active: true,
+  group_ids: [] as string[],
 })
 const generatedPassword = ref<string | null>(null)
+const showPassword = ref(false)
+const selectedUserGroupId = ref<string | null>(null)
+
+const groupFormMode = ref<'list' | 'add' | 'edit'>('list')
+const groupForm = ref({
+  id: null as string | null,
+  name: '',
+  description: '',
+})
+const groupFormMembers = ref<api.UserGroupMember[]>([])
+const groupFormOriginalMemberIds = ref<string[]>([])
+const selectedMemberUserId = ref<string | null>(null)
 
 onMounted(async () => {
   await load()
@@ -62,14 +77,16 @@ async function load() {
   if (!auth.token) return
   try {
     busy.value = true
-    const [_, u] = await Promise.all([
+    const [_, u, g] = await Promise.all([
       settingsStore.load(),
       api.listAdminUsers(auth.token),
+      api.listUserGroups(auth.token),
     ])
     if (settingsStore.settings) {
       settings.value = { ...settingsStore.settings }
     }
     users.value = u
+    groups.value = g
   } catch (e) {
     console.error(e)
   } finally {
@@ -138,8 +155,10 @@ function startAddUser() {
     password: '',
     is_admin: false,
     is_active: true,
+    group_ids: [],
   }
   generatedPassword.value = null
+  showPassword.value = false
   userFormMode.value = 'add'
 }
 
@@ -151,8 +170,10 @@ function startEditUser(user: api.AdminUser) {
     password: '',
     is_admin: user.is_admin,
     is_active: user.is_active,
+    group_ids: user.groups.map((g) => g.id),
   }
   generatedPassword.value = null
+  showPassword.value = false
   userFormMode.value = 'edit'
 }
 
@@ -165,18 +186,42 @@ function cancelUserForm() {
     password: '',
     is_admin: false,
     is_active: true,
+    group_ids: [],
   }
+  selectedUserGroupId.value = null
+  showPassword.value = false
+}
+
+const selectedUserGroups = computed(() =>
+  groups.value.filter((g) => userForm.value.group_ids.includes(g.id)).sort((a, b) => a.name.localeCompare(b.name)),
+)
+
+const availableUserGroups = computed(() =>
+  groups.value.filter((g) => !userForm.value.group_ids.includes(g.id)).sort((a, b) => a.name.localeCompare(b.name)),
+)
+
+function addUserGroup() {
+  const groupId = selectedUserGroupId.value
+  if (!groupId || userForm.value.group_ids.includes(groupId)) return
+  userForm.value.group_ids.push(groupId)
+  selectedUserGroupId.value = null
+}
+
+function removeUserGroup(groupId: string) {
+  userForm.value.group_ids = userForm.value.group_ids.filter((id) => id !== groupId)
 }
 
 async function saveUser() {
   if (!auth.token || !userForm.value.email || !userForm.value.display_name) return
   try {
+    const groupIds = userForm.value.group_ids
     if (userForm.value.id) {
       const data: api.AdminUserUpdate = {
         email: userForm.value.email,
         display_name: userForm.value.display_name,
         is_admin: userForm.value.is_admin,
         is_active: userForm.value.is_active,
+        group_ids: groupIds,
       }
       if (userForm.value.password) {
         data.password = userForm.value.password
@@ -191,6 +236,7 @@ async function saveUser() {
         password,
         is_admin: userForm.value.is_admin,
         is_active: userForm.value.is_active,
+        group_ids: groupIds,
       })
       if (!userForm.value.password) {
         generatedPassword.value = password
@@ -202,6 +248,124 @@ async function saveUser() {
     console.error(e)
   }
 }
+
+function startAddGroup() {
+  groupForm.value = {
+    id: null,
+    name: '',
+    description: '',
+  }
+  groupFormMembers.value = []
+  groupFormOriginalMemberIds.value = []
+  selectedMemberUserId.value = null
+  groupFormMode.value = 'add'
+}
+
+async function startEditGroup(group: api.UserGroup) {
+  if (!auth.token) return
+  groupForm.value = {
+    id: group.id,
+    name: group.name,
+    description: group.description ?? '',
+  }
+  groupFormMembers.value = []
+  groupFormOriginalMemberIds.value = []
+  selectedMemberUserId.value = null
+  try {
+    const detail = await api.getUserGroup(auth.token, group.id)
+    groupFormMembers.value = detail.members
+    groupFormOriginalMemberIds.value = detail.members.map((m) => m.id)
+  } catch (e) {
+    console.error(e)
+  }
+  groupFormMode.value = 'edit'
+}
+
+function cancelGroupForm() {
+  groupFormMode.value = 'list'
+  groupForm.value = {
+    id: null,
+    name: '',
+    description: '',
+  }
+  groupFormMembers.value = []
+  groupFormOriginalMemberIds.value = []
+  selectedMemberUserId.value = null
+}
+
+async function saveGroup() {
+  if (!auth.token || !groupForm.value.name) return
+  const groupId = groupForm.value.id
+  try {
+    const isNew = !groupId
+    let group: api.UserGroupDetail
+    if (isNew) {
+      group = await api.createUserGroup(auth.token, {
+        name: groupForm.value.name,
+        description: groupForm.value.description || null,
+      })
+    } else {
+      group = await api.updateUserGroup(auth.token, groupId, {
+        name: groupForm.value.name,
+        description: groupForm.value.description || null,
+      })
+    }
+
+    const currentIds = groupFormMembers.value.map((m) => m.id)
+    if (isNew) {
+      for (const member of groupFormMembers.value) {
+        await api.addUserGroupMember(auth.token, group.id, member.id)
+      }
+    } else {
+      const added = currentIds.filter((id) => !groupFormOriginalMemberIds.value.includes(id))
+      const removed = groupFormOriginalMemberIds.value.filter((id) => !currentIds.includes(id))
+      for (const userId of added) {
+        await api.addUserGroupMember(auth.token, group.id, userId)
+      }
+      for (const userId of removed) {
+        await api.removeUserGroupMember(auth.token, group.id, userId)
+      }
+    }
+
+    cancelGroupForm()
+    await load()
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function deleteGroup(group: api.UserGroup) {
+  if (!auth.token) return
+  const ok = await confirm(`Delete ${group.name}?`, 'Delete group')
+  if (!ok) return
+  await api.deleteUserGroup(auth.token, group.id)
+  await load()
+}
+
+function addGroupMember() {
+  const userId = selectedMemberUserId.value
+  if (!userId) return
+  const user = users.value.find((u) => u.id === userId)
+  if (!user) return
+  if (groupFormMembers.value.some((m) => m.id === userId)) return
+  groupFormMembers.value.push({
+    id: user.id,
+    email: user.email,
+    display_name: user.display_name,
+  })
+  selectedMemberUserId.value = null
+}
+
+function removeGroupMember(member: api.UserGroupMember) {
+  groupFormMembers.value = groupFormMembers.value.filter((m) => m.id !== member.id)
+}
+
+const availableGroupMembers = computed(() => {
+  const memberIds = new Set(groupFormMembers.value.map((m) => m.id))
+  return users.value
+    .filter((u) => !memberIds.has(u.id))
+    .sort((a, b) => a.display_name.localeCompare(b.display_name))
+})
 
 function generatePassword() {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -244,8 +408,9 @@ const isCurrentUser = computed(() => {
 
     <div class="flex gap-2 mb-4 border-b border-gray-200">
       <button
-        v-for="t in ['general', 'users']"
+        v-for="t in ['general', 'users', 'groups']"
         :key="t"
+        type="button"
         @click="tab = t as Tab"
         :class="{ 'border-b-2 border-blue-600 text-blue-600': tab === t }"
         class="px-4 py-2 text-sm font-medium text-gray-600 capitalize"
@@ -447,12 +612,23 @@ const isCurrentUser = computed(() => {
             </label>
             <label class="block">
               <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.password') }}</span>
-              <input
-                v-model="userForm.password"
-                type="text"
-                :placeholder="userForm.id ? $t('app.passwordUnchanged') : $t('app.passwordGenerated')"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2"
-              />
+              <div class="relative">
+                <input
+                  v-model="userForm.password"
+                  :type="showPassword ? 'text' : 'password'"
+                  :placeholder="userForm.id ? $t('app.passwordUnchanged') : $t('app.passwordGenerated')"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10"
+                />
+                <IconButton
+                  type="button"
+                  class="absolute right-2 top-1/2 -translate-y-1/2"
+                  :label="showPassword ? $t('auth.hidePassword') : $t('auth.showPassword')"
+                  @click="showPassword = !showPassword"
+                >
+                  <Eye v-if="showPassword" :size="18" :stroke-width="2.25" />
+                  <EyeOff v-else :size="18" :stroke-width="2.25" />
+                </IconButton>
+              </div>
             </label>
             <div class="flex gap-6">
               <label class="flex items-center gap-2 text-sm">
@@ -464,6 +640,49 @@ const isCurrentUser = computed(() => {
                 {{ $t('app.active') }}
               </label>
             </div>
+            <div>
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">{{ $t('app.groups') }}</h3>
+              <div v-if="selectedUserGroups.length" class="space-y-2 mb-4">
+                <div
+                  v-for="group in selectedUserGroups"
+                  :key="group.id"
+                  class="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
+                >
+                  <div>
+                    <p class="text-sm font-medium text-gray-800">{{ group.name }}</p>
+                  </div>
+                  <IconButton
+                    type="button"
+                    @click="removeUserGroup(group.id)"
+                    :label="$t('app.delete')"
+                    tone="danger"
+                  >
+                    <X :size="18" :stroke-width="2.25" />
+                  </IconButton>
+                </div>
+              </div>
+              <p v-else class="text-sm text-gray-500 mb-4">{{ $t('app.noGroups') }}</p>
+
+              <div v-if="availableUserGroups.length" class="flex items-end gap-2">
+                <div class="flex-1">
+                  <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.addGroup') }}</span>
+                  <SearchableSelect
+                    v-model="selectedUserGroupId"
+                    entity="groups"
+                    open-on-focus
+                    :placeholder="$t('app.search')"
+                  />
+                </div>
+                <button
+                  type="button"
+                  @click="addUserGroup"
+                  :disabled="!selectedUserGroupId"
+                  class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Plus :size="18" />
+                </button>
+              </div>
+            </div>
           </div>
           <div class="flex justify-end gap-3">
             <button @click="cancelUserForm" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">
@@ -472,6 +691,144 @@ const isCurrentUser = computed(() => {
             <button
               @click="saveUser"
               :disabled="!userForm.email || !userForm.display_name"
+              class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {{ $t('app.save') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="tab === 'groups'" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-if="groupFormMode === 'list'">
+        <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
+          <h2 class="font-semibold text-gray-700">{{ $t('app.groups') }}</h2>
+          <button
+            type="button"
+            @click="startAddGroup"
+            class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          >
+            {{ $t('app.addGroup') }}
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th class="px-4 py-2">{{ $t('app.groupName') }}</th>
+                <th class="px-4 py-2">{{ $t('app.groupDescription') }}</th>
+                <th class="px-4 py-2">{{ $t('app.members') }}</th>
+                <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="group in groups" :key="group.id" class="group hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium text-gray-800">{{ group.name }}</td>
+                <td class="px-4 py-2 text-gray-600">
+                  <span v-if="group.description" class="line-clamp-1">{{ group.description }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-4 py-2 text-gray-600">
+                  {{ group.member_count ?? 0 }}
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <IconButton @click="startEditGroup(group)" :label="$t('app.edit')" tone="primary">
+                      <Pencil :size="18" :stroke-width="2.25" />
+                    </IconButton>
+                    <IconButton @click="deleteGroup(group)" :label="$t('app.delete')" tone="danger">
+                      <Trash2 :size="18" :stroke-width="2.25" />
+                    </IconButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!groups.length">
+                <td colspan="4" class="px-6 py-8 text-center text-gray-500">{{ $t('app.noGroups') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-else>
+        <div class="px-6 py-4 flex items-center justify-between border-b border-gray-200">
+          <h2 class="font-semibold text-gray-700">{{ groupForm.id ? $t('app.editGroup') : $t('app.addGroup') }}</h2>
+          <div class="h-9" aria-hidden="true"></div>
+        </div>
+        <div class="p-6 space-y-6">
+          <div class="space-y-4">
+            <label class="block">
+              <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.groupName') }}</span>
+              <input v-model="groupForm.name" class="w-full border border-gray-300 rounded-lg px-3 py-2" />
+            </label>
+            <label class="block">
+              <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.groupDescription') }}</span>
+              <textarea
+                v-model="groupForm.description"
+                rows="3"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2"
+              ></textarea>
+            </label>
+          </div>
+
+          <div class="border-t border-gray-100 pt-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">{{ $t('app.members') }}</h3>
+            <div v-if="groupFormMembers.length" class="space-y-2 mb-4">
+              <div
+                v-for="member in groupFormMembers"
+                :key="member.id"
+                class="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
+              >
+                <div>
+                  <p class="text-sm font-medium text-gray-800">{{ member.display_name }}</p>
+                  <p class="text-xs text-gray-500">{{ member.email }}</p>
+                </div>
+                <IconButton
+                  type="button"
+                  @click="removeGroupMember(member)"
+                  :label="$t('app.removeMember')"
+                  tone="danger"
+                >
+                  <X :size="18" :stroke-width="2.25" />
+                </IconButton>
+              </div>
+            </div>
+            <p v-else class="text-sm text-gray-500 mb-4">{{ $t('app.noMembers') }}</p>
+
+            <div v-if="groupForm.id" class="flex items-end gap-2">
+              <div class="flex-1">
+                <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('app.addMember') }}</span>
+                <SearchableSelect
+                  v-model="selectedMemberUserId"
+                  entity="users"
+                  :min-search-length="2"
+                  :placeholder="$t('app.searchUsers')"
+                />
+              </div>
+              <button
+                type="button"
+                @click="addGroupMember"
+                :disabled="!selectedMemberUserId"
+                class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Plus :size="18" />
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-3 border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              @click="cancelGroupForm"
+              class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100"
+            >
+              {{ $t('app.cancel') }}
+            </button>
+            <button
+              type="button"
+              @click="saveGroup"
+              :disabled="!groupForm.name"
               class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {{ $t('app.save') }}

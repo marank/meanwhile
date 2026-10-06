@@ -6,11 +6,13 @@ import uuid_utils
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import (
     Boolean,
+    Column,
     DateTime,
     ForeignKey,
     Integer,
     JSON,
     String,
+    Table,
     Text,
     UniqueConstraint,
 )
@@ -36,6 +38,31 @@ class EventStatus(str, enum.Enum):
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+user_group_members = Table(
+    "user_group_members",
+    Base.metadata,
+    Column(
+        "id",
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid_utils.uuid7()),
+    ),
+    Column(
+        "user_id",
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    ),
+    Column(
+        "group_id",
+        String(36),
+        ForeignKey("user_groups.id", ondelete="CASCADE"),
+        index=True,
+    ),
+    UniqueConstraint("user_id", "group_id", name="uq_user_group_member"),
+)
 
 
 class User(Base):
@@ -70,6 +97,47 @@ class User(Base):
     created_events: Mapped[List["Event"]] = relationship(
         back_populates="creator", foreign_keys="Event.creator_id"
     )
+    event_participations: Mapped[List["EventParticipant"]] = relationship(
+        back_populates="user"
+    )
+    groups: Mapped[List["UserGroup"]] = relationship(
+        secondary=user_group_members,
+        back_populates="users",
+        passive_deletes=True,
+    )
+
+
+class UserGroup(Base):
+    __tablename__ = "user_groups"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid_utils.uuid7())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    users: Mapped[List["User"]] = relationship(
+        secondary=user_group_members,
+        back_populates="groups",
+        passive_deletes=True,
+    )
+    calendar_groups: Mapped[List["CalendarGroup"]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def members(self) -> List["User"]:
+        return self.users
 
 
 class AppSettings(Base):
@@ -187,16 +255,38 @@ class Calendar(Base):
         nullable=False,
     )
 
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    public_role: Mapped[str] = mapped_column(
+        String(20), default=Role.VIEWER.value, nullable=False
+    )
+
     owner: Mapped["User"] = relationship(
         back_populates="calendars_owned", foreign_keys=[owner_id]
     )
-    members: Mapped[List["CalendarMember"]] = relationship(back_populates="calendar")
-    approvers: Mapped[List["CalendarApprover"]] = relationship(
-        back_populates="calendar"
+    members: Mapped[List["CalendarMember"]] = relationship(
+        back_populates="calendar",
+        cascade="all, delete-orphan",
     )
-    resources: Mapped[List["Resource"]] = relationship(back_populates="calendar")
-    categories: Mapped[List["Category"]] = relationship(back_populates="calendar")
-    events: Mapped[List["Event"]] = relationship(back_populates="calendar")
+    calendar_groups: Mapped[List["CalendarGroup"]] = relationship(
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+    )
+    approvers: Mapped[List["CalendarApprover"]] = relationship(
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+    )
+    resources: Mapped[List["Resource"]] = relationship(
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+    )
+    categories: Mapped[List["Category"]] = relationship(
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+    )
+    events: Mapped[List["Event"]] = relationship(
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+    )
 
 
 class CalendarMember(Base):
@@ -228,6 +318,36 @@ class CalendarMember(Base):
     folder: Mapped[Optional["Folder"]] = relationship(
         back_populates="memberships", foreign_keys=[folder_id]
     )
+
+
+class CalendarGroup(Base):
+    __tablename__ = "calendar_groups"
+    __table_args__ = (
+        UniqueConstraint("calendar_id", "group_id", name="uq_calendar_group"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid_utils.uuid7())
+    )
+    calendar_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("calendars.id", ondelete="CASCADE"), index=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user_groups.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), default=Role.VIEWER.value)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    calendar: Mapped["Calendar"] = relationship(back_populates="calendar_groups")
+    group: Mapped["UserGroup"] = relationship(back_populates="calendar_groups")
 
 
 class CalendarApprover(Base):
@@ -343,7 +463,7 @@ class Event(Base):
     creator_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    title: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(255), default='')
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -387,10 +507,52 @@ class Event(Base):
     )
     resource: Mapped[Optional["Resource"]] = relationship(back_populates="events")
     category: Mapped[Optional["Category"]] = relationship(back_populates="events")
+    participants: Mapped[List["EventParticipant"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         UniqueConstraint("calendar_id", "uid", name="uq_event_calendar_uid"),
     )
+
+    @property
+    def creator_name(self) -> Optional[str]:
+        return self.creator.display_name if self.creator else None
+
+    @property
+    def creator_email(self) -> Optional[str]:
+        return self.creator.email if self.creator else None
+
+
+class EventParticipant(Base):
+    __tablename__ = "event_participants"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_participant_user"),
+        UniqueConstraint("event_id", "email", name="uq_event_participant_email"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid_utils.uuid7())
+    )
+    event_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("events.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="needs_action", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+    event: Mapped["Event"] = relationship(back_populates="participants")
+    user: Mapped[Optional["User"]] = relationship(back_populates="event_participations")
 
 
 class EventComment(Base):

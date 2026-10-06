@@ -30,7 +30,10 @@ const { locale, t } = useI18n()
 const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null)
 
 function eventLabel(occ: Occurrence): string {
-  const title = occ.recurrence_count === null ? occ.title : `${occ.title} (${occ.recurrence_count})`
+  let title = occ.recurrence_count === null ? occ.title : `${occ.title} (${occ.recurrence_count})`
+  if (occ.status === 'rejected' || occ.status === 'cancelled') {
+    title = `${title} (${t('event.declined')})`
+  }
   return occ.resource_name ? `${title} · ${occ.resource_name}` : title
 }
 
@@ -47,9 +50,14 @@ function renderEventContent(info: EventDisplayInfo) {
   const duration = info.event.start && info.event.end
     ? info.event.end.getTime() - info.event.start.getTime()
     : 0
-  content.className = duration > 24 * 60 * 60 * 1000
+  const classes = [duration > 24 * 60 * 60 * 1000
     ? 'fc-event-label fc-event-label-multiday'
-    : 'fc-event-label'
+    : 'fc-event-label']
+  const status = info.event.extendedProps.status as string | undefined
+  if (status === 'rejected' || status === 'cancelled') {
+    classes.push('fc-event-declined')
+  }
+  content.className = classes.join(' ')
   if (info.timeText) {
     const time = document.createElement('span')
     time.className = 'fc-event-time-label'
@@ -78,10 +86,11 @@ const fcEvents = computed(() =>
       start: occ.start,
       end: occ.end,
       allDay: occ.all_day,
-      editable: occ.can_edit && !occ.is_recurring,
+      startEditable: occ.can_edit && !occ.is_recurring,
+      durationEditable: occ.can_edit && !occ.is_recurring,
       color,
       contrastColor: contrastColor(color),
-      extendedProps: { eventId: occ.event_id, categoryColor: occ.category_color },
+      extendedProps: { eventId: occ.event_id, categoryColor: occ.category_color, status: occ.status },
     }
   }),
 )
@@ -237,7 +246,7 @@ const calendarOptions = computed(() => ({
   eventDrop: handleEventChange,
   eventResize: handleEventChange,
   eventTimeFormat: { hour: 'numeric', minute: '2-digit', hour12: hour12() } as Intl.DateTimeFormatOptions,
-  slotLabelFormat: { hour: 'numeric', minute: '2-digit', hour12: hour12() } as Intl.DateTimeFormatOptions,
+  slotHeaderFormat: { hour: 'numeric', minute: '2-digit', hour12: hour12() } as Intl.DateTimeFormatOptions,
   dayCellClass,
   datesSet: handleDatesSet,
   dateClick: (info: DateClickInfo) => openCreateModal(info.date),
@@ -253,10 +262,10 @@ const calendarOptions = computed(() => ({
     openEditModal(info.event.extendedProps.eventId as string),
   eventContent: renderEventContent,
   dayMaxEvents: true,
-  buttonText: {
-    today: t('app.today'),
-    month: t('app.month'),
-    week: t('app.week'),
+  buttons: {
+    today: { text: t('app.today'), display: 'text' as const },
+    dayGridMonth: { text: t('app.month'), display: 'text' as const },
+    timeGridWeek: { text: t('app.week'), display: 'text' as const },
   },
 }))
 </script>
@@ -334,6 +343,11 @@ const calendarOptions = computed(() => ({
   height: 0.625rem;
   border-radius: 0.125rem;
   flex: 0 0 auto;
+}
+
+.fc-event-declined {
+  opacity: 0.6;
+  text-decoration: line-through;
 }
 
 .fc .fc-daygrid-day-frame {

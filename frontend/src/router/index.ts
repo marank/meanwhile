@@ -27,9 +27,9 @@ const router = createRouter({
       component: () => import('@/views/CalendarView.vue'),
     },
     {
-      path: '/approvals',
-      name: 'approvals',
-      component: () => import('@/views/ApprovalsView.vue'),
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('@/views/NotificationsView.vue'),
     },
     {
       path: '/settings/:calendarId',

@@ -2,7 +2,6 @@ import secrets
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
@@ -14,7 +13,6 @@ from app.schemas import (
     AppPasswordCreated,
     AppPasswordOut,
     UserOut,
-    UserSearchResult,
     UserUpdate,
 )
 
@@ -41,32 +39,6 @@ def update_current_user(
     db.commit()
     db.refresh(current_user)
     return current_user
-
-
-@router.get("/search", response_model=List[UserSearchResult])
-def search_users(
-    q: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> List[User]:
-    if len(q) < 2:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Query must be at least 2 characters",
-        )
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    users = (
-        db.query(User)
-        .filter(
-            or_(
-                User.email.ilike(f"%{escaped}%", escape="\\"),
-                User.display_name.ilike(f"%{escaped}%", escape="\\"),
-            )
-        )
-        .limit(20)
-        .all()
-    )
-    return users
 
 
 @router.get("/me/app-passwords", response_model=List[AppPasswordOut])

@@ -2,15 +2,30 @@ import secrets
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Calendar, CalendarApprover, CalendarMember, Folder, Role, User, get_or_create_app_settings
+from app.models import (
+    Calendar,
+    CalendarApprover,
+    CalendarGroup,
+    CalendarMember,
+    Folder,
+    Role,
+    User,
+    UserGroup,
+    get_or_create_app_settings,
+    user_group_members,
+)
 from app.schemas import (
     ApproverCreate,
     CalendarCreate,
+    CalendarGroupLinkCreate,
+    CalendarGroupLinkOut,
+    CalendarGroupLinkUpdate,
     CalendarListOut,
     CalendarMemberCreate,
     CalendarMemberOut,
@@ -23,10 +38,13 @@ from app.schemas import (
 )
 from app.services.notifications import notify
 from app.services.permissions import (
+    _make_synthetic_member,
+    get_direct_membership,
     get_membership,
     has_at_least_role,
     is_owner,
     require_membership,
+    role_weight,
 )
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
@@ -44,20 +62,75 @@ def list_calendars(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[dict]:
-    memberships = (
+    # 1. Direct memberships
+    direct_memberships = (
         db.query(CalendarMember)
         .filter(CalendarMember.user_id == current_user.id)
         .join(Calendar)
         .order_by(CalendarMember.position.asc(), Calendar.name.asc())
         .all()
     )
-    return [
-        {
-            "calendar": CalendarOut.model_validate(membership.calendar),
-            "membership": _serialize_membership(membership),
-        }
-        for membership in memberships
-    ]
+    seen_calendar_ids = {m.calendar_id for m in direct_memberships}
+    results: list[dict] = []
+    for membership in direct_memberships:
+        membership.user = current_user
+        results.append(
+            {
+                "calendar": CalendarOut.model_validate(membership.calendar),
+                "membership": _serialize_membership(membership),
+            }
+        )
+
+    # 2. Group-linked calendars the user doesn't already have direct membership for.
+    my_group_ids = (
+        select(user_group_members.c.group_id)
+        .where(user_group_members.c.user_id == current_user.id)
+        .scalar_subquery()
+    )
+    group_links = (
+        db.query(CalendarGroup)
+        .filter(CalendarGroup.group_id.in_(my_group_ids))
+        .options(joinedload(CalendarGroup.calendar))
+        .all()
+    )
+    # Group by calendar_id, pick highest role
+    group_cal_roles: dict[str, str] = {}
+    group_cal_objs: dict[str, Calendar] = {}
+    for gl in group_links:
+        cid = gl.calendar_id
+        if cid in seen_calendar_ids:
+            continue
+        if cid not in group_cal_roles or role_weight(Role(gl.role)) > role_weight(
+            Role(group_cal_roles[cid])
+        ):
+            group_cal_roles[cid] = gl.role
+            group_cal_objs[cid] = gl.calendar
+    for cid, role_val in group_cal_roles.items():
+        seen_calendar_ids.add(cid)
+        cal = group_cal_objs[cid]
+        member = _make_synthetic_member(cal, current_user, role_val)
+        results.append(
+            {
+                "calendar": CalendarOut.model_validate(cal),
+                "membership": _serialize_membership(member),
+            }
+        )
+
+    # 3. Public calendars the user doesn't already see.
+    public_q = db.query(Calendar).filter(Calendar.is_public.is_(True))
+    if seen_calendar_ids:
+        public_q = public_q.filter(Calendar.id.notin_(seen_calendar_ids))
+    public_calendars = public_q.all()
+    for cal in public_calendars:
+        member = _make_synthetic_member(cal, current_user, cal.public_role)
+        results.append(
+            {
+                "calendar": CalendarOut.model_validate(cal),
+                "membership": _serialize_membership(member),
+            }
+        )
+
+    return results
 
 
 @router.post("", response_model=CalendarOut, status_code=status.HTTP_201_CREATED)
@@ -167,6 +240,10 @@ def update_calendar(
         calendar.weekend_color = data.weekend_color
     if data.dark_weekend_color is not None:
         calendar.dark_weekend_color = data.dark_weekend_color
+    if data.is_public is not None:
+        calendar.is_public = data.is_public
+    if data.public_role is not None:
+        calendar.public_role = data.public_role
     db.commit()
     db.refresh(calendar)
     out = CalendarOut.model_validate(calendar)
@@ -235,7 +312,7 @@ def add_member(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    existing = get_membership(db, calendar_id, data.user_id)
+    existing = get_direct_membership(db, calendar_id, data.user_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -315,7 +392,7 @@ def update_member(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner can change member roles",
         )
-    target = get_membership(db, calendar_id, user_id)
+    target = get_direct_membership(db, calendar_id, user_id)
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -361,7 +438,7 @@ def remove_member(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner can remove members",
         )
-    target = get_membership(db, calendar_id, user_id)
+    target = get_direct_membership(db, calendar_id, user_id)
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -462,7 +539,7 @@ def add_calendar_approver(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner can add approvers",
         )
-    target_membership = get_membership(db, calendar_id, data.user_id)
+    target_membership = get_direct_membership(db, calendar_id, data.user_id)
     if target_membership is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -521,4 +598,153 @@ def remove_calendar_approver(
             detail="Approver not found",
         )
     db.delete(approver)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Calendar group links
+# ---------------------------------------------------------------------------
+
+
+def _serialize_group_link(link: CalendarGroup) -> CalendarGroupLinkOut:
+    return CalendarGroupLinkOut(
+        id=link.id,
+        group={"id": link.group.id, "name": link.group.name},
+        role=link.role,
+    )
+
+
+@router.get("/{calendar_id}/groups", response_model=List[CalendarGroupLinkOut])
+def list_calendar_groups(
+    calendar_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[CalendarGroupLinkOut]:
+    membership = require_membership(db, calendar_id, current_user.id)
+    if not is_owner(membership):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can manage group links",
+        )
+    links = (
+        db.query(CalendarGroup)
+        .filter(CalendarGroup.calendar_id == calendar_id)
+        .options(joinedload(CalendarGroup.group))
+        .all()
+    )
+    return [_serialize_group_link(link) for link in links]
+
+
+@router.post(
+    "/{calendar_id}/groups",
+    response_model=CalendarGroupLinkOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_calendar_group(
+    calendar_id: str,
+    data: CalendarGroupLinkCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalendarGroupLinkOut:
+    membership = require_membership(db, calendar_id, current_user.id)
+    if not is_owner(membership):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can manage group links",
+        )
+    group = db.query(UserGroup).filter(UserGroup.id == data.group_id).first()
+    if group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found",
+        )
+    existing = (
+        db.query(CalendarGroup)
+        .filter_by(calendar_id=calendar_id, group_id=data.group_id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Group is already linked to this calendar",
+        )
+    link = CalendarGroup(
+        calendar_id=calendar_id,
+        group_id=data.group_id,
+        role=data.role,
+    )
+    db.add(link)
+    db.commit()
+    # Re-fetch with group eagerly loaded after commit
+    link = (
+        db.query(CalendarGroup)
+        .filter(CalendarGroup.id == link.id)
+        .options(joinedload(CalendarGroup.group))
+        .first()
+    )
+    return _serialize_group_link(link)
+
+
+@router.patch("/{calendar_id}/groups/{link_id}", response_model=CalendarGroupLinkOut)
+def update_calendar_group(
+    calendar_id: str,
+    link_id: str,
+    data: CalendarGroupLinkUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalendarGroupLinkOut:
+    membership = require_membership(db, calendar_id, current_user.id)
+    if not is_owner(membership):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can manage group links",
+        )
+    link = (
+        db.query(CalendarGroup)
+        .filter(CalendarGroup.id == link_id, CalendarGroup.calendar_id == calendar_id)
+        .options(joinedload(CalendarGroup.group))
+        .first()
+    )
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group link not found",
+        )
+    if data.role is not None:
+        link.role = data.role
+    db.commit()
+    # Re-fetch with group eagerly loaded after commit
+    link = (
+        db.query(CalendarGroup)
+        .filter(CalendarGroup.id == link_id)
+        .options(joinedload(CalendarGroup.group))
+        .first()
+    )
+    return _serialize_group_link(link)
+
+
+@router.delete("/{calendar_id}/groups/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_calendar_group(
+    calendar_id: str,
+    link_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    membership = require_membership(db, calendar_id, current_user.id)
+    if not is_owner(membership):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can manage group links",
+        )
+    link = (
+        db.query(CalendarGroup)
+        .filter(CalendarGroup.id == link_id, CalendarGroup.calendar_id == calendar_id)
+        .first()
+    )
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group link not found",
+        )
+    db.delete(link)
     db.commit()

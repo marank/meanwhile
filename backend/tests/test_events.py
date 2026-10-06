@@ -203,3 +203,155 @@ def test_feed_excludes_pending_bookings(make_calendar):
     feed = _feed(auth, cal["id"])
     assert "Confirmed event" in feed
     assert "Pending booking" not in feed
+
+
+def test_event_title_and_description_optional(make_calendar):
+    auth, cal = make_calendar("optional@example.com", "Optional")
+    r = auth.post(
+        f"/api/calendars/{cal['id']}/events",
+        json={"start": "2026-10-01T10:00:00Z", "end": "2026-10-01T11:00:00Z"},
+    )
+    assert r.status_code == 201
+    event = r.json()
+    assert event["title"] == ""
+    assert event["description"] is None
+
+    r = auth.patch(
+        f"/api/calendars/events/{event['id']}",
+        json={"title": "Has title", "description": "A description"},
+    )
+    assert r.status_code == 200
+    assert r.json()["title"] == "Has title"
+    assert r.json()["description"] == "A description"
+
+    r = auth.patch(
+        f"/api/calendars/events/{event['id']}",
+        json={"title": "", "description": None},
+    )
+    assert r.status_code == 200
+    assert r.json()["title"] == ""
+    assert r.json()["description"] is None
+
+
+def _create_event(auth, cal_id):
+    r = auth.post(
+        f"/api/calendars/{cal_id}/events",
+        json={"title": "Meeting", "start": "2026-10-01T10:00:00Z", "end": "2026-10-01T11:00:00Z"},
+    )
+    assert r.status_code == 201
+    return r.json()
+
+
+def test_list_event_participants_empty(make_calendar):
+    auth, cal = make_calendar("ep-empty@example.com", "Team")
+    event = _create_event(auth, cal["id"])
+    r = auth.get(f"/api/calendars/events/{event['id']}/participants")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_add_and_remove_external_participant(make_calendar):
+    auth, cal = make_calendar("ep-ext@example.com", "Team")
+    event = _create_event(auth, cal["id"])
+    r = auth.post(
+        f"/api/calendars/events/{event['id']}/participants",
+        json={"email": "External@Example.com", "status": "tentative"},
+    )
+    assert r.status_code == 201
+    p = r.json()
+    assert p["email"] == "external@example.com"
+    assert p["user_id"] is None
+    assert p["status"] == "tentative"
+
+    r = auth.get(f"/api/calendars/events/{event['id']}/participants")
+    assert len(r.json()) == 1
+
+    r = auth.delete(f"/api/calendars/events/{event['id']}/participants/{p['id']}")
+    assert r.status_code == 204
+    assert auth.get(f"/api/calendars/events/{event['id']}/participants").json() == []
+
+
+def test_add_participant_links_registered_user(make_calendar, user_factory, login, db):
+    owner, cal = make_calendar("ep-reg@example.com", "Team")
+    event = _create_event(owner, cal["id"])
+    invitee = user_factory("ep-invitee@example.com", display_name="Invitee")
+
+    r = owner.post(
+        f"/api/calendars/events/{event['id']}/participants",
+        json={"email": "EP-INVITEE@EXAMPLE.COM"},
+    )
+    assert r.status_code == 201
+    p = r.json()
+    assert p["email"] == "ep-invitee@example.com"
+    assert p["user_id"] == invitee["id"]
+    assert p["display_name"] == "Invitee"
+    assert p["status"] == "needs_action"
+
+    # The invitee should have a notification
+    from app.models import Notification
+    notifications = db.query(Notification).filter(Notification.user_id == invitee["id"]).all()
+    assert len(notifications) == 1
+    assert notifications[0].type == "participant_added"
+
+
+def test_cannot_add_duplicate_participant(make_calendar, user_factory):
+    owner, cal = make_calendar("ep-dup@example.com", "Team")
+    event = _create_event(owner, cal["id"])
+    user_factory("ep-dup-user@example.com")
+    owner.post(
+        f"/api/calendars/events/{event['id']}/participants",
+        json={"email": "ep-dup-user@example.com"},
+    )
+    r = owner.post(
+        f"/api/calendars/events/{event['id']}/participants",
+        json={"email": "EP-DUP-USER@EXAMPLE.COM"},
+    )
+    assert r.status_code == 400
+
+
+def test_participant_status_update_by_organizer_and_self(make_calendar, user_factory, login, add_member):
+    owner, cal = make_calendar("ep-status@example.com", "Team")
+    event = _create_event(owner, cal["id"])
+    invitee_info = user_factory("ep-status-user@example.com")
+    add_member(owner, cal["id"], "ep-viewer@example.com", "viewer")
+    invitee = login("ep-status-user@example.com")
+
+    p = owner.post(
+        f"/api/calendars/events/{event['id']}/participants",
+        json={"email": "ep-status-user@example.com"},
+    ).json()
+
+    # Organizer can update status
+    r = owner.patch(
+        f"/api/calendars/events/{event['id']}/participants/{p['id']}",
+        json={"status": "accepted"},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "accepted"
+
+    # Participant can update own status
+    r = invitee.patch(
+        f"/api/calendars/events/{event['id']}/participants/{p['id']}",
+        json={"status": "declined"},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "declined"
+
+    # Viewer cannot update
+    viewer = login("ep-viewer@example.com")
+    r = viewer.patch(
+        f"/api/calendars/events/{event['id']}/participants/{p['id']}",
+        json={"status": "tentative"},
+    )
+    assert r.status_code == 403
+
+
+def test_viewer_cannot_add_participant(make_calendar, add_member):
+    owner, cal = make_calendar("ep-perm@example.com", "Team")
+    event = _create_event(owner, cal["id"])
+    viewer = add_member(owner, cal["id"], "ep-perm-viewer@example.com", "viewer")
+    r = viewer.post(
+        f"/api/calendars/events/{event['id']}/participants",
+        json={"email": "someone@example.com"},
+    )
+    assert r.status_code == 403

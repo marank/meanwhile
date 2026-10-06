@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronLeft, Pencil, Trash2 } from 'lucide-vue-next'
+import { ChevronLeft, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useCalendarStore } from '@/stores/calendars'
 import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/IconButton.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { confirm } from '@/services/dialog'
 import * as api from '@/api'
 
@@ -19,15 +20,19 @@ const calendarId = computed(() => route.params.calendarId as string)
 const tab = ref<'general' | 'members' | 'categories' | 'resources' | 'approvers' | 'share'>('general')
 
 const calendar = ref<api.Calendar | null>(null)
+const calendarForm = ref<Partial<api.Calendar> | null>(null)
 const items = ref<api.CalendarListItem[]>([])
 const members = ref<api.CalendarMember[]>([])
 const categories = ref<api.Category[]>([])
 const resources = ref<api.Resource[]>([])
 const approvers = ref<api.Approver[]>([])
 const feedUrl = ref('')
-const search = ref('')
-const searchResults = ref<api.User[]>([])
+const selectedMemberId = ref<string | null>(null)
+const selectedApproverId = ref<string | null>(null)
 const newRole = ref('contributor')
+const calendarGroups = ref<api.CalendarGroupLink[]>([])
+const newGroupId = ref<string | null>(null)
+const newGroupRole = ref('viewer')
 const membership = computed(() => items.value.find((i) => i.calendar.id === calendarId.value)?.membership)
 const canManage = computed(() => membership.value?.role === 'owner')
 
@@ -41,7 +46,7 @@ const weekdayChoices = [
   { value: 6, key: 'saturday' },
 ]
 const orderedWeekendChoices = computed(() => {
-  const firstWeekday = calendar.value?.first_weekday ?? 0
+  const firstWeekday = calendarForm.value?.first_weekday ?? calendar.value?.first_weekday ?? 0
   return [...weekdayChoices.slice(firstWeekday), ...weekdayChoices.slice(0, firstWeekday)]
 })
 
@@ -63,7 +68,25 @@ async function load() {
     items.value = await api.listCalendars(auth.token)
     const item = items.value.find((i) => i.calendar.id === calendarId.value)
     calendar.value = item?.calendar || null
+    if (calendar.value) {
+      calendarForm.value = {
+        color: calendar.value.color,
+        dark_color: calendar.value.dark_color,
+        force_all_day: calendar.value.force_all_day,
+        first_weekday: calendar.value.first_weekday,
+        show_weekends: calendar.value.show_weekends,
+        weekend_days: [...calendar.value.weekend_days],
+        show_week_numbers: calendar.value.show_week_numbers,
+        today_color: calendar.value.today_color,
+        dark_today_color: calendar.value.dark_today_color,
+        weekend_color: calendar.value.weekend_color,
+        dark_weekend_color: calendar.value.dark_weekend_color,
+        is_public: calendar.value.is_public,
+        public_role: calendar.value.public_role,
+      }
+    }
     members.value = await api.listMembers(auth.token, calendarId.value)
+    calendarGroups.value = await api.listCalendarGroups(auth.token, calendarId.value)
     categories.value = await api.listCategories(auth.token, calendarId.value)
     resources.value = await api.listResources(auth.token, calendarId.value)
     approvers.value = await api.listCalendarApprovers(auth.token, calendarId.value)
@@ -76,12 +99,12 @@ async function load() {
 onMounted(load)
 watch(calendarId, load)
 
-async function toggleWeekendDay(day: number) {
-  if (!calendar.value || !canManage.value) return
-  calendar.value.weekend_days = calendar.value.weekend_days.includes(day)
-    ? calendar.value.weekend_days.filter((value) => value !== day)
-    : [...calendar.value.weekend_days, day]
-  await updateCalendarSettings()
+function toggleWeekendDay(day: number) {
+  if (!calendarForm.value || !canManage.value) return
+  const current = calendarForm.value.weekend_days || []
+  calendarForm.value.weekend_days = current.includes(day)
+    ? current.filter((value) => value !== day)
+    : [...current, day]
 }
 
 function goToCalendar() {
@@ -89,34 +112,30 @@ function goToCalendar() {
   router.push('/calendar')
 }
 
-async function updateCalendarSettings() {
-  if (!auth.token || !calendar.value || !canManage.value) return
+async function saveCalendarSettings() {
+  if (!auth.token || !calendar.value || !calendarForm.value || !canManage.value) return
   calendar.value = await api.updateCalendar(auth.token, calendarId.value, {
-    color: calendar.value.color,
-    dark_color: calendar.value.dark_color,
-    force_all_day: calendar.value.force_all_day,
-    first_weekday: calendar.value.first_weekday,
-    show_weekends: calendar.value.show_weekends,
-    weekend_days: calendar.value.weekend_days,
-    show_week_numbers: calendar.value.show_week_numbers,
-    today_color: calendar.value.today_color,
-    dark_today_color: calendar.value.dark_today_color,
-    weekend_color: calendar.value.weekend_color,
-    dark_weekend_color: calendar.value.dark_weekend_color,
+    color: calendarForm.value.color,
+    dark_color: calendarForm.value.dark_color,
+    force_all_day: calendarForm.value.force_all_day,
+    first_weekday: calendarForm.value.first_weekday,
+    show_weekends: calendarForm.value.show_weekends,
+    weekend_days: calendarForm.value.weekend_days,
+    show_week_numbers: calendarForm.value.show_week_numbers,
+    today_color: calendarForm.value.today_color,
+    dark_today_color: calendarForm.value.dark_today_color,
+    weekend_color: calendarForm.value.weekend_color,
+    dark_weekend_color: calendarForm.value.dark_weekend_color,
+    is_public: calendarForm.value.is_public,
+    public_role: calendarForm.value.public_role,
   })
-  await calendarStore.load()
+  await load()
 }
 
-async function doSearch() {
-  if (!auth.token || search.value.length < 2) return
-  searchResults.value = await api.searchUsers(auth.token, search.value)
-}
-
-async function addMember(userId: string) {
-  if (!auth.token) return
-  await api.addMember(auth.token, calendarId.value, userId, newRole.value)
-  search.value = ''
-  searchResults.value = []
+async function addMember() {
+  if (!auth.token || !selectedMemberId.value) return
+  await api.addMember(auth.token, calendarId.value, selectedMemberId.value, newRole.value)
+  selectedMemberId.value = null
   await load()
 }
 
@@ -125,6 +144,28 @@ async function removeMember(userId: string) {
   const ok = await confirm(t('app.removeMemberText'), t('app.removeMemberTitle'))
   if (!ok) return
   await api.removeMember(auth.token, calendarId.value, userId)
+  await load()
+}
+
+async function addCalendarGroupLink() {
+  if (!auth.token || !newGroupId.value) return
+  await api.addCalendarGroup(auth.token, calendarId.value, {
+    group_id: newGroupId.value,
+    role: newGroupRole.value,
+  })
+  await load()
+}
+
+async function updateCalendarGroupLink(linkId: string, event: Event) {
+  if (!auth.token) return
+  const target = event.target as HTMLSelectElement
+  await api.updateCalendarGroup(auth.token, calendarId.value, linkId, { role: target.value })
+  await load()
+}
+
+async function removeCalendarGroupLink(linkId: string) {
+  if (!auth.token) return
+  await api.removeCalendarGroup(auth.token, calendarId.value, linkId)
   await load()
 }
 
@@ -243,11 +284,10 @@ async function deleteResource(id: string) {
   await load()
 }
 
-async function addApprover(userId: string) {
-  if (!auth.token) return
-  await api.addCalendarApprover(auth.token, calendarId.value, userId)
-  search.value = ''
-  searchResults.value = []
+async function addApprover() {
+  if (!auth.token || !selectedApproverId.value) return
+  await api.addCalendarApprover(auth.token, calendarId.value, selectedApproverId.value)
+  selectedApproverId.value = null
   await load()
 }
 
@@ -270,13 +310,23 @@ const caldavUrl = computed(() => {
 
 <template>
   <div class="max-w-4xl mx-auto p-6">
-    <div class="flex items-center gap-3 mb-2">
-      <IconButton @click="goToCalendar" :label="$t('app.back')" bordered>
-        <ChevronLeft :size="20" :stroke-width="2.25" />
-      </IconButton>
-      <h1 class="text-2xl font-bold text-gray-800">
-        {{ $t('app.settings') }}: {{ calendar?.name }}
-      </h1>
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center gap-3">
+        <IconButton @click="goToCalendar" :label="$t('app.back')" bordered>
+          <ChevronLeft :size="20" :stroke-width="2.25" />
+        </IconButton>
+        <h1 class="text-2xl font-bold text-gray-800">
+          {{ $t('app.settings') }}: {{ calendar?.name }}
+        </h1>
+      </div>
+      <button
+        type="button"
+        :disabled="!calendarForm || !canManage"
+        class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
+        @click="saveCalendarSettings"
+      >
+        {{ $t('app.save') }}
+      </button>
     </div>
 
     <div class="flex gap-2 mb-4 border-b border-gray-200">
@@ -293,7 +343,7 @@ const caldavUrl = computed(() => {
 
     <div v-if="tab === 'general'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
       <h2 class="font-semibold text-gray-700">{{ $t('app.calendarBehavior') }}</h2>
-      <div v-if="calendar" class="overflow-hidden rounded-lg border border-gray-200">
+      <div v-if="calendarForm" class="overflow-hidden rounded-lg border border-gray-200">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
             <tr>
@@ -305,27 +355,27 @@ const caldavUrl = computed(() => {
           <tbody class="divide-y divide-gray-100">
             <tr>
               <td class="px-4 py-2 font-medium text-gray-800">{{ $t('app.calendar') }}</td>
-              <td class="px-4 py-2"><input v-model="calendar.color" @change="updateCalendarSettings" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
-              <td class="px-4 py-2"><input v-model="calendar.dark_color" @change="updateCalendarSettings" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
+              <td class="px-4 py-2"><input v-model="calendarForm.color" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
+              <td class="px-4 py-2"><input v-model="calendarForm.dark_color" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
             </tr>
             <tr>
               <td class="px-4 py-2 font-medium text-gray-800">{{ $t('app.today') }}</td>
-              <td class="px-4 py-2"><input v-model="calendar.today_color" @change="updateCalendarSettings" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
-              <td class="px-4 py-2"><input v-model="calendar.dark_today_color" @change="updateCalendarSettings" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
+              <td class="px-4 py-2"><input v-model="calendarForm.today_color" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
+              <td class="px-4 py-2"><input v-model="calendarForm.dark_today_color" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
             </tr>
             <tr>
               <td class="px-4 py-2 font-medium text-gray-800">{{ $t('app.weekend') }}</td>
-              <td class="px-4 py-2"><input v-model="calendar.weekend_color" @change="updateCalendarSettings" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
-              <td class="px-4 py-2"><input v-model="calendar.dark_weekend_color" @change="updateCalendarSettings" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
+              <td class="px-4 py-2"><input v-model="calendarForm.weekend_color" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
+              <td class="px-4 py-2"><input v-model="calendarForm.dark_weekend_color" type="color" :disabled="!canManage" class="h-8 w-14 rounded border border-gray-300" /></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <div v-if="calendar" class="border-t border-gray-100 pt-4 space-y-4">
+      <div v-if="calendarForm" class="border-t border-gray-100 pt-4 space-y-4">
         <h3 class="text-sm font-semibold text-gray-700">{{ $t('app.calendarDisplay') }}</h3>
         <label class="block max-w-sm">
           <span class="block text-sm font-medium text-gray-800 mb-1">{{ $t('app.firstWeekday') }}</span>
-          <select v-model.number="calendar.first_weekday" @change="updateCalendarSettings" :disabled="!canManage" class="w-full border rounded-lg px-3 py-2">
+          <select v-model.number="calendarForm.first_weekday" :disabled="!canManage" class="w-full border rounded-lg px-3 py-2">
             <option :value="0">{{ $t('event.sunday') }}</option>
             <option :value="1">{{ $t('event.monday') }}</option>
             <option :value="2">{{ $t('event.tuesday') }}</option>
@@ -345,7 +395,7 @@ const caldavUrl = computed(() => {
               @click="toggleWeekendDay(day.value)"
               :disabled="!canManage"
               class="px-3 py-1.5 rounded-full border text-sm transition-colors disabled:opacity-60"
-              :class="calendar.weekend_days.includes(day.value) ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
+              :class="(calendarForm.weekend_days || []).includes(day.value) ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
             >
               {{ $t(`event.${day.key}`) }}
             </button>
@@ -353,14 +403,14 @@ const caldavUrl = computed(() => {
           <p class="text-xs text-gray-500 mt-1">{{ $t('app.weekendDaysHelp') }}</p>
         </div>
         <label class="flex items-start gap-3" :class="canManage ? 'cursor-pointer' : 'opacity-60'">
-          <input v-model="calendar.show_weekends" @change="updateCalendarSettings" type="checkbox" :disabled="!canManage" class="mt-1" />
+          <input v-model="calendarForm.show_weekends" type="checkbox" :disabled="!canManage" class="mt-1" />
           <span>
             <span class="block text-sm font-medium text-gray-800">{{ $t('app.showWeekends') }}</span>
             <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.showWeekendsHelp') }}</span>
           </span>
         </label>
         <label class="flex items-start gap-3" :class="canManage ? 'cursor-pointer' : 'opacity-60'">
-          <input v-model="calendar.show_week_numbers" @change="updateCalendarSettings" type="checkbox" :disabled="!canManage" class="mt-1" />
+          <input v-model="calendarForm.show_week_numbers" type="checkbox" :disabled="!canManage" class="mt-1" />
           <span>
             <span class="block text-sm font-medium text-gray-800">{{ $t('app.showWeekNumbers') }}</span>
             <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.showWeekNumbersHelp') }}</span>
@@ -369,9 +419,8 @@ const caldavUrl = computed(() => {
       </div>
       <label class="flex items-start gap-3" :class="canManage ? 'cursor-pointer' : 'opacity-60'">
         <input
-          v-if="calendar"
-          v-model="calendar.force_all_day"
-          @change="updateCalendarSettings"
+          v-if="calendarForm"
+          v-model="calendarForm.force_all_day"
           type="checkbox"
           :disabled="!canManage"
           class="mt-1"
@@ -384,35 +433,132 @@ const caldavUrl = computed(() => {
     </div>
 
     <!-- Members -->
-    <div v-if="tab === 'members'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-      <h2 class="font-semibold text-gray-700">{{ $t('app.members') }}</h2>
-      <ul class="divide-y divide-gray-100">
-        <li v-for="m in members" :key="m.id" class="py-2 flex items-center justify-between">
-          <div>
-            <div class="font-medium text-gray-800">{{ m.display_name }} ({{ m.email }})</div>
-            <div class="text-xs text-gray-500 capitalize">{{ m.role }}</div>
-          </div>
-          <button v-if="canManage && m.role !== 'owner'" @click="removeMember(m.user_id)" class="text-red-600 hover:underline text-sm">
-            {{ $t('app.delete') }}
-          </button>
-        </li>
-      </ul>
-
-      <div v-if="canManage" class="border-t border-gray-100 pt-4 space-y-2">
-        <div class="flex gap-2">
-          <input v-model="search" @input="doSearch" placeholder="Search by email..." class="flex-1 border rounded-lg px-3 py-2" />
-          <select v-model="newRole" class="border rounded-lg px-3 py-2">
-            <option value="viewer">viewer</option>
-            <option value="contributor">contributor</option>
-            <option value="editor">editor</option>
-          </select>
+    <div v-if="tab === 'members'" class="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+      <template v-if="canManage">
+        <!-- Public access -->
+        <div>
+          <h2 class="font-semibold text-gray-700 mb-3">{{ $t('app.publicCalendar') }}</h2>
+          <label class="flex items-start gap-3" :class="canManage ? 'cursor-pointer' : 'opacity-60'">
+            <input
+              v-if="calendarForm"
+              v-model="calendarForm.is_public"
+              type="checkbox"
+              :disabled="!canManage"
+              class="mt-1"
+            />
+            <span>
+              <span class="block text-sm font-medium text-gray-800">{{ $t('app.publicCalendar') }}</span>
+              <span class="block text-xs text-gray-500 mt-0.5">{{ $t('app.publicCalendarHelp') }}</span>
+            </span>
+          </label>
+          <label v-if="calendarForm?.is_public" class="block max-w-sm mt-3">
+            <span class="block text-sm font-medium text-gray-800 mb-1">{{ $t('app.publicRole') }}</span>
+            <select
+              v-model="calendarForm.public_role"
+              :disabled="!canManage"
+              class="w-full border rounded-lg px-3 py-2"
+            >
+              <option value="viewer">{{ $t('roles.viewer') }}</option>
+              <option value="contributor">{{ $t('roles.contributor') }}</option>
+              <option value="editor">{{ $t('roles.editor') }}</option>
+            </select>
+            <p class="text-xs text-gray-500 mt-1">{{ $t('roles.' + calendarForm.public_role + 'Description') }}</p>
+          </label>
         </div>
-        <ul v-if="searchResults.length" class="border rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
-          <li v-for="u in searchResults" :key="u.id" class="px-3 py-2 flex justify-between items-center hover:bg-gray-50">
-            <span class="text-sm">{{ u.display_name }} ({{ u.email }})</span>
-            <button @click="addMember(u.id)" class="text-blue-600 text-sm hover:underline">{{ $t('app.add') }}</button>
+
+        <!-- Group access -->
+        <div class="border-t border-gray-100 pt-4">
+          <h2 class="font-semibold text-gray-700 mb-3">{{ $t('app.groupAccess') }}</h2>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <SearchableSelect v-model="newGroupId" entity="groups" open-on-focus :placeholder="$t('app.search')" />
+            </div>
+            <select v-model="newGroupRole" class="border rounded-lg px-3 py-2">
+              <option value="viewer">{{ $t('roles.viewer') }}</option>
+              <option value="contributor">{{ $t('roles.contributor') }}</option>
+              <option value="editor">{{ $t('roles.editor') }}</option>
+            </select>
+            <button
+              type="button"
+              @click="addCalendarGroupLink"
+              :disabled="!newGroupId"
+              class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Plus :size="18" />
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">{{ $t('roles.' + newGroupRole + 'Description') }}</p>
+          <ul class="mt-3 divide-y divide-gray-100 border rounded-lg">
+            <li
+              v-for="link in calendarGroups"
+              :key="link.id"
+              class="px-3 py-2 flex items-center justify-between hover:bg-gray-50"
+            >
+              <span class="text-sm text-gray-800">{{ link.group.name }}</span>
+              <div class="flex items-start gap-2">
+                <div>
+                  <select
+                    :value="link.role"
+                    @change="updateCalendarGroupLink(link.id, $event)"
+                    class="border rounded-lg px-2 py-1 text-sm"
+                  >
+                    <option value="viewer">{{ $t('roles.viewer') }}</option>
+                    <option value="contributor">{{ $t('roles.contributor') }}</option>
+                    <option value="editor">{{ $t('roles.editor') }}</option>
+                  </select>
+                  <p class="text-xs text-gray-500 mt-1">{{ $t('roles.' + link.role + 'Description') }}</p>
+                </div>
+                <button
+                  @click="removeCalendarGroupLink(link.id)"
+                  class="text-red-600 hover:underline text-sm"
+                >
+                  {{ $t('app.delete') }}
+                </button>
+              </div>
+            </li>
+            <li v-if="!calendarGroups.length" class="px-3 py-6 text-center text-sm text-gray-500">
+              {{ $t('app.noGroupAccess') }}
+            </li>
+          </ul>
+        </div>
+      </template>
+
+      <!-- Direct members -->
+      <div :class="canManage ? 'border-t border-gray-100 pt-4' : ''">
+        <h2 class="font-semibold text-gray-700 mb-3">{{ $t('app.members') }}</h2>
+        <ul class="divide-y divide-gray-100">
+          <li v-for="m in members" :key="m.id" class="py-2 flex items-center justify-between">
+            <div>
+              <div class="font-medium text-gray-800">{{ m.display_name }} ({{ m.email }})</div>
+              <div class="text-xs text-gray-500">{{ $t('roles.' + m.role) }}</div>
+            </div>
+            <button v-if="canManage && m.role !== 'owner'" @click="removeMember(m.user_id)" class="text-red-600 hover:underline text-sm">
+              {{ $t('app.delete') }}
+            </button>
           </li>
         </ul>
+
+        <div v-if="canManage" class="mt-4 space-y-2">
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <SearchableSelect v-model="selectedMemberId" entity="users" :min-search-length="2" :placeholder="$t('app.searchUsers')" />
+            </div>
+            <select v-model="newRole" class="border rounded-lg px-3 py-2">
+              <option value="viewer">{{ $t('roles.viewer') }}</option>
+              <option value="contributor">{{ $t('roles.contributor') }}</option>
+              <option value="editor">{{ $t('roles.editor') }}</option>
+            </select>
+            <button
+              type="button"
+              @click="addMember"
+              :disabled="!selectedMemberId"
+              class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Plus :size="18" />
+            </button>
+          </div>
+          <p class="text-xs text-gray-500">{{ $t('roles.' + newRole + 'Description') }}</p>
+        </div>
       </div>
     </div>
 
@@ -566,14 +712,20 @@ const caldavUrl = computed(() => {
           <button v-if="canManage" @click="removeApprover(a.user_id)" class="text-red-600 hover:underline text-sm">{{ $t('app.delete') }}</button>
         </li>
       </ul>
-      <div v-if="canManage" class="border-t border-gray-100 pt-4 space-y-2">
-        <input v-model="search" @input="doSearch" placeholder="Search member..." class="w-full border rounded-lg px-3 py-2" />
-        <ul v-if="searchResults.length" class="border rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
-          <li v-for="u in searchResults" :key="u.id" class="px-3 py-2 flex justify-between items-center hover:bg-gray-50">
-            <span class="text-sm">{{ u.display_name }} ({{ u.email }})</span>
-            <button @click="addApprover(u.id)" class="text-blue-600 text-sm hover:underline">{{ $t('app.add') }}</button>
-          </li>
-        </ul>
+      <div v-if="canManage" class="border-t border-gray-100 pt-4">
+        <div class="flex gap-2">
+          <div class="flex-1">
+            <SearchableSelect v-model="selectedApproverId" entity="users" :min-search-length="2" :placeholder="$t('app.searchUsers')" />
+          </div>
+          <button
+            type="button"
+            @click="addApprover"
+            :disabled="!selectedApproverId"
+            class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Plus :size="18" />
+          </button>
+        </div>
       </div>
     </div>
 

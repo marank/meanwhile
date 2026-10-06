@@ -4,8 +4,6 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.models import CalendarApprover, Event, EventStatus, Resource, ResourceApprover, Role, User
-from app.services.permissions import get_membership
-
 
 def get_resource_approvers(db: Session, resource: Resource) -> List[User]:
     resource_approvers = [a.user for a in resource.approvers]

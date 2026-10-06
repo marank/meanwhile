@@ -1,19 +1,20 @@
 import secrets
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import hash_password
 from app.database import get_db
 from app.deps import CurrentAdmin
-from app.models import User, get_or_create_app_settings
+from app.models import User, UserGroup, get_or_create_app_settings
 from app.schemas import (
     AdminUserCreate,
     AdminUserOut,
     AdminUserUpdate,
     AppSettingsOut,
     AppSettingsUpdate,
+    GroupOut,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -58,7 +59,26 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = CurrentAdmin,
 ) -> List[User]:
-    return db.query(User).order_by(User.created_at.desc()).all()
+    return (
+        db.query(User)
+        .options(joinedload(User.groups))
+        .order_by(User.created_at.desc())
+        .all()
+    )
+
+
+def _validate_group_ids(db: Session, group_ids: Optional[List[str]]) -> List[UserGroup]:
+    if not group_ids:
+        return []
+    groups = db.query(UserGroup).filter(UserGroup.id.in_(group_ids)).all()
+    found = {g.id for g in groups}
+    missing = [gid for gid in group_ids if gid not in found]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid group ids: {missing}",
+        )
+    return groups
 
 
 @router.post("/users", response_model=AdminUserOut, status_code=201)
@@ -73,6 +93,7 @@ def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
+    groups = _validate_group_ids(db, data.group_ids)
     user = User(
         email=data.email,
         display_name=data.display_name,
@@ -80,6 +101,8 @@ def create_user(
         is_admin=data.is_admin,
         is_active=data.is_active,
     )
+    if groups:
+        user.groups = groups
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -122,6 +145,17 @@ def update_user(
         user.is_admin = data.is_admin
     if data.is_active is not None:
         user.is_active = data.is_active
+    if data.group_ids is not None:
+        groups = _validate_group_ids(db, data.group_ids)
+        group_map = {g.id: g for g in groups}
+        desired_ids = set(data.group_ids)
+        current_memberships = list(user.groups)
+        for group in current_memberships:
+            if group.id not in desired_ids:
+                user.groups.remove(group)
+        current_ids = {g.id for g in current_memberships}
+        for gid in desired_ids - current_ids:
+            user.groups.append(group_map[gid])
     db.commit()
     db.refresh(user)
     return user

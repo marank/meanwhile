@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 Weekday = Annotated[int, Field(ge=0, le=6)]
@@ -66,10 +66,43 @@ class AppPasswordCreated(BaseModel):
     password: str
 
 
-class UserSearchResult(BaseModel):
+class SearchResult(BaseModel):
+    id: str
+    type: str
+    label: str
+    subtitle: Optional[str] = None
+    meta: Optional[dict] = None
+
+
+class GroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: Optional[str] = None
+    member_count: int = 0
+
+
+class GroupMemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     email: str
     display_name: str
+
+
+class GroupDetailOut(GroupOut):
+    members: List[GroupMemberOut] = []
+
+
+class GroupCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
 
 
 class AdminUserOut(BaseModel):
@@ -82,6 +115,7 @@ class AdminUserOut(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    groups: List[GroupOut] = []
 
 
 class AdminUserCreate(BaseModel):
@@ -90,6 +124,7 @@ class AdminUserCreate(BaseModel):
     password: str = Field(..., min_length=8)
     is_admin: bool = False
     is_active: bool = True
+    group_ids: Optional[List[str]] = None
 
 
 class AdminUserUpdate(BaseModel):
@@ -98,6 +133,7 @@ class AdminUserUpdate(BaseModel):
     password: Optional[str] = Field(None, min_length=8)
     is_admin: Optional[bool] = None
     is_active: Optional[bool] = None
+    group_ids: Optional[List[str]] = None
 
 
 class AppSettingsOut(BaseModel):
@@ -228,6 +264,8 @@ class CalendarUpdate(BaseModel):
     dark_today_color: Optional[str] = None
     weekend_color: Optional[str] = None
     dark_weekend_color: Optional[str] = None
+    is_public: Optional[bool] = None
+    public_role: Optional[Literal["viewer", "contributor", "editor"]] = None
 
 
 class CalendarOut(BaseModel):
@@ -247,6 +285,8 @@ class CalendarOut(BaseModel):
     dark_today_color: str
     weekend_color: str
     dark_weekend_color: str
+    is_public: bool
+    public_role: str
     owner_id: str
     created_at: datetime
     updated_at: datetime
@@ -256,6 +296,33 @@ class CalendarOut(BaseModel):
 class CalendarListOut(BaseModel):
     calendar: CalendarOut
     membership: CalendarMemberOut
+
+
+# ---------------------------------------------------------------------------
+# Calendar group links
+# ---------------------------------------------------------------------------
+
+
+class CalendarGroupLinkGroupInfo(BaseModel):
+    id: str
+    name: str
+
+
+class CalendarGroupLinkOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    group: CalendarGroupLinkGroupInfo
+    role: str
+
+
+class CalendarGroupLinkCreate(BaseModel):
+    group_id: str
+    role: Literal["viewer", "contributor", "editor"] = "viewer"
+
+
+class CalendarGroupLinkUpdate(BaseModel):
+    role: Optional[Literal["viewer", "contributor", "editor"]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -332,8 +399,20 @@ class CategoryOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class EventParticipantInvite(BaseModel):
+    user_id: Optional[str] = None
+    email: Optional[EmailStr] = None
+    status: Optional[str] = "needs_action"
+
+    @model_validator(mode="after")
+    def require_user_id_or_email(self) -> "EventParticipantInvite":
+        if self.user_id is None and self.email is None:
+            raise ValueError("Either user_id or email is required")
+        return self
+
+
 class EventCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=255)
+    title: Optional[str] = Field(default=None, max_length=255)
     description: Optional[str] = None
     start: datetime
     end: datetime
@@ -342,10 +421,11 @@ class EventCreate(BaseModel):
     rrule: Optional[str] = None
     category_id: Optional[str] = None
     resource_id: Optional[str] = None
+    participants: Optional[List[EventParticipantInvite]] = None
 
 
 class EventUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     start: Optional[datetime] = None
     end: Optional[datetime] = None
@@ -356,12 +436,41 @@ class EventUpdate(BaseModel):
     resource_id: Optional[str] = None
 
 
+class EventParticipantCreate(BaseModel):
+    user_id: Optional[str] = None
+    email: Optional[EmailStr] = None
+    status: Optional[str] = "needs_action"
+
+    @model_validator(mode="after")
+    def require_user_id_or_email(self) -> "EventParticipantCreate":
+        if self.user_id is None and self.email is None:
+            raise ValueError("Either user_id or email is required")
+        return self
+
+
+class EventParticipantUpdate(BaseModel):
+    status: Optional[str] = None
+
+
+class EventParticipantOut(BaseModel):
+    id: str
+    event_id: str
+    user_id: Optional[str]
+    email: str
+    display_name: Optional[str]
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class EventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     calendar_id: str
     creator_id: str
+    creator_name: Optional[str] = None
+    creator_email: Optional[str] = None
     title: str
     description: Optional[str]
     start: datetime

@@ -96,3 +96,106 @@ def test_admin_cannot_demote_or_deactivate_self(admin_client):
     )
     assert r.status_code == 200
     assert r.json()["is_admin"] is True
+
+
+def test_admin_group_crud(admin_client):
+    r = admin_client.post("/api/groups", json={"name": "Engineering", "description": "Eng team"})
+    assert r.status_code == 201
+    data = r.json()
+    group_id = data["id"]
+    assert data["name"] == "Engineering"
+    assert data["description"] == "Eng team"
+    assert data["member_count"] == 0
+    assert data["members"] == []
+
+    r = admin_client.get("/api/groups")
+    assert r.status_code == 200
+    groups = r.json()
+    assert any(g["id"] == group_id for g in groups)
+    assert groups[0]["member_count"] == 0
+
+    r = admin_client.patch(f"/api/groups/{group_id}", json={"name": "Engineering 2"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "Engineering 2"
+
+    assert admin_client.delete(f"/api/groups/{group_id}").status_code == 204
+    assert admin_client.get(f"/api/groups/{group_id}").status_code == 404
+
+
+def test_non_admin_can_read_but_not_modify_groups(admin_client, user_factory, login):
+    group = admin_client.post("/api/groups", json={"name": "Visible"}).json()
+    user = user_factory("group-reader@example.com")
+    auth = login("group-reader@example.com")
+
+    assert auth.get("/api/groups").status_code == 200
+    assert auth.get(f"/api/groups/{group['id']}").status_code == 200
+    assert auth.post("/api/groups", json={"name": "Denied"}).status_code == 403
+    assert auth.patch(f"/api/groups/{group['id']}", json={"name": "Denied"}).status_code == 403
+    assert auth.delete(f"/api/groups/{group['id']}").status_code == 403
+    assert auth.post(f"/api/groups/{group['id']}/members/{user['id']}").status_code == 403
+    assert auth.delete(f"/api/groups/{group['id']}/members/{user['id']}").status_code == 403
+
+
+def test_admin_group_members(admin_client, user_factory):
+    g = admin_client.post("/api/groups", json={"name": "Members"}).json()
+    gid = g["id"]
+    u = user_factory("member@example.com", display_name="Member")
+
+    r = admin_client.post(f"/api/groups/{gid}/members/{u['id']}")
+    assert r.status_code == 200
+    assert len(r.json()["members"]) == 1
+    assert r.json()["members"][0]["email"] == "member@example.com"
+
+    assert admin_client.post(f"/api/groups/{gid}/members/{u['id']}").status_code == 400
+
+    assert admin_client.delete(f"/api/groups/{gid}/members/{u['id']}").status_code == 204
+    r = admin_client.get(f"/api/groups/{gid}")
+    assert r.json()["member_count"] == 0
+    assert r.json()["members"] == []
+    assert admin_client.delete(f"/api/groups/{gid}/members/{u['id']}").status_code == 404
+
+
+def test_admin_create_user_with_group_ids(admin_client):
+    g = admin_client.post("/api/groups", json={"name": "Admins"}).json()
+    r = admin_client.post(
+        "/api/admin/users",
+        json={
+            "email": "u1@example.com",
+            "display_name": "U1",
+            "password": "password123",
+            "group_ids": [g["id"]],
+        },
+    )
+    assert r.status_code == 201
+    assert [gr["id"] for gr in r.json()["groups"]] == [g["id"]]
+    assert admin_client.get(f"/api/groups/{g['id']}").json()["member_count"] == 1
+
+
+def test_admin_update_user_group_ids_replaces_memberships(admin_client, user_factory):
+    g1 = admin_client.post("/api/groups", json={"name": "G1"}).json()
+    g2 = admin_client.post("/api/groups", json={"name": "G2"}).json()
+    u = user_factory("u2@example.com", display_name="U2")
+
+    r = admin_client.patch(f"/api/admin/users/{u['id']}", json={"group_ids": [g1["id"]]})
+    assert r.status_code == 200
+    assert {gr["id"] for gr in r.json()["groups"]} == {g1["id"]}
+
+    r = admin_client.patch(f"/api/admin/users/{u['id']}", json={"group_ids": [g2["id"]]})
+    assert r.status_code == 200
+    assert {gr["id"] for gr in r.json()["groups"]} == {g2["id"]}
+
+    r = admin_client.patch(f"/api/admin/users/{u['id']}", json={"group_ids": []})
+    assert r.status_code == 200
+    assert r.json()["groups"] == []
+
+
+def test_admin_delete_group_removes_members_but_not_users(admin_client, user_factory):
+    g = admin_client.post("/api/groups", json={"name": "Temp"}).json()
+    u = user_factory("u3@example.com", display_name="U3")
+    admin_client.post(f"/api/groups/{g['id']}/members/{u['id']}")
+
+    assert admin_client.delete(f"/api/groups/{g['id']}").status_code == 204
+
+    users = admin_client.get("/api/admin/users").json()
+    assert any(x["id"] == u["id"] for x in users)
+    assert admin_client.get(f"/api/groups/{g['id']}").status_code == 404

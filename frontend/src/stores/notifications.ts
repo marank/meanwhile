@@ -41,6 +41,13 @@ export const useNotificationsStore = defineStore('notifications', () => {
     unreadCount.value = 0
   }
 
+  async function remove(id: string) {
+    if (!auth.token) return
+    await api.deleteNotification(auth.token, id)
+    items.value = items.value.filter((n) => n.id !== id)
+    await refreshCount()
+  }
+
   function startPolling() {
     stopPolling()
     void refreshCount()
@@ -61,6 +68,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     refreshCount,
     markRead,
     markAllRead,
+    remove,
     startPolling,
     stopPolling,
   }

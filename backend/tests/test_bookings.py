@@ -112,16 +112,39 @@ def test_resource_approver_can_list_and_approve(make_calendar, add_member, user_
     assert approver.get("/api/approvals").json() == []
 
 
-def test_reject_booking(make_calendar):
-    auth, cal = make_calendar("reject@example.com", "Fleet")
-    van = _resource(auth, cal["id"], "Van")
-    event = _book(auth, cal["id"], van["id"], "2026-10-05T09:00:00Z", "2026-10-05T12:00:00Z").json()
+def test_reject_booking(make_calendar, add_member):
+    owner, cal = make_calendar("reject@example.com", "Fleet")
+    member = add_member(owner, cal["id"], "reject-member@example.com", "viewer")
+    van = _resource(owner, cal["id"], "Van")
+    event = _book(owner, cal["id"], van["id"], "2026-10-05T09:00:00Z", "2026-10-05T12:00:00Z").json()
 
-    r = auth.post(f"/api/events/{event['id']}/reject", json={"note": "busy"})
+    # Pending event appears for both owner and member.
+    for client in (owner, member):
+        occurrences = client.get(
+            f"/api/calendars/{cal['id']}/events",
+            params={"start": "2026-10-01T00:00:00Z", "end": "2026-10-31T00:00:00Z"},
+        ).json()
+        assert [o["event_id"] for o in occurrences] == [event["id"]]
+
+    r = owner.post(f"/api/events/{event['id']}/reject", json={"note": "busy"})
     assert r.status_code == 200
     assert r.json()["status"] == "rejected"
     # Already decided.
-    assert auth.post(f"/api/events/{event['id']}/approve", json={}).status_code == 400
+    assert owner.post(f"/api/events/{event['id']}/approve", json={}).status_code == 400
+
+    # Owner still sees the rejected event; other members do not.
+    owner_occurrences = owner.get(
+        f"/api/calendars/{cal['id']}/events",
+        params={"start": "2026-10-01T00:00:00Z", "end": "2026-10-31T00:00:00Z"},
+    ).json()
+    assert [o["event_id"] for o in owner_occurrences] == [event["id"]]
+    assert owner_occurrences[0]["status"] == "rejected"
+
+    member_occurrences = member.get(
+        f"/api/calendars/{cal['id']}/events",
+        params={"start": "2026-10-01T00:00:00Z", "end": "2026-10-31T00:00:00Z"},
+    ).json()
+    assert member_occurrences == []
 
 
 def test_approval_datetimes_are_utc(make_calendar):

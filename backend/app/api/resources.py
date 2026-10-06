@@ -14,7 +14,7 @@ from app.schemas import (
     ResourceUpdate,
 )
 from app.services.permissions import (
-    get_membership,
+    get_direct_membership,
     is_owner,
     require_membership,
 )
@@ -205,7 +205,7 @@ def add_resource_approver(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner can add resource approvers",
         )
-    approver_membership = get_membership(db, resource.calendar_id, data.user_id)
+    approver_membership = get_direct_membership(db, resource.calendar_id, data.user_id)
     if approver_membership is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -13,8 +13,10 @@ from app.api import (
     events,
     feed,
     folders,
+    groups,
     notifications,
     resources,
+    search,
     sidebar,
     users,
 )
@@ -35,6 +37,8 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(groups.router, prefix="/api")
+app.include_router(search.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(calendars.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
