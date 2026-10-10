@@ -50,11 +50,16 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+let initStarted = false
+
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  const hasToken = !!auth.token
-  if (!to.meta.public && !hasToken) return '/login'
-  if (to.meta.public && hasToken) return '/calendar'
+  if (!initStarted) {
+    initStarted = true
+    await auth.init()
+  }
+  if (!to.meta.public && !auth.isLoggedIn) return '/login'
+  if (to.meta.public && auth.isLoggedIn) return '/calendar'
   if (to.meta.admin && !auth.isAdmin) return '/calendar'
 })
 

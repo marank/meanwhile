@@ -116,7 +116,7 @@ function applyLocalReordering(
 }
 
 async function handleSortEnd(evt: Sortable.SortableEvent) {
-  if (!auth.token) return
+  if (!auth.isLoggedIn) return
 
   const to = evt.to as HTMLElement
   const from = evt.from as HTMLElement
@@ -154,7 +154,7 @@ async function handleSortEnd(evt: Sortable.SortableEvent) {
   applyLocalReordering(sidebarUpdates)
 
   try {
-    await api.reorderSidebar(auth.token, sidebarUpdates)
+    await api.reorderSidebar(sidebarUpdates)
   } catch (e) {
     console.error(e)
     await store.load()
@@ -184,8 +184,8 @@ async function createFolder(parentId?: string | null) {
     '',
     t('app.createFolder'),
   )
-  if (!name || !auth.token) return
-  await api.createFolder(auth.token, name, parentId || undefined)
+  if (!name || !auth.isLoggedIn) return
+  await api.createFolder(name, parentId || undefined)
   await store.load()
 }
 
@@ -205,8 +205,8 @@ function gotoSettings(item: CalendarListItem) {
 
 async function deleteFolder(id: string) {
   const ok = await confirm(t('app.deleteFolderText'), t('app.deleteFolderTitle'))
-  if (!ok || !auth.token) return
-  await api.deleteFolder(auth.token, id)
+  if (!ok || !auth.isLoggedIn) return
+  await api.deleteFolder(id)
   await store.load()
 }
 
@@ -254,22 +254,22 @@ function calendarMenuItems(item: CalendarListItem): MenuItem[] {
 
 async function renameFolder(folder: Folder) {
   const name = await prompt(t('app.folderNamePrompt'), folder.name, t('app.rename'))
-  if (!name || !auth.token) return
-  await api.updateFolder(auth.token, folder.id, { name })
+  if (!name || !auth.isLoggedIn) return
+  await api.updateFolder(folder.id, { name })
   await store.load()
 }
 
 async function renameCalendar(item: CalendarListItem) {
   const name = await prompt(t('app.calendarNamePrompt'), item.calendar.name, t('app.rename'))
-  if (!name || !auth.token) return
-  await api.updateCalendar(auth.token, item.calendar.id, { name })
+  if (!name || !auth.isLoggedIn) return
+  await api.updateCalendar(item.calendar.id, { name })
   await store.load()
 }
 
 async function deleteCalendarWithConfirm(item: CalendarListItem) {
   const ok = await confirm(t('app.deleteCalendarText'), t('app.deleteCalendarTitle'))
-  if (!ok || !auth.token) return
-  await api.deleteCalendar(auth.token, item.calendar.id)
+  if (!ok || !auth.isLoggedIn) return
+  await api.deleteCalendar(item.calendar.id)
   await store.load()
 }
 

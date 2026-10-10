@@ -29,7 +29,7 @@ function closeOnOutsideClick(event: PointerEvent) {
 
 onMounted(() => {
   document.addEventListener('pointerdown', closeOnOutsideClick)
-  if (auth.token) notifications.startPolling()
+  if (auth.isLoggedIn) notifications.startPolling()
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeOnOutsideClick)
@@ -37,7 +37,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => auth.token,
+  () => auth.isLoggedIn,
   (token) => (token ? notifications.startPolling() : notifications.stopPolling()),
 )
 

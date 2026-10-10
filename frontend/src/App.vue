@@ -3,6 +3,7 @@ import { onMounted, watch, computed } from 'vue'
 import AppNavbar from './components/AppNavbar.vue'
 import CalendarSidebar from './components/CalendarSidebar.vue'
 import DialogHost from './components/DialogHost.vue'
+import ToastHost from './components/ToastHost.vue'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
 
@@ -48,5 +49,6 @@ watch(
       </main>
     </div>
     <DialogHost />
+    <ToastHost />
   </div>
 </template>

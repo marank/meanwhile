@@ -14,7 +14,7 @@ services:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://calendar:calendar@db:5432/calendar
+      DATABASE_URL: postgresql://calendar:calendar@db:5432/calendar
       ENVIRONMENT: production
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the environment}
       ALLOW_REGISTRATION: "true"
@@ -22,6 +22,8 @@ services:
       - "8000:8000"
     depends_on:
       - db
+    command: >
+      sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
 
 volumes:
   postgres_data:

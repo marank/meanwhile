@@ -8,7 +8,7 @@ import * as api from '@/api'
 const props = withDefaults(
   defineProps<{
     modelValue: string | null;
-    entity: 'users' | 'groups' | 'resources' | 'categories';
+    entity: 'users' | 'members' | 'groups' | 'resources' | 'categories';
     calendarId?: string;
     allowFreeText?: boolean;
     freeTextValidator?: (value: string) => boolean;
@@ -76,7 +76,7 @@ function canSearch(q: string) {
 }
 
 async function fetchResults(q: string) {
-  if (!auth.token) return
+  if (!auth.isLoggedIn) return
   if (!canSearch(q)) {
     console.log('[SearchableSelect] skipped, too short')
     if (q) results.value = []
@@ -87,7 +87,7 @@ async function fetchResults(q: string) {
   const seq = ++fetchSeq
   loading.value = true
   try {
-    const res = await api.searchEntities(auth.token, props.entity, q, {
+    const res = await api.searchEntities(props.entity, q, {
       limit: props.defaultLimit,
       calendarId: props.calendarId,
     })
@@ -215,7 +215,8 @@ function onKeydown(event: KeyboardEvent) {
     } else if (freeTextValue.value !== null) {
       chooseFreeText()
     }
-  } else if (event.key === 'Escape') {
+  } else if (event.key === 'Escape' && isOpen.value) {
+    // Only swallow Escape while the list is open, so a surrounding dialog can close on the next press.
     event.preventDefault()
     close()
   } else if (event.key === 'Tab') {

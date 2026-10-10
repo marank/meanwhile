@@ -2,16 +2,13 @@ import { api } from './client'
 
 export * from './client'
 
-export interface TokenResponse {
-  access_token: string
-  token_type: string
-}
-
 export interface User {
   id: string
   email: string
   display_name: string
   is_admin: boolean
+  is_staff: boolean
+  is_superuser: boolean
   is_active: boolean
   time_format: 'auto' | '24h' | '12h'
   date_format: 'auto' | 'dmy' | 'mdy' | 'ymd'
@@ -50,6 +47,8 @@ export interface AdminUser {
   email: string
   display_name: string
   is_admin: boolean
+  is_staff: boolean
+  is_superuser: boolean
   is_active: boolean
   groups: UserGroup[]
   created_at: string
@@ -61,6 +60,8 @@ export interface AdminUserCreate {
   display_name: string
   password: string
   is_admin?: boolean
+  is_staff?: boolean
+  is_superuser?: boolean
   is_active?: boolean
   group_ids?: string[]
 }
@@ -70,6 +71,8 @@ export interface AdminUserUpdate {
   display_name?: string
   password?: string
   is_admin?: boolean
+  is_staff?: boolean
+  is_superuser?: boolean
   is_active?: boolean
   group_ids?: string[]
 }
@@ -208,6 +211,7 @@ export interface Event {
   decision_note: string | null
   created_at: string
   updated_at: string
+  can_decide?: boolean
 }
 
 export interface Occurrence {
@@ -290,7 +294,12 @@ export interface AppNotification {
   data: { note?: string; role?: string } | null
   read_at: string | null
   created_at: string
+  event_status: string | null
+  response_status: EventParticipant['status'] | null
+  deletable: boolean
 }
+
+export type NotificationGroup = 'approvals' | 'invitations'
 
 export interface AppPassword {
   id: string
@@ -300,18 +309,55 @@ export interface AppPassword {
   created_at: string
 }
 
-// Auth
-export const register = (data: { email: string; display_name: string; password: string }) =>
-  api<TokenResponse>('/api/auth/register', { method: 'POST', body: data })
+// Auth (django-allauth headless browser client, mounted at /api/auth/v1)
+interface AllauthResponse<T = unknown> {
+  status: number
+  data: T
+  errors?: { message: string; code?: string; param?: string }[]
+}
 
-export const login = (data: { email: string; password: string }) =>
-  api<TokenResponse>('/api/auth/login', { method: 'POST', body: data })
+function extractDetail(err: any): string {
+  const detail = err?.detail
+  if (typeof detail === 'string') return detail
+  if (detail?.detail) return detail.detail
+  if (Array.isArray(detail?.errors)) {
+    return detail.errors.map((e: any) => e.message || e.code).filter(Boolean).join(', ')
+  }
+  return err?.message || 'Request failed'
+}
 
-export const me = (token: string) => api<User>('/api/users/me', { token })
+export async function getCsrf() {
+  return api<{ ok: boolean }>('/api/auth/csrf/')
+}
+
+export async function login(data: { email: string; password: string }): Promise<User> {
+  const resp = await api<AllauthResponse<{ user: User }>>('/api/auth/v1/auth/login', {
+    method: 'POST',
+    body: data,
+  })
+  return resp.data.user
+}
+
+export async function register(data: {
+  email: string
+  display_name: string
+  password: string
+}): Promise<User> {
+  const resp = await api<AllauthResponse<{ user: User }>>('/api/auth/v1/auth/signup', {
+    method: 'POST',
+    body: { email: data.email, password: data.password, display_name: data.display_name },
+  })
+  return resp.data.user
+}
+
+export async function logout() {
+  await api('/api/auth/v1/auth/session', { method: 'DELETE' })
+}
+
+export const me = () => api<User>('/api/users/me')
 
 // Search
 export const searchEntities = (
-  token: string,
   entity: 'users' | 'groups' | 'resources' | 'categories' | string,
   q: string,
   options: { limit?: number; calendarId?: string } = {},
@@ -319,77 +365,72 @@ export const searchEntities = (
   const params = new URLSearchParams({ entity, q })
   if (options.limit !== undefined) params.set('limit', String(options.limit))
   if (options.calendarId) params.set('calendar_id', options.calendarId)
-  return api<SearchResult[]>(`/api/search?${params.toString()}`, { token })
+  return api<SearchResult[]>(`/api/search?${params.toString()}`)
 }
 
 // Users / app passwords
-export const listAppPasswords = (token: string) =>
-  api<AppPassword[]>('/api/users/me/app-passwords', { token })
+export const listAppPasswords = () =>
+  api<AppPassword[]>('/api/users/me/app-passwords')
 
-export const createAppPassword = (token: string, label: string) =>
-  api<AppPassword>('/api/users/me/app-passwords', { method: 'POST', body: { label }, token })
+export const createAppPassword = (label: string) =>
+  api<AppPassword>('/api/users/me/app-passwords', { method: 'POST', body: { label } })
 
-export const deleteAppPassword = (token: string, id: string) =>
-  api<void>(`/api/users/me/app-passwords/${id}`, { method: 'DELETE', token })
+export const deleteAppPassword = (id: string) =>
+  api<void>(`/api/users/me/app-passwords/${id}`, { method: 'DELETE' })
 
 export const updateProfile = (
-  token: string,
   data: {
     display_name?: string
     time_format?: 'auto' | '24h' | '12h'
     date_format?: 'auto' | 'dmy' | 'mdy' | 'ymd'
   },
-) => api<User>('/api/users/me', { method: 'PATCH', body: data, token })
+) => api<User>('/api/users/me', { method: 'PATCH', body: data })
 
 // Calendars
-export const listCalendars = (token: string) =>
-  api<CalendarListItem[]>('/api/calendars', { token })
+export const listCalendars = () =>
+  api<CalendarListItem[]>('/api/calendars')
 
-export const getCalendar = (token: string, id: string) =>
-  api<Calendar>(`/api/calendars/${id}`, { token })
+export const getCalendar = (id: string) =>
+  api<Calendar>(`/api/calendars/${id}`)
 
-export const createCalendar = (token: string, name: string, description?: string, color?: string) =>
-  api<Calendar>('/api/calendars', { method: 'POST', body: { name, description, color }, token })
+export const createCalendar = (name: string, description?: string, color?: string) =>
+  api<Calendar>('/api/calendars', { method: 'POST', body: { name, description, color } })
 
-export const updateCalendar = (token: string, id: string, data: Partial<Calendar>) =>
-  api<Calendar>(`/api/calendars/${id}`, { method: 'PATCH', body: data, token })
+export const updateCalendar = (id: string, data: Partial<Calendar>) =>
+  api<Calendar>(`/api/calendars/${id}`, { method: 'PATCH', body: data })
 
-export const deleteCalendar = (token: string, id: string) =>
-  api<void>(`/api/calendars/${id}`, { method: 'DELETE', token })
+export const deleteCalendar = (id: string) =>
+  api<void>(`/api/calendars/${id}`, { method: 'DELETE' })
 
 // Members
-export const listMembers = (token: string, calendarId: string) =>
-  api<CalendarMember[]>(`/api/calendars/${calendarId}/members`, { token })
+export const listMembers = (calendarId: string) =>
+  api<CalendarMember[]>(`/api/calendars/${calendarId}/members`)
 
-export const addMember = (token: string, calendarId: string, userId: string, role: string) =>
+export const addMember = (calendarId: string, userId: string, role: string) =>
   api<CalendarMember>(`/api/calendars/${calendarId}/members`, {
     method: 'POST',
     body: { user_id: userId, role },
-    token,
   })
 
-export const updateMember = (token: string, calendarId: string, userId: string, role: string) =>
+export const updateMember = (calendarId: string, userId: string, role: string) =>
   api<CalendarMember>(`/api/calendars/${calendarId}/members/${userId}`, {
     method: 'PATCH',
     body: { role },
-    token,
   })
 
-export const removeMember = (token: string, calendarId: string, userId: string) =>
-  api<void>(`/api/calendars/${calendarId}/members/${userId}`, { method: 'DELETE', token })
+export const removeMember = (calendarId: string, userId: string) =>
+  api<void>(`/api/calendars/${calendarId}/members/${userId}`, { method: 'DELETE' })
 
 // Calendar group access
-export const listCalendarGroups = (token: string, calendarId: string) =>
-  api<CalendarGroupLink[]>(`/api/calendars/${calendarId}/groups`, { token })
+export const listCalendarGroups = (calendarId: string) =>
+  api<CalendarGroupLink[]>(`/api/calendars/${calendarId}/groups`)
 
 export const addCalendarGroup = (
-  token: string,
   calendarId: string,
   data: CalendarGroupLinkCreate,
-) => api<CalendarGroupLink>(`/api/calendars/${calendarId}/groups`, { method: 'POST', body: data, token })
+) => api<CalendarGroupLink>(`/api/calendars/${calendarId}/groups`, { method: 'POST', body: data })
 
 export const updateCalendarGroup = (
-  token: string,
   calendarId: string,
   linkId: string,
   data: CalendarGroupLinkUpdate,
@@ -397,226 +438,219 @@ export const updateCalendarGroup = (
   api<CalendarGroupLink>(`/api/calendars/${calendarId}/groups/${linkId}`, {
     method: 'PATCH',
     body: data,
-    token,
   })
 
-export const removeCalendarGroup = (token: string, calendarId: string, linkId: string) =>
-  api<void>(`/api/calendars/${calendarId}/groups/${linkId}`, { method: 'DELETE', token })
+export const removeCalendarGroup = (calendarId: string, linkId: string) =>
+  api<void>(`/api/calendars/${calendarId}/groups/${linkId}`, { method: 'DELETE' })
 
 export const updateMyMembership = (
-  token: string,
   calendarId: string,
   data: { folder_id?: string | null; position?: number },
 ) =>
-  api<CalendarMember>(`/api/calendars/${calendarId}/members/me`, { method: 'PATCH', body: data, token })
+  api<CalendarMember>(`/api/calendars/${calendarId}/members/me`, { method: 'PATCH', body: data })
 
 export const reorderSidebar = (
-  token: string,
   items: { type: 'folder' | 'calendar'; id: string; parent_id?: string | null; position: number }[],
-) => api<void>('/api/sidebar/reorder', { method: 'POST', body: { items }, token })
+) => api<void>('/api/sidebar/reorder', { method: 'POST', body: { items } })
 
 // Folders
-export const listFolders = (token: string) => api<Folder[]>('/api/folders', { token })
+export const listFolders = () => api<Folder[]>('/api/folders')
 
-export const createFolder = (token: string, name: string, parent_id?: string | null) =>
-  api<Folder>('/api/folders', { method: 'POST', body: { name, parent_id }, token })
+export const createFolder = (name: string, parent_id?: string | null) =>
+  api<Folder>('/api/folders', { method: 'POST', body: { name, parent_id } })
 
-export const updateFolder = (token: string, id: string, data: Partial<Folder>) =>
-  api<Folder>(`/api/folders/${id}`, { method: 'PATCH', body: data, token })
+export const updateFolder = (id: string, data: Partial<Folder>) =>
+  api<Folder>(`/api/folders/${id}`, { method: 'PATCH', body: data })
 
-export const deleteFolder = (token: string, id: string) =>
-  api<void>(`/api/folders/${id}`, { method: 'DELETE', token })
+export const deleteFolder = (id: string) =>
+  api<void>(`/api/folders/${id}`, { method: 'DELETE' })
 
 // Categories
-export const listCategories = (token: string, calendarId: string) =>
-  api<Category[]>(`/api/calendars/${calendarId}/categories`, { token })
+export const listCategories = (calendarId: string) =>
+  api<Category[]>(`/api/calendars/${calendarId}/categories`)
 
-export const createCategory = (token: string, calendarId: string, data: Partial<Category>) =>
-  api<Category>(`/api/calendars/${calendarId}/categories`, { method: 'POST', body: data, token })
+export const createCategory = (calendarId: string, data: Partial<Category>) =>
+  api<Category>(`/api/calendars/${calendarId}/categories`, { method: 'POST', body: data })
 
-export const updateCategory = (token: string, id: string, data: Partial<Category>) =>
-  api<Category>(`/api/categories/${id}`, { method: 'PATCH', body: data, token })
+export const updateCategory = (calendarId: string, id: string, data: Partial<Category>) =>
+  api<Category>(`/api/calendars/${calendarId}/categories/${id}`, { method: 'PATCH', body: data })
 
-export const deleteCategory = (token: string, id: string) =>
-  api<void>(`/api/categories/${id}`, { method: 'DELETE', token })
+export const deleteCategory = (calendarId: string, id: string) =>
+  api<void>(`/api/calendars/${calendarId}/categories/${id}`, { method: 'DELETE' })
 
 // Resources
-export const listResources = (token: string, calendarId: string) =>
-  api<Resource[]>(`/api/calendars/${calendarId}/resources`, { token })
+export const listResources = (calendarId: string) =>
+  api<Resource[]>(`/api/calendars/${calendarId}/resources`)
 
-export const createResource = (token: string, calendarId: string, data: Partial<Resource>) =>
-  api<Resource>(`/api/calendars/${calendarId}/resources`, { method: 'POST', body: data, token })
+export const createResource = (calendarId: string, data: Partial<Resource>) =>
+  api<Resource>(`/api/calendars/${calendarId}/resources`, { method: 'POST', body: data })
 
-export const updateResource = (token: string, id: string, data: Partial<Resource>) =>
-  api<Resource>(`/api/resources/${id}`, { method: 'PATCH', body: data, token })
+export const updateResource = (calendarId: string, id: string, data: Partial<Resource>) =>
+  api<Resource>(`/api/calendars/${calendarId}/resources/${id}`, { method: 'PATCH', body: data })
 
-export const deleteResource = (token: string, id: string) =>
-  api<void>(`/api/resources/${id}`, { method: 'DELETE', token })
+export const deleteResource = (calendarId: string, id: string) =>
+  api<void>(`/api/calendars/${calendarId}/resources/${id}`, { method: 'DELETE' })
 
-export const listResourceApprovers = (token: string, resourceId: string) =>
-  api<Approver[]>(`/api/resources/${resourceId}/approvers`, { token })
+export const listResourceApprovers = (calendarId: string, resourceId: string) =>
+  api<Approver[]>(`/api/calendars/${calendarId}/resources/${resourceId}/approvers`)
 
-export const addResourceApprover = (token: string, resourceId: string, userId: string) =>
-  api<Approver>(`/api/resources/${resourceId}/approvers`, {
+export const addResourceApprover = (calendarId: string, resourceId: string, userId: string) =>
+  api<Approver>(`/api/calendars/${calendarId}/resources/${resourceId}/approvers`, {
     method: 'POST',
     body: { user_id: userId },
-    token,
   })
 
-export const removeResourceApprover = (token: string, resourceId: string, userId: string) =>
-  api<void>(`/api/resources/${resourceId}/approvers/${userId}`, { method: 'DELETE', token })
+export const removeResourceApprover = (calendarId: string, resourceId: string, userId: string) =>
+  api<void>(`/api/calendars/${calendarId}/resources/${resourceId}/approvers/${userId}`, { method: 'DELETE' })
 
 // Calendar approvers
-export const listCalendarApprovers = (token: string, calendarId: string) =>
-  api<Approver[]>(`/api/calendars/${calendarId}/approvers`, { token })
+export const listCalendarApprovers = (calendarId: string) =>
+  api<Approver[]>(`/api/calendars/${calendarId}/approvers`)
 
-export const addCalendarApprover = (token: string, calendarId: string, userId: string) =>
+export const addCalendarApprover = (calendarId: string, userId: string) =>
   api<Approver>(`/api/calendars/${calendarId}/approvers`, {
     method: 'POST',
     body: { user_id: userId },
-    token,
   })
 
-export const removeCalendarApprover = (token: string, calendarId: string, userId: string) =>
-  api<void>(`/api/calendars/${calendarId}/approvers/${userId}`, { method: 'DELETE', token })
+export const removeCalendarApprover = (calendarId: string, userId: string) =>
+  api<void>(`/api/calendars/${calendarId}/approvers/${userId}`, { method: 'DELETE' })
 
 // Events
-export const listEvents = (token: string, calendarId: string, start: string, end: string) =>
-  api<Occurrence[]>(`/api/calendars/${calendarId}/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, { token })
+export const listEvents = (calendarId: string, start: string, end: string) =>
+  api<Occurrence[]>(`/api/calendars/${calendarId}/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
 
-export const getEvent = (token: string, eventId: string) =>
-  api<Event>(`/api/calendars/events/${eventId}`, { token })
+export const getEvent = (eventId: string) =>
+  api<Event>(`/api/events/${eventId}`)
 
-export const createEvent = (token: string, calendarId: string, data: Partial<Event>) =>
-  api<Event>(`/api/calendars/${calendarId}/events`, { method: 'POST', body: data, token })
+export const createEvent = (calendarId: string, data: Partial<Event>) =>
+  api<Event>(`/api/calendars/${calendarId}/events`, { method: 'POST', body: data })
 
-export const updateEvent = (token: string, eventId: string, data: Partial<Event>) =>
-  api<Event>(`/api/calendars/events/${eventId}`, { method: 'PATCH', body: data, token })
+export const updateEvent = (eventId: string, data: Partial<Event>) =>
+  api<Event>(`/api/events/${eventId}`, { method: 'PATCH', body: data })
 
-export const deleteEvent = (token: string, eventId: string) =>
-  api<void>(`/api/calendars/events/${eventId}`, { method: 'DELETE', token })
+export const deleteEvent = (eventId: string) =>
+  api<void>(`/api/events/${eventId}`, { method: 'DELETE' })
 
 // Comments & activity
-export const listComments = (token: string, eventId: string) =>
-  api<EventComment[]>(`/api/calendars/events/${eventId}/comments`, { token })
+export const listComments = (eventId: string) =>
+  api<EventComment[]>(`/api/events/${eventId}/comments`)
 
-export const addComment = (token: string, eventId: string, body: string) =>
-  api<EventComment>(`/api/calendars/events/${eventId}/comments`, {
+export const addComment = (eventId: string, body: string) =>
+  api<EventComment>(`/api/events/${eventId}/comments`, {
     method: 'POST',
     body: { body },
-    token,
   })
 
-export const deleteComment = (token: string, commentId: string) =>
-  api<void>(`/api/calendars/events/comments/${commentId}`, { method: 'DELETE', token })
+export const deleteComment = (commentId: string) =>
+  api<void>(`/api/events/comments/${commentId}`, { method: 'DELETE' })
 
-export const listActivity = (token: string, eventId: string) =>
-  api<EventActivity[]>(`/api/calendars/events/${eventId}/activity`, { token })
+export const listActivity = (eventId: string) =>
+  api<EventActivity[]>(`/api/events/${eventId}/activity`)
 
 // Event participants
-export const listEventParticipants = (token: string, eventId: string) =>
-  api<EventParticipant[]>(`/api/calendars/events/${eventId}/participants`, { token })
+export const listEventParticipants = (eventId: string) =>
+  api<EventParticipant[]>(`/api/events/${eventId}/participants`)
 
-export const addEventParticipant = (token: string, eventId: string, data: EventParticipantCreate) =>
-  api<EventParticipant>(`/api/calendars/events/${eventId}/participants`, {
+export const addEventParticipant = (eventId: string, data: EventParticipantCreate) =>
+  api<EventParticipant>(`/api/events/${eventId}/participants`, {
     method: 'POST',
     body: data,
-    token,
   })
 
 export const updateEventParticipant = (
-  token: string,
   eventId: string,
   participantId: string,
   data: EventParticipantUpdate,
-) => api<EventParticipant>(`/api/calendars/events/${eventId}/participants/${participantId}`, {
+) => api<EventParticipant>(`/api/events/${eventId}/participants/${participantId}`, {
   method: 'PATCH',
   body: data,
-  token,
 })
 
-export const removeEventParticipant = (token: string, eventId: string, participantId: string) =>
-  api<void>(`/api/calendars/events/${eventId}/participants/${participantId}`, {
+export const removeEventParticipant = (eventId: string, participantId: string) =>
+  api<void>(`/api/events/${eventId}/participants/${participantId}`, {
     method: 'DELETE',
-    token,
   })
 
 // Notifications
-export const listNotifications = (token: string, limit = 50) =>
-  api<AppNotification[]>(`/api/notifications?limit=${limit}`, { token })
+export const listNotifications = (group?: NotificationGroup, limit = 50) =>
+  api<AppNotification[]>(`/api/notifications?limit=${limit}${group ? `&group=${group}` : ''}`)
 
-export const getUnreadCount = (token: string) =>
-  api<{ count: number }>('/api/notifications/unread-count', { token })
+export const getOpenNotificationCounts = () =>
+  api<{ approvals: number; invitations: number }>('/api/notifications/open-counts')
 
-export const markNotificationRead = (token: string, id: string) =>
-  api<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST', token })
+export const getUnreadCount = () =>
+  api<{ count: number }>('/api/notifications/unread-count')
 
-export const markAllNotificationsRead = (token: string) =>
-  api<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST', token })
+export const markNotificationRead = (id: string) =>
+  api<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST' })
 
-export const deleteNotification = (token: string, id: string) =>
-  api<void>(`/api/notifications/${id}`, { method: 'DELETE', token })
+export const markAllNotificationsRead = () =>
+  api<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST' })
+
+export const deleteNotification = (id: string) =>
+  api<void>(`/api/notifications/${id}`, { method: 'DELETE' })
 
 // Approvals
-export const listPendingApprovals = (token: string) =>
-  api<Event[]>('/api/approvals', { token })
+export const listPendingApprovals = () =>
+  api<Event[]>('/api/approvals')
 
-export const approveEvent = (token: string, eventId: string, note?: string) =>
-  api<Event>(`/api/events/${eventId}/approve`, { method: 'POST', body: { note }, token })
+export const approveEvent = (eventId: string, note?: string) =>
+  api<Event>(`/api/events/${eventId}/approve`, { method: 'POST', body: { note } })
 
-export const rejectEvent = (token: string, eventId: string, note?: string) =>
-  api<Event>(`/api/events/${eventId}/reject`, { method: 'POST', body: { note }, token })
+export const rejectEvent = (eventId: string, note?: string) =>
+  api<Event>(`/api/events/${eventId}/reject`, { method: 'POST', body: { note } })
 
-export const cancelEvent = (token: string, eventId: string) =>
-  api<Event>(`/api/events/${eventId}/cancel`, { method: 'POST', token })
+export const cancelEvent = (eventId: string) =>
+  api<Event>(`/api/events/${eventId}/cancel`, { method: 'POST' })
 
 // Feed
-export const getFeedUrl = (token: string, calendarId: string) =>
-  api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-url`, { token })
+export const getFeedUrl = (calendarId: string) =>
+  api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-url`)
 
-export const rotateFeedToken = (token: string, calendarId: string) =>
-  api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST', token })
+export const rotateFeedToken = (calendarId: string) =>
+  api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST' })
 
 // App settings (public: app name, logo, favicon, calendar defaults)
 export const getAppSettings = () => api<AppSettings>('/api/settings')
 
 // Admin
-export const updateAppSettings = (token: string, data: AppSettingsUpdate) =>
-  api<AppSettings>('/api/admin/settings', { method: 'PATCH', body: data, token })
+export const updateAppSettings = (data: AppSettingsUpdate) =>
+  api<AppSettings>('/api/admin/settings', { method: 'PATCH', body: data })
 
-export const listAdminUsers = (token: string) =>
-  api<AdminUser[]>('/api/admin/users', { token })
+export const listAdminUsers = () =>
+  api<AdminUser[]>('/api/admin/users')
 
-export const createAdminUser = (token: string, data: AdminUserCreate) =>
-  api<AdminUser>('/api/admin/users', { method: 'POST', body: data, token })
+export const createAdminUser = (data: AdminUserCreate) =>
+  api<AdminUser>('/api/admin/users', { method: 'POST', body: data })
 
-export const updateAdminUser = (token: string, userId: string, data: AdminUserUpdate) =>
-  api<AdminUser>(`/api/admin/users/${userId}`, { method: 'PATCH', body: data, token })
+export const updateAdminUser = (userId: string, data: AdminUserUpdate) =>
+  api<AdminUser>(`/api/admin/users/${userId}`, { method: 'PATCH', body: data })
 
-export const deleteAdminUser = (token: string, userId: string) =>
-  api<void>(`/api/admin/users/${userId}`, { method: 'DELETE', token })
+export const deleteAdminUser = (userId: string) =>
+  api<void>(`/api/admin/users/${userId}`, { method: 'DELETE' })
 
-export const resetAdminUserPassword = (token: string, userId: string) =>
-  api<{ password: string }>(`/api/admin/users/${userId}/reset-password`, { method: 'POST', token })
+export const resetAdminUserPassword = (userId: string) =>
+  api<{ password: string }>(`/api/admin/users/${userId}/reset-password`, { method: 'POST' })
 
 // Admin user groups
-export const listUserGroups = (token: string) =>
-  api<UserGroup[]>('/api/groups', { token })
+export const listUserGroups = () =>
+  api<UserGroup[]>('/api/groups')
 
-export const createUserGroup = (token: string, data: UserGroupCreate) =>
-  api<UserGroupDetail>('/api/groups', { method: 'POST', body: data, token })
+export const createUserGroup = (data: UserGroupCreate) =>
+  api<UserGroupDetail>('/api/groups', { method: 'POST', body: data })
 
-export const getUserGroup = (token: string, groupId: string) =>
-  api<UserGroupDetail>(`/api/groups/${groupId}`, { token })
+export const getUserGroup = (groupId: string) =>
+  api<UserGroupDetail>(`/api/groups/${groupId}`)
 
-export const updateUserGroup = (token: string, groupId: string, data: UserGroupUpdate) =>
-  api<UserGroupDetail>(`/api/groups/${groupId}`, { method: 'PATCH', body: data, token })
+export const updateUserGroup = (groupId: string, data: UserGroupUpdate) =>
+  api<UserGroupDetail>(`/api/groups/${groupId}`, { method: 'PATCH', body: data })
 
-export const deleteUserGroup = (token: string, groupId: string) =>
-  api<void>(`/api/groups/${groupId}`, { method: 'DELETE', token })
+export const deleteUserGroup = (groupId: string) =>
+  api<void>(`/api/groups/${groupId}`, { method: 'DELETE' })
 
-export const addUserGroupMember = (token: string, groupId: string, userId: string) =>
-  api<void>(`/api/groups/${groupId}/members/${userId}`, { method: 'POST', token })
+export const addUserGroupMember = (groupId: string, userId: string) =>
+  api<void>(`/api/groups/${groupId}/members/${userId}`, { method: 'POST' })
 
-export const removeUserGroupMember = (token: string, groupId: string, userId: string) =>
-  api<void>(`/api/groups/${groupId}/members/${userId}`, { method: 'DELETE', token })
+export const removeUserGroupMember = (groupId: string, userId: string) =>
+  api<void>(`/api/groups/${groupId}/members/${userId}`, { method: 'DELETE' })

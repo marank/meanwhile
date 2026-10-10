@@ -22,8 +22,8 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function update(token: string, data: AppSettingsUpdate) {
-    const updated = await api.updateAppSettings(token, data)
+  async function update(data: AppSettingsUpdate) {
+    const updated = await api.updateAppSettings(data)
     settings.value = updated
     return updated
   }

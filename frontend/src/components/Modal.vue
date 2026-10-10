@@ -1,5 +1,7 @@
 <script setup lang="ts">
-withDefaults(
+import { useEscapeToClose } from '@/services/escapeToClose'
+
+const props = withDefaults(
   defineProps<{
     open: boolean
     title?: string
@@ -17,11 +19,7 @@ function onBackdropClick(event: MouseEvent) {
   }
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    emit('close')
-  }
-}
+useEscapeToClose(() => props.open, () => emit('close'))
 </script>
 
 <template>
@@ -30,8 +28,6 @@ function onKeydown(event: KeyboardEvent) {
       v-if="open"
       class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       @click="onBackdropClick"
-      @keydown="onKeydown"
-      tabindex="-1"
     >
       <div
         class="modal-panel bg-white border border-transparent rounded-xl shadow-2xl w-full max-w-md overflow-hidden"

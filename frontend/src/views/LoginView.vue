@@ -28,7 +28,16 @@ async function submit() {
     }
     router.push('/calendar')
   } catch (e: any) {
-    error.value = e.detail?.detail || e.message || 'Authentication failed'
+    const detail = (e as any).detail
+    if (Array.isArray(detail?.errors)) {
+      error.value = detail.errors.map((err: any) => err.message || err.code).filter(Boolean).join(', ')
+    } else if (typeof detail?.detail === 'string') {
+      error.value = detail.detail
+    } else if (typeof detail === 'string') {
+      error.value = detail
+    } else {
+      error.value = (e as Error).message || 'Authentication failed'
+    }
   } finally {
     busy.value = false
   }
@@ -60,7 +69,7 @@ function toggleMode() {
             v-model="email"
             type="email"
             required
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
         </div>
 
@@ -70,7 +79,7 @@ function toggleMode() {
             v-model="displayName"
             type="text"
             required
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
         </div>
 
@@ -81,7 +90,7 @@ function toggleMode() {
             type="password"
             required
             minlength="8"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
         </div>
 

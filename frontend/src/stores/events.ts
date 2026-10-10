@@ -46,7 +46,7 @@ export const useEventStore = defineStore('events', () => {
   }
 
   async function load(rangeStart: Date, rangeEnd: Date, force = false) {
-    if (!auth.token) return
+    if (!auth.isLoggedIn) return
     const ids = selectedCalendarIds()
     const start = rangeStart.toISOString()
     const end = rangeEnd.toISOString()
@@ -65,7 +65,7 @@ export const useEventStore = defineStore('events', () => {
     error.value = null
     try {
       const results = await Promise.all(
-        ids.map((id) => api.listEvents(auth.token!, id, start, end).catch(() => [] as Occurrence[])),
+        ids.map((id) => api.listEvents(id, start, end).catch(() => [] as Occurrence[])),
       )
       if (version === loadVersion) {
         occurrences.value = results.flat().sort((a, b) => a.start.localeCompare(b.start))

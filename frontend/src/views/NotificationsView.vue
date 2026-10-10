@@ -7,7 +7,9 @@ import { useNotificationsStore } from '@/stores/notifications'
 import IconButton from '@/components/IconButton.vue'
 import { formatDateTime } from '@/services/datetime'
 import * as api from '@/api'
-import type { AppNotification } from '@/api'
+import { toast } from '@/services/toast'
+import { bookingErrorMessage } from '@/services/bookings'
+import type { AppNotification, NotificationGroup } from '@/api'
 import EventModal from '@/components/EventModal.vue'
 
 const auth = useAuthStore()
@@ -20,10 +22,48 @@ const showModal = ref(false)
 const modalCalendarId = ref('')
 const modalEventId = ref<string | null>(null)
 
+const tabs = computed(() => [
+  { id: null, label: t('notifications.tabAll'), count: 0 },
+  { id: 'approvals' as const, label: t('notifications.tabApprovals'), count: notifications.openCounts.approvals },
+  { id: 'invitations' as const, label: t('notifications.tabInvitations'), count: notifications.openCounts.invitations },
+])
+
+const emptyText = computed(() => {
+  if (notifications.group === 'approvals') return t('notifications.emptyApprovals')
+  if (notifications.group === 'invitations') return t('notifications.emptyInvitations')
+  return t('notifications.empty')
+})
+
+async function selectTab(id: NotificationGroup | null) {
+  if (notifications.group === id) return
+  busy.value = true
+  try {
+    await notifications.setGroup(id)
+  } finally {
+    busy.value = false
+  }
+}
+
 onMounted(async () => {
   await notifications.load()
   initialLoading.value = false
 })
+
+// Outcome of an approval request once it is no longer pending.
+function requestState(n: AppNotification): string | null {
+  if (n.type !== 'approval_requested' || n.event_status === 'pending') return null
+  switch (n.event_status) {
+    case 'approved':
+    case 'confirmed':
+      return t('notifications.stateApproved')
+    case 'rejected':
+      return t('notifications.stateRejected')
+    case 'cancelled':
+      return t('notifications.stateCancelled')
+    default:
+      return t('notifications.stateDeleted')
+  }
+}
 
 function notificationText(n: AppNotification): string {
   const params = { actor: n.actor_name || t('app.someone'), title: n.title }
@@ -85,40 +125,54 @@ async function markAllRead() {
 }
 
 async function approveBooking(n: AppNotification) {
-  if (!auth.token || !n.event_id) return
+  if (!auth.isLoggedIn || !n.event_id) return
   busy.value = true
   try {
-    await api.approveEvent(auth.token, n.event_id)
+    await api.approveEvent(n.event_id)
     await notifications.load()
+  } catch (error) {
+    toast.error(bookingErrorMessage(error, t))
   } finally {
     busy.value = false
   }
 }
 
 async function declineBooking(n: AppNotification) {
-  if (!auth.token || !n.event_id) return
+  if (!auth.isLoggedIn || !n.event_id) return
   busy.value = true
   try {
-    await api.rejectEvent(auth.token, n.event_id)
+    await api.rejectEvent(n.event_id)
     await notifications.load()
+  } catch (error) {
+    toast.error(bookingErrorMessage(error, t))
   } finally {
     busy.value = false
   }
 }
 
 async function respondToInvitation(n: AppNotification, status: api.EventParticipant['status']) {
-  if (!auth.token || !n.event_id) return
+  if (!auth.isLoggedIn || !n.event_id) return
   busy.value = true
   try {
-    const participants = await api.listEventParticipants(auth.token, n.event_id)
+    const participants = await api.listEventParticipants(n.event_id)
     const me = participants.find((p) => p.user_id === auth.user?.id)
     if (me) {
-      await api.updateEventParticipant(auth.token, n.event_id, me.id, { status })
+      await api.updateEventParticipant(n.event_id, me.id, { status })
       await notifications.load()
     }
   } finally {
     busy.value = false
   }
+}
+
+function participantAnswer(status: api.EventParticipant['status']) {
+  const keys: Record<api.EventParticipant['status'], string> = {
+    needs_action: 'statusNeedsAction',
+    accepted: 'statusAccepted',
+    declined: 'statusDeclined',
+    tentative: 'statusTentative',
+  }
+  return t(`event.${keys[status]}`)
 }
 
 function notificationIcon(n: AppNotification) {
@@ -127,9 +181,6 @@ function notificationIcon(n: AppNotification) {
   return 'default'
 }
 
-function canDeleteNotification(n: AppNotification) {
-  return n.type !== 'approval_requested' && n.type !== 'participant_added'
-}
 
 async function removeNotification(id: string) {
   await notifications.remove(id)
@@ -151,8 +202,26 @@ async function removeNotification(id: string) {
       </button>
     </div>
 
+    <div class="mb-4 flex gap-1 border-b border-gray-200" role="tablist">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id ?? 'all'"
+        type="button"
+        role="tab"
+        :aria-selected="notifications.group === tab.id"
+        class="-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium"
+        :class="notifications.group === tab.id
+          ? 'border-blue-600 text-blue-600 dark:text-blue-300'
+          : 'border-transparent text-gray-500 hover:text-gray-800'"
+        @click="selectTab(tab.id)"
+      >
+        {{ tab.label }}
+        <span v-if="tab.count" class="rounded-full bg-blue-600 px-1.5 text-xs font-semibold leading-5 text-white">{{ tab.count }}</span>
+      </button>
+    </div>
+
     <p v-if="initialLoading" class="text-sm text-gray-500">{{ $t('app.loading') }}</p>
-    <p v-else-if="!notifications.items.length" class="text-sm text-gray-500">{{ $t('notifications.empty') }}</p>
+    <p v-else-if="!notifications.items.length" class="text-sm text-gray-500">{{ emptyText }}</p>
 
     <ul v-else class="space-y-3">
       <li
@@ -171,7 +240,10 @@ async function removeNotification(id: string) {
           <p class="text-xs text-gray-500 mt-1">{{ formatDateTime(n.created_at) }}</p>
 
           <div class="flex flex-wrap gap-2 mt-3">
-            <template v-if="n.type === 'approval_requested' && n.event_id">
+            <span v-if="requestState(n)" class="inline-flex items-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700">
+              {{ requestState(n) }}
+            </span>
+            <template v-else-if="n.type === 'approval_requested' && n.event_id">
               <button
                 type="button"
                 :disabled="busy"
@@ -190,7 +262,13 @@ async function removeNotification(id: string) {
               </button>
             </template>
 
-            <template v-if="n.type === 'participant_added' && n.event_id">
+            <span
+              v-if="n.type === 'participant_added' && n.response_status && n.response_status !== 'needs_action'"
+              class="inline-flex items-center rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700"
+            >
+              {{ $t('notifications.yourAnswer', { answer: participantAnswer(n.response_status) }) }}
+            </span>
+            <template v-if="n.type === 'participant_added' && n.event_id && n.event_status">
               <button
                 type="button"
                 :disabled="busy"
@@ -240,7 +318,7 @@ async function removeNotification(id: string) {
           </div>
         </div>
         <div
-          v-if="canDeleteNotification(n)"
+          v-if="n.deletable"
           class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <IconButton

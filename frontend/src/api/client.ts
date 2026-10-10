@@ -1,9 +1,17 @@
 const API_BASE = ''
 
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) {
+    return parts.pop()?.split(';').shift() || null
+  }
+  return null
+}
+
 export type FetchOptions = {
   method?: string
   body?: unknown
-  token?: string | null
 }
 
 export async function api<T = unknown>(
@@ -15,12 +23,17 @@ export async function api<T = unknown>(
     Accept: 'application/json',
     'Content-Type': 'application/json',
   }
-  if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`
+  const method = options.method || 'GET'
+  if (method !== 'GET' && method !== 'HEAD') {
+    const csrf = getCookie('csrftoken')
+    if (csrf) {
+      headers['X-CSRFToken'] = csrf
+    }
   }
   const resp = await fetch(url, {
-    method: options.method || 'GET',
+    method,
     headers,
+    credentials: 'include',
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
   if (!resp.ok) {

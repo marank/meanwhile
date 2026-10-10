@@ -1,20 +1,61 @@
 @import 'tailwindcss';
 
+/* Follow the app's theme toggle (the .dark class on <html>) instead of the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Neutral palette: Tailwind's gray is slightly blue, while the dark theme is built on zinc.
+ * Mapping gray onto zinc keeps text, borders and surfaces on one hue in both themes.
+ * The primary blue is toned down a little so it doesn't glare against the soft neutrals.
+ */
+@theme {
+  --color-gray-50: oklch(98.5% 0 0);
+  --color-gray-100: oklch(96.7% 0.001 286.375);
+  --color-gray-200: oklch(92% 0.004 286.32);
+  --color-gray-300: oklch(87.1% 0.006 286.286);
+  --color-gray-400: oklch(70.5% 0.015 286.067);
+  --color-gray-500: oklch(55.2% 0.016 285.938);
+  --color-gray-600: oklch(44.2% 0.017 285.786);
+  --color-gray-700: oklch(37% 0.013 285.805);
+  --color-gray-800: oklch(27.4% 0.006 286.033);
+  --color-gray-900: oklch(21% 0.006 285.885);
+  --color-gray-950: oklch(14.1% 0.005 285.823);
+  --color-blue-600: oklch(53% 0.2 262);
+  --color-blue-700: oklch(47% 0.18 263);
+}
+
+/* Tailwind v4 defaults unspecified border colors to currentColor; use the theme border instead. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--app-border);
+  }
+}
+
 html, body, #app {
   height: 100%;
   margin: 0;
 }
 
+/* Light mode uses soft zinc grays instead of pure white to reduce glare. */
 :root {
-  --app-bg: #f9fafb;
-  --app-surface: #ffffff;
-  --app-surface-muted: #f3f4f6;
-  --app-border: #e5e7eb;
-  --app-text: #111827;
-  --app-text-muted: #6b7280;
+  --app-bg: #ebebed;
+  --app-surface: #f6f6f7;
+  --app-surface-muted: #ededef;
+  --app-hover: #e4e4e7;
+  /* Fields take the background of the surface they sit on, so they don't look read-only. */
+  --app-input: transparent;
+  --app-border: #d4d4d8;
+  --app-text: #27272a;
+  --app-text-muted: #71717a;
 }
 
 [data-color-scheme='dark'] {
+  --app-hover: #3f3f46;
+  --app-input: #18181b;
   --app-bg: #09090b;
   --app-surface: #18181b;
   --app-surface-muted: #27272a;
@@ -29,17 +70,50 @@ body {
   transition: background-color 150ms ease, color 150ms ease;
 }
 
-[data-color-scheme='dark'] .bg-white {
+/* Tailwind's neutral surfaces are mapped onto the app tokens in both themes. */
+.bg-white {
   background-color: var(--app-surface) !important;
 }
 
-[data-color-scheme='dark'] .bg-gray-50,
-[data-color-scheme='dark'] .bg-gray-100,
-[data-color-scheme='dark'] .disabled\:bg-gray-100:disabled {
+.bg-gray-50,
+.bg-gray-100,
+.disabled\:bg-gray-100:disabled {
   background-color: var(--app-surface-muted) !important;
 }
 
+.hover\:bg-gray-50:hover,
+.hover\:bg-gray-100:hover {
+  background-color: var(--app-hover) !important;
+}
 
+.border-gray-100,
+.border-gray-200,
+.border-gray-300,
+.divide-gray-100 > :not(:last-child) {
+  border-color: var(--app-border) !important;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='color']),
+select,
+textarea {
+  background-color: var(--app-input);
+}
+
+/* One focus style for every form field: primary border plus a thin ring. */
+:root input:not([type='checkbox']):not([type='radio']):not([type='color']):focus,
+:root select:focus,
+:root textarea:focus {
+  outline: none;
+  border-color: var(--color-blue-500) !important;
+  box-shadow: 0 0 0 1px var(--color-blue-500);
+}
+
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible,
+input[type='color']:focus-visible {
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: 2px;
+}
 
 [data-color-scheme='dark'] .text-gray-900,
 [data-color-scheme='dark'] .text-gray-800,
@@ -53,20 +127,8 @@ body {
   color: var(--app-text-muted) !important;
 }
 
-[data-color-scheme='dark'] .border-gray-100,
-[data-color-scheme='dark'] .border-gray-200,
-[data-color-scheme='dark'] .border-gray-300,
 [data-color-scheme='dark'] .border {
   border-color: var(--app-border) !important;
-}
-
-[data-color-scheme='dark'] .divide-gray-100 > :not(:last-child) {
-  border-color: var(--app-border) !important;
-}
-
-[data-color-scheme='dark'] .hover\:bg-gray-50:hover,
-[data-color-scheme='dark'] .hover\:bg-gray-100:hover {
-  background-color: #3f3f46 !important;
 }
 
 [data-color-scheme='dark'] .hover\:text-gray-600:hover,
@@ -78,7 +140,6 @@ body {
 [data-color-scheme='dark'] input:not([type='checkbox']):not([type='radio']):not([type='color']),
 [data-color-scheme='dark'] select,
 [data-color-scheme='dark'] textarea {
-  background-color: #18181b;
   border-color: var(--app-border);
   color: var(--app-text);
 }

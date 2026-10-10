@@ -1,0 +1,47 @@
+"""
+Global search endpoint.
+"""
+
+from ninja import Router
+from ninja.errors import HttpError
+from ninja.security import django_auth
+
+from core.api import CSRFRouter
+from core.models import Calendar
+from core.schemas import SearchResult
+from core.services.permissions import get_membership
+from core.services.search import (
+    search_calendar_members,
+    search_categories,
+    search_groups,
+    search_resources,
+    search_users,
+)
+
+router = CSRFRouter()
+
+
+@router.get("/search", response=list[SearchResult], auth=django_auth)
+def search(
+    request,
+    entity: str,
+    q: str = "",
+    limit: int = 20,
+    calendar_id: str | None = None,
+):
+    if entity == "users":
+        return search_users(q, limit)
+    if entity == "groups":
+        return search_groups(q, limit)
+    if entity in {"resources", "categories", "members"}:
+        if calendar_id is None:
+            raise HttpError(422, "calendar_id is required for this entity")
+        calendar = Calendar.objects.get(id=calendar_id)
+        if get_membership(calendar, request.user) is None and not calendar.is_public:
+            raise HttpError(403, "Not a member of this calendar")
+        if entity == "resources":
+            return search_resources(calendar_id, q, limit)
+        if entity == "members":
+            return search_calendar_members(calendar_id, q, limit)
+        return search_categories(calendar_id, q, limit)
+    raise HttpError(400, "Unknown search entity")

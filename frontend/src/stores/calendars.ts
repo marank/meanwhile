@@ -24,12 +24,12 @@ export const useCalendarStore = defineStore('calendars', () => {
   }
 
   async function load() {
-    if (!auth.token) return
+    if (!auth.isLoggedIn) return
     loading.value = true
     try {
       const [calData, folderData] = await Promise.all([
-        api.listCalendars(auth.token),
-        api.listFolders(auth.token),
+        api.listCalendars(),
+        api.listFolders(),
       ])
       items.value = calData
       folders.value = folderData
@@ -39,8 +39,8 @@ export const useCalendarStore = defineStore('calendars', () => {
   }
 
   async function create(name: string, description?: string, color?: string) {
-    if (!auth.token) return
-    const cal = await api.createCalendar(auth.token, name, description, color)
+    if (!auth.isLoggedIn) return
+    const cal = await api.createCalendar(name, description, color)
     await load()
     selectedId.value = cal.id
   }

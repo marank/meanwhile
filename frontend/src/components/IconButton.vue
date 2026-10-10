@@ -6,8 +6,9 @@ const props = withDefaults(
     label: string
     tone?: 'muted' | 'primary' | 'danger'
     bordered?: boolean
+    disabled?: boolean
   }>(),
-  { tone: 'muted', bordered: false },
+  { tone: 'muted', bordered: false, disabled: false },
 )
 
 const toneClass = computed(() => ({
@@ -20,7 +21,8 @@ const toneClass = computed(() => ({
 <template>
   <button
     type="button"
-    class="group/icon inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+    :disabled="disabled"
+    class="group/icon inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:pointer-events-none disabled:opacity-50"
     :class="[toneClass, bordered ? 'border border-gray-300 rounded-lg p-2' : 'p-1']"
     :title="label"
     :aria-label="label"

@@ -8,6 +8,8 @@ import { buildRrule as serializeRrule, parseRrule as parseRruleValue, type Recur
 import { useI18n } from 'vue-i18n'
 import { Plus } from 'lucide-vue-next'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import { useEscapeToClose } from '@/services/escapeToClose'
+import { bookingErrorMessage } from '@/services/bookings'
 
 interface PendingParticipant {
   tempId: string
@@ -35,6 +37,25 @@ const auth = useAuthStore()
 const { t } = useI18n()
 const busy = ref(false)
 const error = ref('')
+const eventStatus = ref<string | null>(null)
+const eventHasResource = ref(false)
+const decisionNoteShown = ref<string | null>(null)
+const canDecide = ref(false)
+const decisionNote = ref('')
+const statusLabels: Record<string, string> = {
+  pending: 'booking.pending',
+  approved: 'booking.approved',
+  rejected: 'booking.rejected',
+  cancelled: 'booking.cancelled',
+}
+const statusClasses: Record<string, string> = {
+  pending: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100',
+  approved: 'border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100',
+  rejected: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100',
+  cancelled: 'border-gray-300 bg-gray-50 text-gray-700',
+}
+// Only bookings (events with a resource) go through approval, so only they show a status.
+const showBookingStatus = computed(() => !!eventStatus.value && eventHasResource.value && eventStatus.value in statusLabels)
 const selectedResourceOption = ref<api.SearchResult | null>(null)
 const forceAllDay = ref(false)
 const calendar = ref<api.Calendar | null>(null)
@@ -202,12 +223,12 @@ function canDeleteComment(comment: api.EventComment): boolean {
 }
 
 async function loadActivity() {
-  if (!auth.token || !props.eventId || activityLoaded.value) return
+  if (!auth.isLoggedIn || !props.eventId || activityLoaded.value) return
   activityBusy.value = true
   try {
     const [c, a] = await Promise.all([
-      api.listComments(auth.token, props.eventId),
-      api.listActivity(auth.token, props.eventId),
+      api.listComments(props.eventId),
+      api.listActivity(props.eventId),
     ])
     comments.value = c
     activityEntries.value = a
@@ -218,20 +239,20 @@ async function loadActivity() {
 }
 
 async function postComment() {
-  if (!auth.token || !props.eventId || !newComment.value.trim()) return
+  if (!auth.isLoggedIn || !props.eventId || !newComment.value.trim()) return
   activityBusy.value = true
   try {
-    await api.addComment(auth.token, props.eventId, newComment.value)
+    await api.addComment(props.eventId, newComment.value)
     newComment.value = ''
-    comments.value = await api.listComments(auth.token, props.eventId)
+    comments.value = await api.listComments(props.eventId)
   } finally {
     activityBusy.value = false
   }
 }
 
 async function removeComment(comment: api.EventComment) {
-  if (!auth.token) return
-  await api.deleteComment(auth.token, comment.id)
+  if (!auth.isLoggedIn) return
+  await api.deleteComment(comment.id)
   comments.value = comments.value.filter((c) => c.id !== comment.id)
 }
 
@@ -260,11 +281,11 @@ function participantError(e: unknown) {
 }
 
 async function loadParticipants() {
-  if (!auth.token || !props.eventId) return
+  if (!auth.isLoggedIn || !props.eventId) return
   participantsBusy.value = true
   error.value = ''
   try {
-    participants.value = await api.listEventParticipants(auth.token, props.eventId)
+    participants.value = await api.listEventParticipants(props.eventId)
   } catch (e: unknown) {
     participantError(e)
   } finally {
@@ -281,7 +302,7 @@ function onParticipantSelect(_value: string | null, option: api.SearchResult | n
 
 async function addParticipant() {
   const value = participantValue.value?.trim()
-  if (!auth.token || !value) return
+  if (!auth.isLoggedIn || !value) return
   const email = participantIsUser.value
     ? (selectedParticipantOption.value?.subtitle || value)
     : value
@@ -314,7 +335,7 @@ async function addParticipant() {
     } else {
       data.email = value
     }
-    await api.addEventParticipant(auth.token, props.eventId, data)
+    await api.addEventParticipant(props.eventId, data)
     participantValue.value = null
     participantIsUser.value = false
     selectedParticipantOption.value = null
@@ -327,11 +348,11 @@ async function addParticipant() {
 }
 
 async function removeParticipant(participant: api.EventParticipant) {
-  if (!auth.token || !props.eventId) return
+  if (!auth.isLoggedIn || !props.eventId) return
   participantsBusy.value = true
   error.value = ''
   try {
-    await api.removeEventParticipant(auth.token, props.eventId, participant.id)
+    await api.removeEventParticipant(props.eventId, participant.id)
     await loadParticipants()
   } catch (e: unknown) {
     participantError(e)
@@ -412,17 +433,21 @@ function selectStartWeekday() {
 }
 
 onMounted(async () => {
-  if (!auth.token) return
-  const cal = await api.getCalendar(auth.token, props.calendarId)
+  if (!auth.isLoggedIn) return
+  const cal = await api.getCalendar(props.calendarId)
   calendar.value = cal
   forceAllDay.value = cal.force_all_day
   if (forceAllDay.value) allDay.value = true
   if (props.eventId) {
-    const event = await api.getEvent(auth.token, props.eventId)
+    const event = await api.getEvent(props.eventId)
     eventCreatorId.value = event.creator_id
     eventCreatorName.value = event.creator_name || event.creator_email || ''
     eventCreatedAt.value = event.created_at
     eventUpdatedAt.value = event.updated_at
+    eventStatus.value = event.status
+    eventHasResource.value = !!event.resource_id
+    decisionNoteShown.value = event.decision_note
+    canDecide.value = !!event.can_decide
     title.value = event.title
     description.value = event.description || ''
     allDay.value = forceAllDay.value || event.all_day
@@ -476,7 +501,7 @@ function buildAllDayDate(dateStr: string) {
 }
 
 async function save() {
-  if (!auth.token) return
+  if (!auth.isLoggedIn) return
   busy.value = true
   error.value = ''
   try {
@@ -495,10 +520,10 @@ async function save() {
       show_recurrence_count: recurrenceEnabled.value && showRecurrenceCount.value,
       rrule: currentRrule(),
       category_id: categoryId.value || null,
-      resource_id: resourceId.value || undefined,
+      resource_id: resourceId.value || null,
     }
     if (props.eventId) {
-      await api.updateEvent(auth.token, props.eventId, body)
+      await api.updateEvent(props.eventId, body)
     } else {
       if (pendingParticipants.value.length) {
         body.participants = pendingParticipants.value.map((p) => ({
@@ -507,27 +532,45 @@ async function save() {
           status: p.status,
         }))
       }
-      await api.createEvent(auth.token, props.calendarId, body)
+      await api.createEvent(props.calendarId, body)
     }
     emit('saved')
   } catch (e: any) {
-    error.value = e.detail?.detail || e.message || 'Failed to save event'
+    error.value = bookingErrorMessage(e, t)
   } finally {
     busy.value = false
   }
 }
 
 async function remove() {
-  if (!props.eventId || !auth.token) return
+  if (!props.eventId || !auth.isLoggedIn) return
   const ok = await confirm(t('app.deleteEventText'), t('app.deleteEventTitle'))
   if (!ok) return
-  await api.deleteEvent(auth.token, props.eventId)
+  await api.deleteEvent(props.eventId)
   emit('deleted')
 }
 
 function cancel() {
   emit('cancel')
 }
+
+async function decide(action: 'approve' | 'reject') {
+  if (!props.eventId || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const note = decisionNote.value.trim() || undefined
+    if (action === 'approve') await api.approveEvent(props.eventId, note)
+    else await api.rejectEvent(props.eventId, note)
+    emit('saved')
+  } catch (e) {
+    error.value = bookingErrorMessage(e, t)
+  } finally {
+    busy.value = false
+  }
+}
+
+useEscapeToClose(() => true, cancel)
 </script>
 
 <template>
@@ -549,6 +592,21 @@ function cancel() {
           {{ $t(`event.${tab}`) }}
         </button>
       </div>
+
+      <div v-if="showBookingStatus" class="mb-4 rounded-lg border px-3 py-2 text-sm" :class="statusClasses[eventStatus!]" role="status">
+        <p class="font-medium">{{ $t(statusLabels[eventStatus!]!) }}</p>
+        <p v-if="eventStatus === 'pending'" class="mt-0.5 text-xs opacity-80">{{ $t('booking.pendingHint') }}</p>
+        <p v-else-if="decisionNoteShown" class="mt-0.5 text-xs opacity-80">„{{ decisionNoteShown }}“</p>
+        <div v-if="canDecide" class="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input v-model="decisionNote" :placeholder="$t('booking.notePlaceholder')" class="min-w-0 flex-1 rounded-lg border px-2 py-1 text-sm" />
+          <div class="flex gap-2">
+            <button type="button" :disabled="busy" class="rounded-lg bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50" @click="decide('approve')">{{ $t('booking.approve') }}</button>
+            <button type="button" :disabled="busy" class="rounded-lg bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50" @click="decide('reject')">{{ $t('booking.reject') }}</button>
+          </div>
+        </div>
+      </div>
+
+      <p v-if="error" class="mb-4 rounded bg-red-50 p-2 text-sm text-red-600 dark:bg-red-900 dark:text-red-200" role="alert">{{ error }}</p>
 
       <div class="overflow-y-auto px-1">
         <fieldset class="contents" :disabled="isReadonly">
@@ -811,8 +869,6 @@ function cancel() {
             </button>
           </div>
         </div>
-
-        <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded mt-4">{{ error }}</p>
         </fieldset>
       </div>
 
