@@ -64,6 +64,11 @@ export function weekdayName(code: string, style: 'long' | 'short' = 'long'): str
   return formatter({ weekday: style }).format(new Date(2024, 0, 1 + WEEK_ORDER.indexOf(code)))
 }
 
+/** Localized name of a month, 1–12. */
+export function monthName(month: number, style: 'long' | 'short' = 'long'): string {
+  return formatter({ month: style }).format(new Date(2024, month - 1, 1))
+}
+
 /** Day and month, e.g. "7. Oktober" or "October 7". */
 export function formatDayMonth(date: Date): string {
   return formatter({ day: 'numeric', month: 'long' }).format(date)

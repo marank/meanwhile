@@ -1,36 +1,25 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { GrantableRole } from '@/api'
+import AppSelect from '@/components/AppSelect.vue'
 
-withDefaults(
-  defineProps<{
-    modelValue: GrantableRole
-    compact?: boolean
-    disabled?: boolean
-  }>(),
-  {
-    compact: false,
-    disabled: false,
-  },
+withDefaults(defineProps<{ compact?: boolean; disabled?: boolean; label?: string }>(), {
+  compact: false,
+  disabled: false,
+})
+
+const role = defineModel<GrantableRole>({ required: true })
+
+const { t } = useI18n()
+const options = computed(() =>
+  (['viewer', 'contributor', 'editor'] as const).map((value) => ({ value, label: t(`roles.${value}`) })),
 )
-
-const emit = defineEmits<{
-  'update:modelValue': [value: GrantableRole]
-}>()
-
-const roles: GrantableRole[] = ['viewer', 'contributor', 'editor']
 </script>
 
 <template>
   <div>
-    <select
-      :value="modelValue"
-      :disabled="disabled"
-      class="w-full rounded-lg border"
-      :class="compact ? 'px-2 py-1 text-sm' : 'px-3 py-2'"
-      @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value as GrantableRole)"
-    >
-      <option v-for="role in roles" :key="role" :value="role">{{ $t(`roles.${role}`) }}</option>
-    </select>
-    <p class="mt-1 text-xs text-gray-500">{{ $t(`roles.${modelValue}Description`) }}</p>
+    <AppSelect v-model="role" :options="options" :disabled="disabled" :size="compact ? 'sm' : 'md'" :label="label" />
+    <p class="mt-1 text-xs text-gray-500">{{ $t(`roles.${role}Description`) }}</p>
   </div>
 </template>

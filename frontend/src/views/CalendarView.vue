@@ -20,6 +20,7 @@ import type {
 import '@fullcalendar/vue3/skeleton.css'
 import '@fullcalendar/vue3/themes/classic/theme.css'
 import '@fullcalendar/vue3/themes/classic/palette.css'
+import CalendarToolbar, { type CalendarViewType } from '@/components/calendar/CalendarToolbar.vue'
 import EventModal from '@/components/event/EventModal.vue'
 import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
 import { useEventStore } from '@/stores/events'
@@ -132,8 +133,27 @@ const fcEvents = computed(() =>
   }),
 )
 
+const toolbar = ref({
+  title: '',
+  view: 'dayGridMonth' as CalendarViewType,
+  date: new Date(),
+  todayInRange: true,
+})
+
 function handleDatesSet(info: DatesSetInfo) {
   eventStore.load(info.start, info.end)
+  const { view } = info
+  const now = new Date()
+  toolbar.value = {
+    title: view.title,
+    view: view.type as CalendarViewType,
+    date: view.currentStart,
+    todayInRange: now >= view.currentStart && now < view.currentEnd,
+  }
+}
+
+function calendarApi() {
+  return calendarRef.value?.getApi()
 }
 
 function reloadVisibleRange(force = false) {
@@ -269,26 +289,12 @@ function dayCellClass(info: { dow: number; isToday: boolean }) {
 const calendarOptions = computed(() => ({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, classicThemePlugin],
   initialView: 'dayGridMonth',
-  headerToolbar: {
-    left: 'prev,next today',
-    center: 'title',
-    right: 'dayGridMonth,timeGridWeek',
-  },
+  // The toolbar is our own (CalendarToolbar), so it can hold month and year fields.
+  headerToolbar: false as const,
   height: '100%',
   locale: locale.value === 'de' ? deLocale : 'en',
   firstDay: displaySettings.value.first_weekday,
   viewClass: 'calendar-view',
-  toolbarTitleClass: 'calendar-toolbar-title',
-  buttonGroupClass: 'calendar-button-group',
-  buttonClass: (info: { isSelected: boolean; isIconOnly: boolean; buttonGroup: unknown }) =>
-    [
-      'calendar-button',
-      info.isSelected && 'calendar-button-active',
-      info.isIconOnly && 'calendar-button-icon',
-      !info.buttonGroup && 'calendar-button-solo',
-    ]
-      .filter(Boolean)
-      .join(' '),
   dayHeaderClass: 'calendar-header',
   eventClass: (info: { event: { extendedProps: Record<string, unknown> } }) =>
     info.event.extendedProps.status === 'pending' ? 'calendar-event calendar-event-pending' : 'calendar-event',
@@ -299,6 +305,8 @@ const calendarOptions = computed(() => ({
   inlineWeekNumberClass: 'calendar-inherit-color',
   views: {
     dayGridMonth: { dayRowClass: 'calendar-day-row' },
+    // The week title names its days; the toolbar's month and year fields cover the rest.
+    timeGridWeek: { titleFormat: { day: 'numeric', month: 'short', year: 'numeric' } as const },
   },
   weekends: true,
   hiddenDays: displaySettings.value.show_weekends ? [] : displaySettings.value.weekend_days,
@@ -323,18 +331,23 @@ const calendarOptions = computed(() => ({
   eventContent: renderEventContent,
   events: fcEvents.value,
   dayMaxEvents: true,
-  buttons: {
-    today: { text: t('app.today'), display: 'text' as const },
-    dayGridMonth: { text: t('app.month'), display: 'text' as const },
-    timeGridWeek: { text: t('app.week'), display: 'text' as const },
-  },
 }))
 </script>
 
 <template>
   <div class="calendar-root h-full flex flex-col" :style="calendarStyle">
-    <div class="flex-1 overflow-hidden p-2">
-      <FullCalendar ref="calendarRef" :options="calendarOptions" />
+    <div class="flex flex-1 flex-col overflow-hidden p-2">
+      <CalendarToolbar
+        v-bind="toolbar"
+        @prev="calendarApi()?.prev()"
+        @next="calendarApi()?.next()"
+        @today="calendarApi()?.today()"
+        @goto="calendarApi()?.gotoDate($event)"
+        @change-view="calendarApi()?.changeView($event)"
+      />
+      <div class="min-h-0 flex-1">
+        <FullCalendar ref="calendarRef" :options="calendarOptions" />
+      </div>
     </div>
 
     <EventModal
@@ -355,12 +368,6 @@ const calendarOptions = computed(() => ({
 .calendar-root {
   --fc-classic-background: var(--app-surface);
   --fc-classic-today: var(--calendar-today-color);
-}
-
-.calendar-root .calendar-toolbar-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--app-text);
 }
 
 .calendar-root .calendar-view {
@@ -393,63 +400,6 @@ const calendarOptions = computed(() => ({
 html.dark .calendar-root {
   --calendar-control-bg: transparent;
   --calendar-control-hover: color-mix(in srgb, var(--app-surface-muted) 70%, var(--app-text) 30%);
-}
-
-.calendar-root .calendar-button-group {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--calendar-control-border);
-  border-radius: 0.625rem;
-  background-color: var(--calendar-control-bg);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
-}
-
-.calendar-root .calendar-button {
-  --fc-classic-button: transparent;
-  --fc-classic-button-border: transparent;
-  --fc-classic-button-strong: var(--calendar-control-hover);
-  --fc-classic-button-strong-border: transparent;
-  --fc-classic-button-foreground: var(--app-text);
-  --fc-classic-button-outline: var(--calendar-accent-color);
-  margin: 0 !important;
-  border-radius: 0.5rem !important;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-transform: capitalize;
-  box-shadow: none !important;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.calendar-root .calendar-button-icon {
-  padding: 0.3rem 0.45rem;
-}
-
-.calendar-root .calendar-button-solo {
-  --fc-classic-button: var(--calendar-control-bg);
-  --fc-classic-button-border: var(--calendar-control-border);
-  --fc-classic-button-strong-border: var(--calendar-control-border);
-  --fc-classic-button-foreground: var(--app-text);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12) !important;
-  /* The theme only draws inline borders on standalone buttons. */
-  border: 1px solid var(--calendar-control-border) !important;
-  border-radius: 0.625rem !important;
-  padding: calc(0.3rem + 3px) 0.9rem;
-}
-
-.calendar-root .calendar-button-solo:disabled {
-  opacity: 0.5;
-}
-
-.calendar-root .calendar-button-active {
-  --fc-classic-button: var(--calendar-accent-color);
-  --fc-classic-button-strong: var(--calendar-accent-color);
-  --fc-classic-button-foreground: var(--calendar-accent-text-color);
-  color: var(--calendar-accent-text-color) !important;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.15) !important;
 }
 
 .calendar-root .calendar-event {

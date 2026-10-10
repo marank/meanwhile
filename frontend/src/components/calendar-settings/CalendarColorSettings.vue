@@ -31,7 +31,7 @@ const paletteOptions = computed(() =>
   })),
 )
 
-function applyPalette(id: string) {
+function applyPalette(id: string | null) {
   const palette = calendarColorPalettes.find((item) => item.id === id)
   if (palette) Object.assign(colors.value, paletteColors(palette))
 }

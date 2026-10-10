@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { User } from '@/api'
+import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import { useAction } from '@/composables/useAction'
 import { setLocale, type Locale } from '@/i18n'
@@ -17,11 +18,22 @@ const languages: Array<{ value: Locale; label: string }> = [
   { value: 'en', label: 'English' },
   { value: 'de', label: 'Deutsch' },
 ]
-const themeOptions: Array<{ value: ThemePreference; label: string }> = [
-  { value: 'system', label: 'app.themeSystem' },
-  { value: 'light', label: 'app.themeLight' },
-  { value: 'dark', label: 'app.themeDark' },
-]
+const themeOptions = computed<SelectOption<ThemePreference>[]>(() => [
+  { value: 'system', label: t('app.themeSystem') },
+  { value: 'light', label: t('app.themeLight') },
+  { value: 'dark', label: t('app.themeDark') },
+])
+const timeFormats = computed<SelectOption<User['time_format']>[]>(() => [
+  { value: 'auto', label: t('app.formatAuto') },
+  { value: '24h', label: t('app.format24h') },
+  { value: '12h', label: t('app.format12h') },
+])
+const dateFormats = computed<SelectOption<User['date_format']>[]>(() => [
+  { value: 'auto', label: t('app.formatAuto') },
+  { value: 'dmy', label: '31.12.2026' },
+  { value: 'mdy', label: '12/31/2026' },
+  { value: 'ymd', label: '2026-12-31' },
+])
 
 const form = ref({
   displayName: auth.user?.display_name ?? '',
@@ -68,19 +80,11 @@ function save() {
         <div class="grid gap-5 sm:grid-cols-2">
           <label class="block">
             <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.language') }}</span>
-            <select v-model="form.language" class="w-full rounded-lg border border-line px-3 py-2">
-              <option v-for="language in languages" :key="language.value" :value="language.value">
-                {{ language.label }}
-              </option>
-            </select>
+            <AppSelect v-model="form.language" :options="languages" />
           </label>
           <label class="block">
             <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.theme') }}</span>
-            <select v-model="form.theme" class="w-full rounded-lg border border-line px-3 py-2">
-              <option v-for="option in themeOptions" :key="option.value" :value="option.value">
-                {{ $t(option.label) }}
-              </option>
-            </select>
+            <AppSelect v-model="form.theme" :options="themeOptions" />
           </label>
         </div>
       </section>
@@ -90,20 +94,11 @@ function save() {
         <div class="grid gap-5 sm:grid-cols-2">
           <label class="block">
             <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.timeFormat') }}</span>
-            <select v-model="form.timeFormat" class="w-full rounded-lg border border-line px-3 py-2">
-              <option value="auto">{{ $t('app.formatAuto') }}</option>
-              <option value="24h">{{ $t('app.format24h') }}</option>
-              <option value="12h">{{ $t('app.format12h') }}</option>
-            </select>
+            <AppSelect v-model="form.timeFormat" :options="timeFormats" />
           </label>
           <label class="block">
             <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.dateFormat') }}</span>
-            <select v-model="form.dateFormat" class="w-full rounded-lg border border-line px-3 py-2">
-              <option value="auto">{{ $t('app.formatAuto') }}</option>
-              <option value="dmy">31.12.2026</option>
-              <option value="mdy">12/31/2026</option>
-              <option value="ymd">2026-12-31</option>
-            </select>
+            <AppSelect v-model="form.dateFormat" :options="dateFormats" />
           </label>
         </div>
       </section>

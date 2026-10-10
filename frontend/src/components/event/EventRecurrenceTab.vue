@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Translation as I18nT, useI18n } from 'vue-i18n'
+import AppSelect from '@/components/AppSelect.vue'
 import NumberListInput from '@/components/NumberListInput.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import { formatDayMonth, weekdayName } from '@/services/datetime'
@@ -111,13 +112,7 @@ const endings = computed(() => [
   <div class="space-y-4">
     <label class="block">
       <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('recurrence.repeat') }}</span>
-      <select
-        :value="choice"
-        class="w-full rounded-lg border px-3 py-2"
-        @change="choose(($event.target as HTMLSelectElement).value as Choice)"
-      >
-        <option v-for="option in choices" :key="option.value" :value="option.value">{{ option.label }}</option>
-      </select>
+      <AppSelect :model-value="choice" :options="choices" @update:model-value="choose" />
     </label>
 
     <template v-if="rule">
@@ -131,15 +126,18 @@ const endings = computed(() => [
             :aria-label="$t('recurrence.every')"
             class="w-16 rounded-lg border px-2 py-1.5"
           />
-          <select
+          <AppSelect
             v-model="rule.frequency"
-            class="flex-1 rounded-lg border px-3 py-1.5"
-            :aria-label="$t('recurrence.repeat')"
-          >
-            <option v-for="frequency in FREQUENCIES" :key="frequency" :value="frequency">
-              {{ $t(`recurrence.unit.${frequency}`, rule.interval || 1) }}
-            </option>
-          </select>
+            :options="
+              FREQUENCIES.map((frequency) => ({
+                value: frequency,
+                label: $t(`recurrence.unit.${frequency}`, rule!.interval || 1),
+              }))
+            "
+            size="sm"
+            :label="$t('recurrence.repeat')"
+            class="flex-1"
+          />
         </div>
 
         <div v-if="rule.frequency === 'WEEKLY'" class="flex items-center gap-2">
@@ -212,13 +210,13 @@ const endings = computed(() => [
               />
             </template>
             <template #weekday>
-              <select
+              <AppSelect
                 v-model="rule.ordinalWeekday"
-                class="rounded-lg border px-3 py-1.5 leading-normal"
-                :aria-label="$t('recurrence.weekdaysLabel')"
-              >
-                <option v-for="day in WEEK" :key="day" :value="day">{{ weekdayName(day) }}</option>
-              </select>
+                :options="WEEK.map((day) => ({ value: day, label: weekdayName(day) }))"
+                size="sm"
+                :label="$t('recurrence.weekdaysLabel')"
+                class="inline-block align-middle leading-normal"
+              />
             </template>
           </I18nT>
           <p class="text-xs text-gray-500">{{ $t('recurrence.listHint') }}</p>

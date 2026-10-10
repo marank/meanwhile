@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppSelect from '@/components/AppSelect.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
 import { weekdays, weekdaysFrom } from '@/services/weekdays'
 
@@ -24,9 +25,11 @@ function toggleWeekendDay(day: number) {
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="block">
         <span class="mb-1 block text-sm font-medium text-gray-800">{{ $t('app.firstWeekday') }}</span>
-        <select v-model.number="firstWeekday" :disabled="disabled" class="w-full rounded-lg border px-3 py-2">
-          <option v-for="day in weekdays" :key="day.value" :value="day.value">{{ $t(`event.${day.key}`) }}</option>
-        </select>
+        <AppSelect
+          v-model="firstWeekday"
+          :options="weekdays.map((day) => ({ value: day.value, label: $t(`event.${day.key}`) }))"
+          :disabled="disabled"
+        />
       </label>
     </div>
     <div>
