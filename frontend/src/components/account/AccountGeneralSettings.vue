@@ -1,0 +1,122 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { User } from '@/api'
+import SettingsPanel from '@/components/SettingsPanel.vue'
+import { useAction } from '@/composables/useAction'
+import { setLocale, type Locale } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
+import { useThemeStore, type ThemePreference } from '@/stores/theme'
+
+const { t, locale } = useI18n()
+const auth = useAuthStore()
+const theme = useThemeStore()
+const { busy, run } = useAction()
+
+const languages: Array<{ value: Locale; label: string }> = [
+  { value: 'en', label: 'English' },
+  { value: 'de', label: 'Deutsch' },
+]
+const themeOptions: Array<{ value: ThemePreference; label: string }> = [
+  { value: 'system', label: 'app.themeSystem' },
+  { value: 'light', label: 'app.themeLight' },
+  { value: 'dark', label: 'app.themeDark' },
+]
+
+const form = ref({
+  displayName: auth.user?.display_name ?? '',
+  language: locale.value as Locale,
+  theme: theme.preference,
+  timeFormat: auth.user?.time_format ?? ('auto' as User['time_format']),
+  dateFormat: auth.user?.date_format ?? ('auto' as User['date_format']),
+})
+
+// Name and formats belong to the account; language and color scheme are kept in this browser.
+function save() {
+  const value = form.value
+  return run(
+    async () => {
+      await auth.updateProfile({
+        display_name: value.displayName,
+        time_format: value.timeFormat,
+        date_format: value.dateFormat,
+      })
+      setLocale(value.language)
+      theme.setPreference(value.theme)
+    },
+    // Evaluated after saving, so the message is already in the newly chosen language.
+    { success: () => t('app.settingsSaved'), failure: t('app.saveFailed') },
+  )
+}
+</script>
+
+<template>
+  <SettingsPanel :title="$t('app.general')" :description="$t('app.accountGeneralDescription')">
+    <div class="space-y-6">
+      <section class="space-y-3">
+        <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.profile') }}</h3>
+        <div class="grid gap-5 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('auth.displayName') }}</span>
+            <input v-model="form.displayName" class="w-full rounded-lg border border-line px-3 py-2" />
+          </label>
+        </div>
+      </section>
+
+      <section class="space-y-3 border-t border-line pt-6">
+        <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.appearance') }}</h3>
+        <div class="grid gap-5 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.language') }}</span>
+            <select v-model="form.language" class="w-full rounded-lg border border-line px-3 py-2">
+              <option v-for="language in languages" :key="language.value" :value="language.value">
+                {{ language.label }}
+              </option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.theme') }}</span>
+            <select v-model="form.theme" class="w-full rounded-lg border border-line px-3 py-2">
+              <option v-for="option in themeOptions" :key="option.value" :value="option.value">
+                {{ $t(option.label) }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="space-y-3 border-t border-line pt-6">
+        <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.dateTime') }}</h3>
+        <div class="grid gap-5 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.timeFormat') }}</span>
+            <select v-model="form.timeFormat" class="w-full rounded-lg border border-line px-3 py-2">
+              <option value="auto">{{ $t('app.formatAuto') }}</option>
+              <option value="24h">{{ $t('app.format24h') }}</option>
+              <option value="12h">{{ $t('app.format12h') }}</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.dateFormat') }}</span>
+            <select v-model="form.dateFormat" class="w-full rounded-lg border border-line px-3 py-2">
+              <option value="auto">{{ $t('app.formatAuto') }}</option>
+              <option value="dmy">31.12.2026</option>
+              <option value="mdy">12/31/2026</option>
+              <option value="ymd">2026-12-31</option>
+            </select>
+          </label>
+        </div>
+      </section>
+    </div>
+    <template #footer>
+      <button
+        type="button"
+        :disabled="busy"
+        class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+        @click="save"
+      >
+        {{ $t('app.save') }}
+      </button>
+    </template>
+  </SettingsPanel>
+</template>

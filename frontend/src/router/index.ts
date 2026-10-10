@@ -1,6 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    /** Reachable without a session; logged-in users are sent to the calendar instead. */
+    public?: boolean
+    /** Only for administrators. */
+    admin?: boolean
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -22,9 +31,16 @@ const router = createRouter({
       redirect: '/calendar',
     },
     {
-      path: '/calendar',
+      path: '/calendar/:calendarId?',
       name: 'calendar',
       component: () => import('@/views/CalendarView.vue'),
+      props: true,
+    },
+    {
+      path: '/calendar/folder/:folderId',
+      name: 'folder',
+      component: () => import('@/views/CalendarView.vue'),
+      props: true,
     },
     {
       path: '/notifications',
@@ -35,6 +51,7 @@ const router = createRouter({
       path: '/settings/:calendarId',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
+      props: true,
     },
     {
       path: '/account',
@@ -50,14 +67,9 @@ const router = createRouter({
   ],
 })
 
-let initStarted = false
-
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  if (!initStarted) {
-    initStarted = true
-    await auth.init()
-  }
+  await auth.init()
   if (!to.meta.public && !auth.isLoggedIn) return '/login'
   if (to.meta.public && auth.isLoggedIn) return '/calendar'
   if (to.meta.admin && !auth.isAdmin) return '/calendar'

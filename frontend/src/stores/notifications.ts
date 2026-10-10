@@ -1,36 +1,37 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api'
-import type { AppNotification, NotificationGroup } from '@/api'
-import { useAuthStore } from './auth'
+
+const POLL_INTERVAL_MS = 60_000
 
 export const useNotificationsStore = defineStore('notifications', () => {
-  const auth = useAuthStore()
-
-  const items = ref<AppNotification[]>([])
+  const items = ref<api.AppNotification[]>([])
   const unreadCount = ref(0)
-  const group = ref<NotificationGroup | null>(null)
+  const group = ref<api.NotificationGroup | null>(null)
   const openCounts = ref({ approvals: 0, invitations: 0 })
+  let loadVersion = 0
   let timer: number | undefined
 
+  /** Loads the current tab; when loads overlap (fast tab switches), only the latest one is applied. */
   async function load() {
-    if (!auth.isLoggedIn) return
-    const [list, counts] = await Promise.all([
+    const version = ++loadVersion
+    const [list, counts, unread] = await Promise.all([
       api.listNotifications(group.value ?? undefined),
       api.getOpenNotificationCounts(),
+      api.getUnreadCount(),
     ])
+    if (version !== loadVersion) return
     items.value = list
     openCounts.value = counts
-    await refreshCount()
+    unreadCount.value = unread.count
   }
 
-  async function setGroup(value: NotificationGroup | null) {
+  async function setGroup(value: api.NotificationGroup | null) {
     group.value = value
     await load()
   }
 
   async function refreshCount() {
-    if (!auth.isLoggedIn) return
     try {
       unreadCount.value = (await api.getUnreadCount()).count
     } catch {
@@ -39,7 +40,6 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   async function markRead(id: string) {
-    if (!auth.isLoggedIn) return
     const updated = await api.markNotificationRead(id)
     const item = items.value.find((n) => n.id === id)
     if (item) item.read_at = updated.read_at
@@ -47,30 +47,48 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   async function markAllRead() {
-    if (!auth.isLoggedIn) return
     await api.markAllNotificationsRead()
-    items.value = items.value.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() }))
+    const now = new Date().toISOString()
+    items.value = items.value.map((n) => ({ ...n, read_at: n.read_at ?? now }))
     unreadCount.value = 0
   }
 
   async function remove(id: string) {
-    if (!auth.isLoggedIn) return
     await api.deleteNotification(id)
     items.value = items.value.filter((n) => n.id !== id)
     await refreshCount()
   }
 
+  // Polling pauses while the tab is hidden and catches up as soon as it's visible again.
+  function onVisibilityChange() {
+    if (document.hidden) {
+      window.clearInterval(timer)
+      timer = undefined
+    } else if (timer === undefined) {
+      void refreshCount()
+      timer = window.setInterval(refreshCount, POLL_INTERVAL_MS)
+    }
+  }
+
   function startPolling() {
     stopPolling()
-    void refreshCount()
-    timer = window.setInterval(refreshCount, 60_000)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    onVisibilityChange()
   }
 
   function stopPolling() {
-    if (timer !== undefined) {
-      window.clearInterval(timer)
-      timer = undefined
-    }
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.clearInterval(timer)
+    timer = undefined
+  }
+
+  function reset() {
+    stopPolling()
+    loadVersion++
+    items.value = []
+    unreadCount.value = 0
+    group.value = null
+    openCounts.value = { approvals: 0, invitations: 0 }
   }
 
   return {
@@ -86,5 +104,6 @@ export const useNotificationsStore = defineStore('notifications', () => {
     remove,
     startPolling,
     stopPolling,
+    reset,
   }
 })

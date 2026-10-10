@@ -46,6 +46,7 @@ def _serialize_event(event: Event) -> dict:
         "start": make_aware(event.start),
         "end": make_aware(event.end),
         "all_day": event.all_day,
+        "timezone": event.timezone,
         "show_recurrence_count": event.show_recurrence_count,
         "rrule": event.rrule,
         "uid": event.uid,

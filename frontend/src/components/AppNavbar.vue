@@ -1,161 +1,121 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, Moon, Sun } from 'lucide-vue-next'
+import { Bell, EllipsisVertical, Moon, Sun } from 'lucide-vue-next'
+import AppLogo from '@/components/AppLogo.vue'
 import IconButton from '@/components/IconButton.vue'
 import type { AppNotification } from '@/api'
+import { useEscapeToClose } from '@/composables/useEscapeToClose'
 import { formatDateTime } from '@/services/datetime'
+import { notificationText } from '@/services/labels'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
-import { useI18n } from 'vue-i18n'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
 const settings = useSettingsStore()
 const notifications = useNotificationsStore()
 const router = useRouter()
-const { t } = useI18n()
-const open = ref(false)
+
+const menuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
-const notifOpen = ref(false)
-const notifRef = ref<HTMLElement | null>(null)
+const notificationsOpen = ref(false)
+const notificationsRef = ref<HTMLElement | null>(null)
 
 function closeOnOutsideClick(event: PointerEvent) {
-  if (open.value && !menuRef.value?.contains(event.target as Node)) open.value = false
-  if (notifOpen.value && !notifRef.value?.contains(event.target as Node)) notifOpen.value = false
+  const target = event.target as Node
+  if (menuOpen.value && !menuRef.value?.contains(target)) menuOpen.value = false
+  if (notificationsOpen.value && !notificationsRef.value?.contains(target)) notificationsOpen.value = false
 }
+
+useEscapeToClose(
+  () => menuOpen.value,
+  () => (menuOpen.value = false),
+)
+useEscapeToClose(
+  () => notificationsOpen.value,
+  () => (notificationsOpen.value = false),
+)
 
 onMounted(() => {
   document.addEventListener('pointerdown', closeOnOutsideClick)
-  if (auth.isLoggedIn) notifications.startPolling()
+  notifications.startPolling()
 })
+
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeOnOutsideClick)
   notifications.stopPolling()
 })
 
-watch(
-  () => auth.isLoggedIn,
-  (token) => (token ? notifications.startPolling() : notifications.stopPolling()),
-)
+const unreadBadge = computed(() => (notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount)))
 
-const unreadBadge = computed(() =>
-  notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount),
-)
-
-function notificationText(n: AppNotification): string {
-  const params = { actor: n.actor_name || t('app.someone'), title: n.title }
-  switch (n.type) {
-    case 'approval_requested':
-      return t('notifications.approvalRequested', params)
-    case 'booking_approved':
-      return t('notifications.bookingApproved', params)
-    case 'booking_rejected':
-      return t('notifications.bookingRejected', params)
-    case 'booking_cancelled':
-      return t('notifications.bookingCancelled', params)
-    case 'member_added':
-      return t('notifications.memberAdded', params)
-    case 'member_role_changed':
-      return t('notifications.memberRoleChanged', params)
-    case 'comment_added':
-      return t('notifications.commentAdded', params)
-    default:
-      return n.title
-  }
-}
-
-async function toggleNotifications() {
-  notifOpen.value = !notifOpen.value
-  if (notifOpen.value) await notifications.load()
-}
-
-async function openNotification(n: AppNotification) {
-  await notifications.markRead(n.id)
-  notifOpen.value = false
-  router.push('/notifications')
-}
-
-function gotoNotifications() {
-  notifOpen.value = false
-  router.push('/notifications')
-}
-
-async function markAllRead() {
-  await notifications.markAllRead()
-}
-
-function logout() {
-  auth.logout()
-  router.push('/login')
-}
-
-const initials = computed(() => {
-  const name = auth.user?.display_name || auth.user?.email || ''
-  return name
+const initials = computed(() =>
+  (auth.user?.display_name || auth.user?.email || '')
     .split(' ')
-    .map((p) => p[0])
+    .map((part) => part[0])
     .join('')
     .toUpperCase()
-    .slice(0, 2)
-})
+    .slice(0, 2),
+)
 
-function gotoAccount() {
-  router.push('/account')
-  open.value = false
+async function toggleNotifications() {
+  notificationsOpen.value = !notificationsOpen.value
+  if (notificationsOpen.value) await notifications.load()
 }
 
-function gotoProfile() {
-  gotoAccount()
+async function openNotification(notification: AppNotification) {
+  await notifications.markRead(notification.id)
+  navigate('/notifications')
 }
 
-function gotoAdmin() {
-  router.push('/admin')
-  open.value = false
+function navigate(path: string) {
+  menuOpen.value = false
+  notificationsOpen.value = false
+  router.push(path)
+}
+
+async function logout() {
+  await auth.logout()
+  navigate('/login')
 }
 </script>
 
 <template>
-  <header class="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm">
+  <header class="flex items-center justify-between border-b border-line bg-surface px-6 py-3 shadow-sm">
     <div class="flex items-center gap-3">
-      <div
-        v-if="settings.logoUrl"
-        class="w-8 h-8 rounded-lg bg-white flex items-center justify-center overflow-hidden"
-      >
-        <img :src="settings.logoUrl" alt="App logo" class="max-w-full max-h-full object-contain" />
-      </div>
-      <div
-        v-else
-        class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold"
-      >
-        C
-      </div>
-      <span class="text-lg font-semibold text-gray-800">{{ settings.appName || $t('app.name') }}</span>
+      <AppLogo />
+      <span class="text-lg font-semibold text-gray-800">{{ settings.appName }}</span>
     </div>
 
-    <div ref="menuRef" class="relative flex items-center gap-3">
-      <div ref="notifRef" class="relative">
-        <IconButton @click="toggleNotifications" :label="$t('notifications.title')">
+    <div class="flex items-center gap-3">
+      <div ref="notificationsRef" class="relative">
+        <IconButton
+          :label="$t('notifications.title')"
+          :aria-expanded="notificationsOpen"
+          aria-haspopup="true"
+          @click="toggleNotifications"
+        >
           <Bell :size="20" :stroke-width="2.25" />
         </IconButton>
         <span
           v-if="notifications.unreadCount > 0"
-          class="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold flex items-center justify-center pointer-events-none"
+          class="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white"
         >
           {{ unreadBadge }}
         </span>
         <div
-          v-if="notifOpen"
-          class="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+          v-if="notificationsOpen"
+          class="absolute right-0 top-10 z-50 w-80 rounded-lg border border-line bg-surface shadow-lg"
         >
-          <div class="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+          <div class="flex items-center justify-between border-b border-line px-4 py-2">
             <span class="text-sm font-semibold text-gray-800">{{ $t('notifications.title') }}</span>
             <button
               v-if="notifications.unreadCount > 0"
-              @click="markAllRead"
+              type="button"
               class="text-xs text-blue-600 hover:underline"
+              @click="notifications.markAllRead()"
             >
               {{ $t('notifications.markAllRead') }}
             </button>
@@ -163,73 +123,83 @@ function gotoAdmin() {
           <div v-if="!notifications.items.length" class="px-4 py-6 text-center text-sm text-gray-500">
             {{ $t('notifications.empty') }}
           </div>
-          <ul v-else class="max-h-96 overflow-y-auto divide-y divide-gray-100">
-            <li v-for="n in notifications.items" :key="n.id">
+          <ul v-else class="max-h-96 divide-y divide-line overflow-y-auto">
+            <li v-for="notification in notifications.items" :key="notification.id">
               <button
-                @click="openNotification(n)"
-                class="block w-full text-left px-4 py-3 text-sm hover:bg-gray-50"
-                :class="{ 'bg-blue-50/60': !n.read_at }"
+                type="button"
+                class="block w-full px-4 py-3 text-left text-sm hover:bg-hover"
+                :class="{ 'bg-blue-50/60 dark:bg-blue-950/40': !notification.read_at }"
+                @click="openNotification(notification)"
               >
-                <span class="block text-gray-800">{{ notificationText(n) }}</span>
-                <span class="block text-xs text-gray-400 mt-0.5">{{ formatDateTime(n.created_at) }}</span>
+                <span class="block text-gray-800">{{ notificationText(notification) }}</span>
+                <span class="mt-0.5 block text-xs text-gray-400">{{ formatDateTime(notification.created_at) }}</span>
               </button>
             </li>
           </ul>
-          <div class="px-4 py-2 border-t border-gray-100 text-center">
-            <button
-              type="button"
-              class="text-xs text-blue-600 hover:underline"
-              @click="gotoNotifications"
-            >
+          <div class="border-t border-line px-4 py-2 text-center">
+            <button type="button" class="text-xs text-blue-600 hover:underline" @click="navigate('/notifications')">
               {{ $t('notifications.viewAll') }}
             </button>
           </div>
         </div>
       </div>
-      <IconButton @click="theme.toggle" :label="$t('app.toggleTheme')">
-        <Sun v-if="theme.resolved === 'dark'" :size="20" :stroke-width="2.25" />
+
+      <IconButton :label="$t('app.toggleTheme')" @click="theme.toggle">
+        <Sun v-if="theme.isDark" :size="20" :stroke-width="2.25" />
         <Moon v-else :size="20" :stroke-width="2.25" />
       </IconButton>
-      <div class="text-right hidden sm:block leading-tight">
+
+      <div class="hidden text-right leading-tight sm:block">
         <div class="text-sm font-medium text-gray-900">{{ auth.user?.display_name }}</div>
         <div class="text-xs text-gray-500">{{ auth.user?.email }}</div>
       </div>
       <div
-        class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-semibold text-sm"
+        class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-semibold text-white"
       >
         {{ initials }}
       </div>
-      <button
-        @click="open = !open"
-        class="p-2 rounded-full hover:bg-gray-100 focus:outline-none"
-        aria-label="Menu"
-      >
-        <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-        </svg>
-      </button>
 
-      <div
-        v-if="open"
-        class="absolute right-0 top-12 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50"
-      >
-        <button @click="gotoProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50">
-          {{ $t('app.profile') }}
-        </button>
-        <button @click="gotoAccount" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50">
-          {{ $t('app.account') }}
-        </button>
-        <button
-          v-if="auth.isAdmin"
-          @click="gotoAdmin"
-          class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+      <div ref="menuRef" class="relative">
+        <IconButton
+          :label="$t('app.menu')"
+          :aria-expanded="menuOpen"
+          aria-haspopup="menu"
+          @click="menuOpen = !menuOpen"
         >
-          {{ $t('app.administration') }}
-        </button>
-        <div class="border-t border-gray-100 my-1"></div>
-        <button @click="logout" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50">
-          {{ $t('app.logout') }}
-        </button>
+          <EllipsisVertical :size="20" :stroke-width="2.25" />
+        </IconButton>
+        <div
+          v-if="menuOpen"
+          role="menu"
+          class="absolute right-0 top-10 z-50 w-56 rounded-lg border border-line bg-surface py-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            class="block w-full px-4 py-2 text-left text-sm hover:bg-hover"
+            @click="navigate('/account')"
+          >
+            {{ $t('app.account') }}
+          </button>
+          <button
+            v-if="auth.isAdmin"
+            type="button"
+            role="menuitem"
+            class="block w-full px-4 py-2 text-left text-sm hover:bg-hover"
+            @click="navigate('/admin')"
+          >
+            {{ $t('app.administration') }}
+          </button>
+          <div class="my-1 border-t border-line"></div>
+          <button
+            type="button"
+            role="menuitem"
+            class="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-hover"
+            @click="logout"
+          >
+            {{ $t('app.logout') }}
+          </button>
+        </div>
       </div>
     </div>
   </header>

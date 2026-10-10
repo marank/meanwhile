@@ -1,33 +1,68 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import FullCalendar from '@fullcalendar/vue3'
 import dayGridPlugin from '@fullcalendar/vue3/daygrid'
 import timeGridPlugin from '@fullcalendar/vue3/timegrid'
 import interactionPlugin from '@fullcalendar/vue3/interaction'
 import classicThemePlugin from '@fullcalendar/vue3/themes/classic'
 import deLocale from '@fullcalendar/vue3/locales/de'
-import type { DateClickInfo, DateSelectInfo, EventClickInfo, EventDisplayInfo, DatesSetInfo, EventDropInfo, EventResizeDoneInfo } from '@fullcalendar/vue3'
+import type {
+  DateClickInfo,
+  DateSelectInfo,
+  EventClickInfo,
+  EventDisplayInfo,
+  DatesSetInfo,
+  EventDropInfo,
+  EventResizeDoneInfo,
+} from '@fullcalendar/vue3'
 import '@fullcalendar/vue3/skeleton.css'
 import '@fullcalendar/vue3/themes/classic/theme.css'
 import '@fullcalendar/vue3/themes/classic/palette.css'
-import EventModal from '@/components/EventModal.vue'
-import { useAuthStore } from '@/stores/auth'
-import { useCalendarStore } from '@/stores/calendars'
+import EventModal from '@/components/event/EventModal.vue'
+import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
 import { useEventStore } from '@/stores/events'
+import { useOverviewStore } from '@/stores/overview'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
+import { overviewPalette, paletteColors, themeColors } from '@/services/calendarColors'
+import { contrastColor } from '@/services/color'
 import { alert } from '@/services/dialog'
-import { hour12 } from '@/services/datetime'
+import { browserTimeZone, hour12, toDateInputValue } from '@/services/datetime'
+import { bookingErrorMessage } from '@/services/errors'
+import { useLoader } from '@/composables/useLoader'
 import * as api from '@/api'
 import type { Occurrence } from '@/api'
 
-const auth = useAuthStore()
+const DAY_MS = 24 * 60 * 60 * 1000
+const HOUR_MS = 60 * 60 * 1000
+
+const props = defineProps<{
+  calendarId?: string
+  folderId?: string
+}>()
+
+const router = useRouter()
 const calendarStore = useCalendarStore()
 const eventStore = useEventStore()
 const settingsStore = useSettingsStore()
+const overviewStore = useOverviewStore()
 const themeStore = useThemeStore()
 const { locale, t } = useI18n()
+
+// The URL decides what is shown: /calendar, /calendar/<id> or /calendar/folder/<id>.
+const selection = computed(() => props.folderId ?? props.calendarId ?? ALL_CALENDARS)
+watch(selection, (id) => calendarStore.select(id), { immediate: true })
+
+// A deleted or no longer shared calendar or folder in the URL falls back to all calendars.
+watch(
+  () => [selection.value, calendarStore.loaded, calendarStore.selectedCalendar, calendarStore.selectedFolder] as const,
+  ([id, loaded, calendar, folder]) => {
+    if (loaded && id !== ALL_CALENDARS && !calendar && !folder) router.replace('/calendar')
+  },
+  { immediate: true },
+)
 
 const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null)
 
@@ -41,85 +76,10 @@ function eventLabel(occ: Occurrence): string {
   return occ.resource_name ? `${title} · ${occ.resource_name}` : title
 }
 
-function colorChannels(color: string): [number, number, number] {
-  const value = color.replace('#', '')
-  return [
-    Number.parseInt(value.slice(0, 2), 16),
-    Number.parseInt(value.slice(2, 4), 16),
-    Number.parseInt(value.slice(4, 6), 16),
-  ]
-}
-
-function contrastColor(color: string): string {
-  const [red, green, blue] = colorChannels(color)
-  return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? '#111827' : '#ffffff'
-}
-
-function toHsl(color: string): [number, number, number] {
-  const [red, green, blue] = colorChannels(color).map((channel) => channel / 255) as [number, number, number]
-  const max = Math.max(red, green, blue)
-  const min = Math.min(red, green, blue)
-  const lightness = (max + min) / 2
-  if (max === min) return [0, 0, lightness]
-  const delta = max - min
-  const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min)
-  const hue = max === red
-    ? (green - blue) / delta + (green < blue ? 6 : 0)
-    : max === green ? (blue - red) / delta + 2 : (red - green) / delta + 4
-  return [hue * 60, saturation, lightness]
-}
-
-function fromHsl(hue: number, saturation: number, lightness: number): string {
-  const amount = saturation * Math.min(lightness, 1 - lightness)
-  const channel = (n: number) => {
-    const k = (n + hue / 30) % 12
-    const value = lightness - amount * Math.max(-1, Math.min(k - 3, 9 - k, 1))
-    return Math.round(value * 255).toString(16).padStart(2, '0')
-  }
-  return `#${channel(0)}${channel(8)}${channel(4)}`
-}
-
-// Darkens a color while keeping its hue, adding saturation so pastel palette colors stay vivid.
-// Saturation is capped so already saturated hues (indigo, lavender, purple) don't turn garish.
-function shadeColor(color: string, lightnessFactor: number, saturationBoost = 0.15, maxSaturation = 0.65): string {
-  const [hue, saturation, lightness] = toHsl(color)
-  return fromHsl(hue, Math.min(maxSaturation, saturation + saturationBoost), lightness * lightnessFactor)
-}
-
-function relativeLuminance(color: string): number {
-  const [red, green, blue] = colorChannels(color).map((channel) => {
-    const value = channel / 255
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  }) as [number, number, number]
-  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
-}
-
-// Keeps darkening until white text reaches WCAG AA contrast (4.5:1); green and yellow hues need more.
-function darkenForWhiteText(color: string): string {
-  let result = color
-  for (let step = 0; step < 20 && 1.05 / (relativeLuminance(result) + 0.05) < 4.5; step++) {
-    const [hue, saturation, lightness] = toHsl(result)
-    result = fromHsl(hue, saturation, lightness * 0.93)
-  }
-  return result
-}
-
-function mixColor(color: string, target: '#000000' | '#ffffff', amount: number): string {
-  const source = colorChannels(color)
-  const destination = colorChannels(target)
-  return `#${source.map((channel, index) =>
-    Math.round(channel + (destination[index]! - channel) * amount).toString(16).padStart(2, '0'),
-  ).join('')}`
-}
-
 function renderEventContent(info: EventDisplayInfo) {
   const content = document.createElement('span')
-  const duration = info.event.start && info.event.end
-    ? info.event.end.getTime() - info.event.start.getTime()
-    : 0
-  const classes = [duration > 24 * 60 * 60 * 1000
-    ? 'fc-event-label fc-event-label-multiday'
-    : 'fc-event-label']
+  const duration = info.event.start && info.event.end ? info.event.end.getTime() - info.event.start.getTime() : 0
+  const classes = [duration > DAY_MS ? 'fc-event-label fc-event-label-multiday' : 'fc-event-label']
   const status = info.event.extendedProps.status as string | undefined
   if (status === 'rejected' || status === 'cancelled') {
     classes.push('fc-event-declined')
@@ -144,9 +104,19 @@ function renderEventContent(info: EventDisplayInfo) {
   return { domNodes: [content] }
 }
 
+// Events take their calendar's current event color, so palette changes show up without reloading them.
+// The overview ("All calendars", folders) can instead show all events in its own event color.
+function eventColor(occurrence: Occurrence): string {
+  const overview = overviewStore.settings
+  const useOverviewColor = !calendarStore.selectedCalendar && overview && !overview.use_calendar_colors
+  const source =
+    (useOverviewColor ? overview : calendarStore.calendarsById.get(occurrence.calendar_id)) ?? displaySettings.value
+  return themeStore.isDark ? source.dark_event_color : source.event_color
+}
+
 const fcEvents = computed(() =>
   eventStore.occurrences.map((occ) => {
-    const color = themeStore.resolved === 'dark' ? occ.dark_color : occ.color
+    const color = eventColor(occ)
     return {
       id: `${occ.event_id}-${occ.start}`,
       title: eventLabel(occ),
@@ -161,13 +131,6 @@ const fcEvents = computed(() =>
     }
   }),
 )
-
-function syncEvents() {
-  const api = calendarRef.value?.getApi()
-  if (!api) return
-  api.removeAllEventSources()
-  if (fcEvents.value.length) api.addEventSource(fcEvents.value)
-}
 
 function handleDatesSet(info: DatesSetInfo) {
   eventStore.load(info.start, info.end)
@@ -185,7 +148,8 @@ const modalEndDate = ref<Date | undefined>(undefined)
 const modalAllDay = ref<boolean | undefined>(undefined)
 
 function openCreateModal(start: Date, end?: Date, allDay?: boolean) {
-  if (calendarStore.allSelected) return
+  // New events need one target calendar; "all" and folder selections are ambiguous.
+  if (!calendarStore.selectedCalendar) return
   modalEventId.value = null
   modalDate.value = start
   modalEndDate.value = end
@@ -210,117 +174,88 @@ function saved() {
   reloadVisibleRange(true)
 }
 
-const activeCalendarId = computed(() => {
-  if (calendarStore.selectedCalendar) return calendarStore.selectedCalendar.id
-  const first = calendarStore.items[0]
-  return first?.calendar.id || ''
-})
-
-onMounted(() => {
-  calendarStore.load()
-  syncEvents()
-})
-
-watch(fcEvents, syncEvents, { flush: 'post' })
-
 watch(
-  () => calendarStore.allSelected,
-  (allSelected) => {
-    if (allSelected && showModal.value && !modalEventId.value) closeModal()
+  () => calendarStore.selectedCalendar,
+  (selected) => {
+    if (!selected && showModal.value && !modalEventId.value) closeModal()
   },
 )
 
 watch(
-  () => eventStore.selectedCalendarIds().join(','),
+  () => calendarStore.selectedCalendarIds.join(','),
   () => reloadVisibleRange(),
   { flush: 'post' },
 )
 
+useLoader(overviewStore.load, { immediate: !overviewStore.settings })
+
+// A single calendar brings its own layout and colors; the overview uses the user's overview settings,
+// and until they're loaded the app defaults with the app color preset.
 const displaySettings = computed(() => {
   if (calendarStore.selectedCalendar) return calendarStore.selectedCalendar
+  if (overviewStore.settings) return overviewStore.settings
   const appSettings = settingsStore.settings
   return {
     first_weekday: appSettings?.default_first_weekday ?? 0,
     show_weekends: appSettings?.default_show_weekends ?? true,
     weekend_days: appSettings?.default_weekend_days ?? [0, 6],
     show_week_numbers: appSettings?.default_show_week_numbers ?? false,
-    color: '#3b82f6',
-    dark_color: '#60a5fa',
-    today_color: '#eff6ff',
-    dark_today_color: '#27272a',
-    weekend_color: '#f9fafb',
-    dark_weekend_color: '#18181b',
+    ...paletteColors(overviewPalette),
   }
 })
 
 const SLOT_HEIGHT = 48
 
+// Only text colors are computed; everything else is stored per calendar.
 const calendarStyle = computed(() => {
-  const isDark = themeStore.resolved === 'dark'
-  const defaultColor = isDark ? displaySettings.value.dark_color : displaySettings.value.color
-  const todayColor = isDark ? displaySettings.value.dark_today_color : displaySettings.value.today_color
-  const weekendColor = isDark ? displaySettings.value.dark_weekend_color : displaySettings.value.weekend_color
-  const headerColor = darkenForWhiteText(shadeColor(defaultColor, isDark ? 0.55 : 0.42, 0.25))
-  const borderColor = mixColor(defaultColor, isDark ? '#ffffff' : '#000000', isDark ? 0.14 : 0.16)
-  const outerBorderColor = shadeColor(defaultColor, isDark ? 0.7 : 0.36, isDark ? 0.35 : 0.2)
-  // Dark palettes are already near black, so the active toolbar button is lifted instead of darkened.
-  const accentColor = isDark ? shadeColor(defaultColor, 2.6, 0.2, 1) : headerColor
+  const colors = themeColors(displaySettings.value, themeStore.isDark)
   return {
-    '--calendar-default-color': defaultColor,
-    '--calendar-default-text-color': contrastColor(defaultColor),
-    '--calendar-header-color': headerColor,
-    '--calendar-header-text-color': contrastColor(headerColor),
-    '--calendar-border-color': borderColor,
+    '--calendar-default-color': colors.base,
+    '--calendar-default-text-color': contrastColor(colors.base),
+    '--calendar-header-color': colors.event,
+    '--calendar-header-text-color': contrastColor(colors.event),
+    '--calendar-border-color': colors.border,
     '--calendar-slot-height': `${SLOT_HEIGHT}px`,
-    '--calendar-outer-border-color': outerBorderColor,
-    '--calendar-accent-color': accentColor,
-    '--calendar-accent-text-color': contrastColor(accentColor),
-    '--fc-classic-border': borderColor,
-    '--fc-classic-strong-border': mixColor(borderColor, isDark ? '#ffffff' : '#000000', 0.18),
-    '--fc-classic-foreground': contrastColor(defaultColor),
-    '--calendar-today-color': todayColor,
-    '--calendar-today-text-color': contrastColor(todayColor),
-    '--calendar-weekend-color': weekendColor,
-    '--calendar-weekend-text-color': contrastColor(weekendColor),
+    '--calendar-outer-border-color': colors.outerBorder,
+    '--calendar-accent-color': colors.event,
+    '--calendar-accent-text-color': contrastColor(colors.event),
+    '--fc-classic-border': colors.border,
+    '--fc-classic-strong-border': colors.outerBorder,
+    '--fc-classic-foreground': contrastColor(colors.base),
+    '--calendar-today-color': colors.today,
+    '--calendar-today-text-color': contrastColor(colors.today),
+    '--calendar-weekend-color': colors.weekend,
+    '--calendar-weekend-text-color': contrastColor(colors.weekend),
   }
 })
 
-function localYMD(d: Date) {
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${month}-${day}`
-}
-
 async function handleEventChange(info: EventDropInfo | EventResizeDoneInfo) {
   const event = info.event
-  if (!event.start || !auth.isLoggedIn) {
+  if (!event.start) {
     info.revert()
     return
   }
   let start: string
   let end: string
   if (event.allDay) {
-    start = `${localYMD(event.start)}T00:00:00.000Z`
-    end = event.end
-      ? `${localYMD(new Date(event.end.getTime() - 24 * 60 * 60 * 1000))}T00:00:00.000Z`
-      : start
+    // All-day events are stored as UTC midnights; FullCalendar's end is exclusive, the API's inclusive.
+    start = `${toDateInputValue(event.start)}T00:00:00.000Z`
+    end = event.end ? `${toDateInputValue(new Date(event.end.getTime() - DAY_MS))}T00:00:00.000Z` : start
   } else {
     start = event.start.toISOString()
-    end = event.end
-      ? event.end.toISOString()
-      : new Date(event.start.getTime() + 60 * 60 * 1000).toISOString()
+    end = (event.end ?? new Date(event.start.getTime() + HOUR_MS)).toISOString()
   }
   try {
     await api.updateEvent(event.extendedProps.eventId as string, {
       start,
       end,
       all_day: event.allDay,
+      timezone: browserTimeZone(),
     })
     reloadVisibleRange(true)
-  } catch (e: any) {
+  } catch (error) {
     info.revert()
-    const detail = e.detail?.detail
-    await alert(typeof detail === 'string' ? detail : detail?.message || e.message)
+    await alert(bookingErrorMessage(error))
   }
 }
 
@@ -345,12 +280,15 @@ const calendarOptions = computed(() => ({
   viewClass: 'calendar-view',
   toolbarTitleClass: 'calendar-toolbar-title',
   buttonGroupClass: 'calendar-button-group',
-  buttonClass: (info: { isSelected: boolean; isIconOnly: boolean; buttonGroup: unknown }) => [
-    'calendar-button',
-    info.isSelected && 'calendar-button-active',
-    info.isIconOnly && 'calendar-button-icon',
-    !info.buttonGroup && 'calendar-button-solo',
-  ].filter(Boolean).join(' '),
+  buttonClass: (info: { isSelected: boolean; isIconOnly: boolean; buttonGroup: unknown }) =>
+    [
+      'calendar-button',
+      info.isSelected && 'calendar-button-active',
+      info.isIconOnly && 'calendar-button-icon',
+      !info.buttonGroup && 'calendar-button-solo',
+    ]
+      .filter(Boolean)
+      .join(' '),
   dayHeaderClass: 'calendar-header',
   eventClass: (info: { event: { extendedProps: Record<string, unknown> } }) =>
     info.event.extendedProps.status === 'pending' ? 'calendar-event calendar-event-pending' : 'calendar-event',
@@ -365,7 +303,7 @@ const calendarOptions = computed(() => ({
   weekends: true,
   hiddenDays: displaySettings.value.show_weekends ? [] : displaySettings.value.weekend_days,
   weekNumbers: displaySettings.value.show_week_numbers,
-  weekNumberCalculation: displaySettings.value.first_weekday === 1 ? 'ISO' as const : 'local' as const,
+  weekNumberCalculation: displaySettings.value.first_weekday === 1 ? ('ISO' as const) : ('local' as const),
   editable: true,
   eventDrop: handleEventChange,
   eventResize: handleEventChange,
@@ -375,17 +313,15 @@ const calendarOptions = computed(() => ({
   dayLaneClass: (info: { dow: number; isToday: boolean }) => `${dayCellClass(info)} calendar-day-lane`,
   datesSet: handleDatesSet,
   dateClick: (info: DateClickInfo) => openCreateModal(info.date),
-  selectable: !calendarStore.allSelected,
-  selectMirror: !calendarStore.allSelected,
+  selectable: !!calendarStore.selectedCalendar,
+  selectMirror: !!calendarStore.selectedCalendar,
   select: (info: DateSelectInfo) => {
-    const end = info.allDay
-      ? new Date(info.end.getTime() - 24 * 60 * 60 * 1000)
-      : info.end
+    const end = info.allDay ? new Date(info.end.getTime() - DAY_MS) : info.end
     openCreateModal(info.start, end, info.allDay)
   },
-  eventClick: (info: EventClickInfo) =>
-    openEditModal(info.event.extendedProps.eventId as string),
+  eventClick: (info: EventClickInfo) => openEditModal(info.event.extendedProps.eventId as string),
   eventContent: renderEventContent,
+  events: fcEvents.value,
   dayMaxEvents: true,
   buttons: {
     today: { text: t('app.today'), display: 'text' as const },
@@ -402,12 +338,12 @@ const calendarOptions = computed(() => ({
     </div>
 
     <EventModal
-      v-if="showModal && activeCalendarId"
-      :calendarId="activeCalendarId"
-      :eventId="modalEventId"
-      :defaultStart="modalDate"
-      :defaultEnd="modalEndDate"
-      :defaultAllDay="modalAllDay"
+      v-if="showModal"
+      :calendar-id="calendarStore.selectedCalendar?.id"
+      :event-id="modalEventId"
+      :default-start="modalDate"
+      :default-end="modalEndDate"
+      :default-all-day="modalAllDay"
       @saved="saved"
       @cancel="closeModal"
       @deleted="saved"
@@ -454,7 +390,7 @@ const calendarOptions = computed(() => ({
   --calendar-control-hover: color-mix(in srgb, var(--app-surface-muted) 85%, var(--app-text) 15%);
 }
 
-[data-color-scheme='dark'] .calendar-root {
+html.dark .calendar-root {
   --calendar-control-bg: transparent;
   --calendar-control-hover: color-mix(in srgb, var(--app-surface-muted) 70%, var(--app-text) 30%);
 }
@@ -483,7 +419,9 @@ const calendarOptions = computed(() => ({
   font-weight: 500;
   text-transform: capitalize;
   box-shadow: none !important;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .calendar-root .calendar-button-icon {
@@ -524,11 +462,7 @@ const calendarOptions = computed(() => ({
 /* Bookings awaiting approval: striped and with a dashed outline. */
 .calendar-root .calendar-event-pending {
   border-style: dashed !important;
-  background-image: repeating-linear-gradient(
-    135deg,
-    transparent 0 6px,
-    rgb(255 255 255 / 0.3) 6px 12px
-  );
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(255 255 255 / 0.3) 6px 12px);
 }
 
 .fc-event-label {
@@ -566,7 +500,8 @@ const calendarOptions = computed(() => ({
     to bottom,
     var(--calendar-border-color) 0 1px,
     transparent 1px var(--calendar-slot-height),
-    color-mix(in srgb, var(--calendar-border-color) 55%, transparent) var(--calendar-slot-height) calc(var(--calendar-slot-height) + 1px),
+    color-mix(in srgb, var(--calendar-border-color) 55%, transparent) var(--calendar-slot-height)
+      calc(var(--calendar-slot-height) + 1px),
     transparent calc(var(--calendar-slot-height) + 1px) calc(var(--calendar-slot-height) * 2)
   );
 }

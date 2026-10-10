@@ -20,17 +20,25 @@ def list_groups(request):
     return groups
 
 
+def _set_members(group: UserGroup, member_ids: list[str]):
+    group.user_set.set(User.objects.filter(id__in=member_ids))
+
+
+def _with_member_count(group_id) -> UserGroup:
+    return UserGroup.objects.annotate(member_count=Count("user_set")).get(id=group_id)
+
+
 @router.post("/groups", response=GroupOut, auth=django_auth)
 def create_group(request, payload: GroupCreate):
     require_admin(request)
     group = UserGroup.objects.create(name=payload.name, description=payload.description)
-    group.member_count = 0
-    return group
+    _set_members(group, payload.member_ids)
+    return _with_member_count(group.id)
 
 
 @router.get("/groups/{group_id}", response=GroupDetailOut, auth=django_auth)
 def get_group(request, group_id: str):
-    group = UserGroup.objects.annotate(member_count=Count("user_set")).get(id=group_id)
+    group = _with_member_count(group_id)
     return {
         "id": group.id,
         "name": group.name,
@@ -46,11 +54,14 @@ def get_group(request, group_id: str):
 def update_group(request, group_id: str, payload: GroupUpdate):
     require_admin(request)
     group = UserGroup.objects.get(id=group_id)
-    for attr, value in payload.dict(exclude_unset=True).items():
+    data = payload.dict(exclude_unset=True)
+    member_ids = data.pop("member_ids", None)
+    for attr, value in data.items():
         setattr(group, attr, value)
     group.save()
-    group = UserGroup.objects.annotate(member_count=Count("user_set")).get(id=group.id)
-    return group
+    if member_ids is not None:
+        _set_members(group, member_ids)
+    return _with_member_count(group.id)
 
 
 @router.delete("/groups/{group_id}", auth=django_auth)

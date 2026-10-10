@@ -1,70 +1,191 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
-import { useAuthStore } from './auth'
+
+/** Selection of the calendar view: a calendar id, a folder id, or 'all'. It follows the URL. */
+export const ALL_CALENDARS = 'all'
 
 export const useCalendarStore = defineStore('calendars', () => {
-  const auth = useAuthStore()
-
   const items = ref<api.CalendarListItem[]>([])
   const folders = ref<api.Folder[]>([])
-  const selectedId = ref<string>('all')
-  const loading = ref(false)
+  const selectedId = ref<string>(ALL_CALENDARS)
+  /** Whether calendars and folders have been loaded at least once. */
+  const loaded = ref(false)
+  let loadVersion = 0
 
-  const allSelected = computed(() => selectedId.value === 'all')
+  const allSelected = computed(() => selectedId.value === ALL_CALENDARS)
 
-  const selectedCalendar = computed<api.Calendar | null>(() => {
-    if (allSelected.value) return null
-    const found = items.value.find((i) => i.calendar.id === selectedId.value)
-    return found?.calendar || null
+  const calendarsById = computed(() => new Map(items.value.map((i) => [i.calendar.id, i.calendar])))
+
+  const selectedCalendar = computed<api.Calendar | null>(
+    () => items.value.find((i) => i.calendar.id === selectedId.value)?.calendar ?? null,
+  )
+
+  const selectedFolder = computed<api.Folder | null>(() => folders.value.find((f) => f.id === selectedId.value) ?? null)
+
+  function groupBy<T>(list: T[], key: (item: T) => string | null): Map<string | null, T[]> {
+    const groups = new Map<string | null, T[]>()
+    for (const item of list) {
+      const group = key(item)
+      const members = groups.get(group)
+      if (members) members.push(item)
+      else groups.set(group, [item])
+    }
+    return groups
+  }
+
+  // Indexed once per change, so rendering the tree doesn't filter the full lists for every folder.
+  const foldersByParent = computed(() => groupBy(folders.value, (f) => f.parent_id ?? null))
+  const calendarsByFolder = computed(() => groupBy(items.value, (i) => i.membership.folder_id ?? null))
+
+  function childFolders(parentId: string | null): api.Folder[] {
+    return foldersByParent.value.get(parentId) ?? []
+  }
+
+  function calendarsIn(folderId: string | null): api.CalendarListItem[] {
+    return calendarsByFolder.value.get(folderId) ?? []
+  }
+
+  /** All folders below `folderId`; the visited set guards against cycles in inconsistent data. */
+  function descendantFolderIds(folderId: string): string[] {
+    const found = new Set<string>()
+    const pending = [folderId]
+    while (pending.length) {
+      for (const child of childFolders(pending.pop()!)) {
+        if (found.has(child.id) || child.id === folderId) continue
+        found.add(child.id)
+        pending.push(child.id)
+      }
+    }
+    return [...found]
+  }
+
+  /** Calendars whose events are shown for the current selection. */
+  const selectedCalendarIds = computed<string[]>(() => {
+    if (allSelected.value) return items.value.map((i) => i.calendar.id)
+    if (selectedFolder.value) {
+      const folderIds = [selectedFolder.value.id, ...descendantFolderIds(selectedFolder.value.id)]
+      return folderIds.flatMap((id) => calendarsIn(id).map((i) => i.calendar.id))
+    }
+    return selectedCalendar.value ? [selectedCalendar.value.id] : []
   })
 
+  /** Only the calendar view calls this, from its URL; everyone else navigates to `selectionPath(id)`. */
   function select(id: string) {
     selectedId.value = id
   }
 
+  /** The URL that shows a calendar, a folder, or all calendars. */
+  function selectionPath(id: string): string {
+    if (id === ALL_CALENDARS) return '/calendar'
+    if (folders.value.some((f) => f.id === id)) return `/calendar/folder/${id}`
+    return `/calendar/${id}`
+  }
+
+  /** Loads calendars and folders; when loads overlap, only the latest one is applied. */
   async function load() {
-    if (!auth.isLoggedIn) return
-    loading.value = true
-    try {
-      const [calData, folderData] = await Promise.all([
-        api.listCalendars(),
-        api.listFolders(),
-      ])
-      items.value = calData
-      folders.value = folderData
-    } finally {
-      loading.value = false
-    }
+    const version = ++loadVersion
+    const [calendarList, folderList] = await Promise.all([api.listCalendars(), api.listFolders()])
+    if (version !== loadVersion) return
+    items.value = calendarList
+    folders.value = folderList
+    loaded.value = true
   }
 
-  async function create(name: string, description?: string, color?: string) {
-    if (!auth.isLoggedIn) return
-    const cal = await api.createCalendar(name, description, color)
+  function reset() {
+    loadVersion++
+    items.value = []
+    folders.value = []
+    loaded.value = false
+    selectedId.value = ALL_CALENDARS
+  }
+
+  async function createCalendar(name: string): Promise<api.Calendar> {
+    const calendar = await api.createCalendar(name)
     await load()
-    selectedId.value = cal.id
+    return calendar
   }
 
-  function groupedItems() {
-    const folderMap = new Map<string | null, api.CalendarListItem[]>()
-    for (const item of items.value) {
-      const folderId = item.membership.folder_id || null
-      if (!folderMap.has(folderId)) folderMap.set(folderId, [])
-      folderMap.get(folderId)!.push(item)
+  async function updateCalendar(id: string, data: api.CalendarUpdate): Promise<api.Calendar> {
+    const calendar = await api.updateCalendar(id, data)
+    const item = items.value.find((i) => i.calendar.id === id)
+    if (item) item.calendar = calendar
+    return calendar
+  }
+
+  async function deleteCalendar(id: string) {
+    await api.deleteCalendar(id)
+    await load()
+  }
+
+  async function createFolder(name: string, parentId: string | null = null) {
+    await api.createFolder(name, parentId)
+    await load()
+  }
+
+  async function renameFolder(id: string, name: string) {
+    await api.updateFolder(id, { name })
+    await load()
+  }
+
+  async function deleteFolder(id: string) {
+    await api.deleteFolder(id)
+    await load()
+  }
+
+  /** Applies a drag-and-drop result right away and persists it; reloads if the server rejects it. */
+  async function reorder(updates: api.SidebarReorderItem[]) {
+    for (const update of updates) {
+      if (update.type === 'folder') {
+        const folder = folders.value.find((f) => f.id === update.id)
+        if (folder) {
+          folder.parent_id = update.parent_id
+          folder.position = update.position
+        }
+      } else {
+        const item = items.value.find((i) => i.calendar.id === update.id)
+        if (item) {
+          item.membership.folder_id = update.parent_id
+          item.membership.position = update.position
+        }
+      }
     }
-    return folderMap
+    folders.value = folders.value.slice().sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+    items.value = items.value
+      .slice()
+      .sort((a, b) => a.membership.position - b.membership.position || a.calendar.name.localeCompare(b.calendar.name))
+
+    try {
+      await api.reorderSidebar(updates)
+    } catch (error) {
+      await load()
+      throw error
+    }
   }
 
   return {
     items,
     folders,
     selectedId,
-    loading,
+    loaded,
     allSelected,
     selectedCalendar,
+    selectedFolder,
+    selectedCalendarIds,
+    calendarsById,
+    childFolders,
+    calendarsIn,
+    descendantFolderIds,
     select,
+    selectionPath,
     load,
-    create,
-    groupedItems,
+    reset,
+    createCalendar,
+    updateCalendar,
+    deleteCalendar,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    reorder,
   }
 })

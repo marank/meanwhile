@@ -135,3 +135,18 @@ def test_caldav_rights_include_group_access(world):
     CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="contributor")
     path = f"/{u['owner'].email}/{world['cal']['id']}/"
     assert Rights(None).authorization(u["outsider"].email, path) == "RWrw"
+
+
+def test_events_from_clients_keep_their_time_zone(world):
+    coll = collection(world)
+    text = (
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+        "BEGIN:VEVENT\r\nUID:series-from-phone\r\nDTSTAMP:20261001T000000Z\r\n"
+        "DTSTART;TZID=Europe/Berlin:20261019T090000\r\nDTEND;TZID=Europe/Berlin:20261019T100000\r\n"
+        "RRULE:FREQ=WEEKLY\r\nSUMMARY:Standup\r\n"
+        "END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    coll.upload("series-from-phone.ics", radicale_item.Item(collection=coll, text=text))
+    stored = Event.objects.get(uid="series-from-phone")
+    assert stored.timezone == "Europe/Berlin"
+    assert stored.start.isoformat() == "2026-10-19T07:00:00+00:00"

@@ -25,6 +25,9 @@ class Event(models.Model):
     start = models.DateTimeField()
     end = models.DateTimeField()
     all_day = models.BooleanField(default=False)
+    # IANA name of the zone the event was planned in. Recurrences of timed events repeat at the same
+    # local time and on the same local weekday in this zone; all-day events don't depend on it.
+    timezone = models.CharField(max_length=64, default="UTC")
     show_recurrence_count = models.BooleanField(default=False)
     rrule = models.TextField(blank=True, null=True)
     uid = models.CharField(max_length=255, db_index=True)

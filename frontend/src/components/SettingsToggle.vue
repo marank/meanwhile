@@ -1,14 +1,17 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{
-  modelValue?: boolean
-  title: string
-  description?: string
-  disabled?: boolean
-}>(), {
-  modelValue: false,
-  description: '',
-  disabled: false,
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean
+    title: string
+    description?: string
+    disabled?: boolean
+  }>(),
+  {
+    modelValue: false,
+    description: '',
+    disabled: false,
+  },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -25,7 +28,7 @@ function toggle() {
     role="switch"
     :aria-checked="modelValue"
     :disabled="disabled"
-    class="flex w-full items-center justify-between gap-5 rounded-lg border border-gray-200 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+    class="flex w-full items-center justify-between gap-5 rounded-lg border border-line px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
     @click="toggle"
   >
     <span class="min-w-0">

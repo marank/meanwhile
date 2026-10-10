@@ -4,19 +4,27 @@ import { dismissToast, toasts } from '@/services/toast'
 </script>
 
 <template>
-  <div class="pointer-events-none fixed inset-x-4 top-4 z-[100] flex flex-col items-end gap-2 sm:left-auto sm:w-96" aria-live="polite">
+  <div
+    class="pointer-events-none fixed inset-x-4 top-4 z-[100] flex flex-col items-end gap-2 sm:left-auto sm:w-96"
+    aria-live="polite"
+  >
     <TransitionGroup name="toast">
       <div
         v-for="item in toasts"
         :key="item.id"
-        class="pointer-events-auto flex w-full items-start gap-3 rounded-lg border bg-white p-4 shadow-lg"
+        class="pointer-events-auto flex w-full items-start gap-3 rounded-lg border bg-surface p-4 shadow-lg"
         :class="item.tone === 'success' ? 'border-green-200 text-green-800' : 'border-red-200 text-red-800'"
         role="status"
       >
         <CircleCheck v-if="item.tone === 'success'" class="mt-0.5 shrink-0" :size="20" />
         <CircleX v-else class="mt-0.5 shrink-0" :size="20" />
         <p class="flex-1 text-sm font-medium">{{ item.message }}</p>
-        <button type="button" class="rounded p-0.5 hover:bg-gray-100" :aria-label="$t('app.close')" @click="dismissToast(item.id)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-hover"
+          :aria-label="$t('app.close')"
+          @click="dismissToast(item.id)"
+        >
           <X :size="18" />
         </button>
       </div>
@@ -27,7 +35,9 @@ import { dismissToast, toasts } from '@/services/toast'
 <style scoped>
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity 150ms ease, transform 150ms ease;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
 }
 .toast-enter-from,
 .toast-leave-to {

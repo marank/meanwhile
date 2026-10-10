@@ -17,6 +17,7 @@ from core.models import Calendar, Event, User
 from core.models.base import EventStatus
 from core.services.bookings import find_conflicting_approved_bookings
 from core.services.ical import event_ical_text
+from core.services.recurrence import zone
 
 # CalDAV only knows the calendar, not who is asking, so it shares what everyone may see,
 # like the ICS feed: pending, rejected and cancelled bookings stay out.
@@ -75,6 +76,16 @@ def _parse_vevent_data(text: str):
     if hasattr(vevent, "rrule"):
         rrule = str(vevent.rrule.value)
 
+    # The zone the client planned the event in, so its recurrences repeat in local time.
+    event_timezone = "UTC"
+    if not all_day and hasattr(vevent, "dtstart"):
+        params = vevent.dtstart.params
+        # vobject moves the TZID parameter aside when it resolves the zone.
+        tzid = (params.get("X-VOBJ-ORIGINAL-TZID") or params.get("TZID") or [None])[0]
+        tzid = tzid or getattr(getattr(dtstart, "tzinfo", None), "zone", None)
+        if tzid and zone(tzid) is not timezone.utc:
+            event_timezone = tzid
+
     uid = None
     if hasattr(vevent, "uid"):
         uid = str(vevent.uid.value)
@@ -85,6 +96,7 @@ def _parse_vevent_data(text: str):
         "start": start,
         "end": end,
         "all_day": all_day,
+        "timezone": event_timezone,
         "rrule": rrule,
         "uid": uid,
     }, text
@@ -232,6 +244,8 @@ class Collection(storage.BaseCollection):
                 or _to_utc(existing.end) != _to_utc(data["end"])
                 or existing.all_day != data["all_day"]
                 or (existing.rrule or None) != (data["rrule"] or None)
+                # Another zone moves the occurrences of a series, not those of a single event.
+                or (bool(data["rrule"]) and existing.timezone != data["timezone"])
             )
             resource = existing.resource
             if rescheduled and resource is not None and resource.requires_approval:
@@ -250,6 +264,7 @@ class Collection(storage.BaseCollection):
             existing.start = data["start"]
             existing.end = data["end"]
             existing.all_day = data["all_day"]
+            existing.timezone = data["timezone"]
             existing.rrule = data["rrule"]
             existing.raw_ical = raw_text
             # The booking status is never changed via CalDAV.
@@ -266,6 +281,7 @@ class Collection(storage.BaseCollection):
                 start=data["start"],
                 end=data["end"],
                 all_day=data["all_day"],
+                timezone=data["timezone"],
                 rrule=data["rrule"],
                 uid=uid,
                 raw_ical=raw_text,

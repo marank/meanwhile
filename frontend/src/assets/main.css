@@ -1,9 +1,160 @@
-@import './base.css';
+@import 'tailwindcss';
 
-#app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+/* Follow the app's theme toggle (the .dark class on <html>) instead of the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Neutral palette: Tailwind's gray is slightly blue, while the dark theme is built on zinc.
+ * Mapping gray onto zinc keeps text, borders and surfaces on one hue in both themes.
+ * The primary blue is toned down a little so it doesn't glare against the soft neutrals.
+ */
+@theme {
+  --color-gray-50: oklch(98.5% 0 0);
+  --color-gray-100: oklch(96.7% 0.001 286.375);
+  --color-gray-200: oklch(92% 0.004 286.32);
+  --color-gray-300: oklch(87.1% 0.006 286.286);
+  --color-gray-400: oklch(70.5% 0.015 286.067);
+  --color-gray-500: oklch(55.2% 0.016 285.938);
+  --color-gray-600: oklch(44.2% 0.017 285.786);
+  --color-gray-700: oklch(37% 0.013 285.805);
+  --color-gray-800: oklch(27.4% 0.006 286.033);
+  --color-gray-900: oklch(21% 0.006 285.885);
+  --color-gray-950: oklch(14.1% 0.005 285.823);
+  --color-blue-600: oklch(53% 0.2 262);
+  --color-blue-700: oklch(47% 0.18 263);
+}
+
+/* Semantic colors that follow the theme: bg-surface, bg-surface-muted, bg-hover, bg-input, border-line. */
+@theme inline {
+  --color-surface: var(--app-surface);
+  --color-surface-muted: var(--app-surface-muted);
+  --color-hover: var(--app-hover);
+  --color-input: var(--app-input);
+  --color-line: var(--app-border);
+}
+
+/* Light mode uses soft zinc grays instead of pure white to reduce glare. */
+:root {
+  --app-bg: #ebebed;
+  --app-surface: #f6f6f7;
+  --app-surface-muted: #ededef;
+  --app-hover: #e4e4e7;
+  /* Fields take the background of the surface they sit on, so they don't look read-only. */
+  --app-input: transparent;
+  --app-border: #d4d4d8;
+  --app-text: #27272a;
+  --app-text-muted: #71717a;
+}
+
+.dark {
+  --app-bg: #09090b;
+  --app-surface: #18181b;
+  --app-surface-muted: #27272a;
+  --app-hover: #3f3f46;
+  --app-input: #18181b;
+  --app-border: #3f3f46;
+  --app-text: #f4f4f5;
+  --app-text-muted: #a1a1aa;
+
+  /* Text grays invert in dark mode: the dark shades become the light text colors. */
+  --color-gray-400: var(--app-text-muted);
+  --color-gray-500: var(--app-text-muted);
+  --color-gray-600: var(--app-text);
+  --color-gray-700: var(--app-text);
+  --color-gray-800: var(--app-text);
+  --color-gray-900: var(--app-text);
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+    margin: 0;
+  }
+
+  #app {
+    overflow: hidden;
+  }
+
+  body {
+    background: var(--app-bg);
+    color: var(--app-text);
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  /* Tailwind v4 defaults unspecified border colors to currentColor; use the theme border instead. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--app-border);
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='color']),
+  select,
+  textarea {
+    background-color: var(--app-input);
+    color: var(--app-text);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  input[type='checkbox']:focus-visible,
+  input[type='radio']:focus-visible,
+  input[type='color']:focus-visible {
+    outline: 2px solid var(--color-blue-500);
+    outline-offset: 2px;
+  }
+
+  .dark input:-webkit-autofill,
+  .dark input:-webkit-autofill:hover,
+  .dark input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--app-text);
+    box-shadow: 0 0 0 1000px var(--app-input) inset;
+  }
+}
+
+/*
+ * One focus style for every form field: primary border plus a thin ring.
+ * Kept outside the layers so it wins over border-color utilities on the field; :where() keeps its
+ * specificity low, so states like aria-invalid can still override it.
+ */
+:where(input:not([type='checkbox']):not([type='radio']):not([type='color']), select, textarea):focus {
+  outline: none;
+  border-color: var(--color-blue-500);
+  box-shadow: 0 0 0 1px var(--color-blue-500);
+}
+
+/* Table row actions: always visible on touch screens, revealed on hover or focus on wider ones. */
+@utility row-actions {
+  @media (width >= 48rem) {
+    opacity: 0;
+    transition: opacity 150ms ease;
+
+    tr:hover &,
+    tr:focus-within & {
+      opacity: 1;
+    }
+  }
+}
+
+.dark .shadow-sm,
+.dark .shadow-lg,
+.dark .shadow-xl,
+.dark .shadow-2xl {
+  --tw-shadow-color: rgb(0 0 0 / 0.55);
+}
+
+/* Invalid fields stay marked while focused; the focus style above would otherwise turn them blue. */
+input[aria-invalid='true'],
+input[aria-invalid='true']:focus {
+  border-color: var(--color-red-600);
+  box-shadow: 0 0 0 1px var(--color-red-600);
 }

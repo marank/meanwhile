@@ -10,6 +10,7 @@ from icalendar import Event as ICalEvent
 
 from core.models.base import EventStatus
 from core.models.events import Event
+from core.services.recurrence import zone
 
 
 PRODID = "-//Calendar App//EN"
@@ -52,8 +53,10 @@ def build_event_ical(event: Event) -> ICalEvent:
         vevent.add("dtstart", event.start.date())
         vevent.add("dtend", event.end.date() + timedelta(days=1))
     else:
-        vevent.add("dtstart", event.start)
-        vevent.add("dtend", event.end)
+        # Local times with TZID, so clients repeat the series in the zone it was planned in.
+        event_zone = zone(event.timezone)
+        vevent.add("dtstart", event.start.astimezone(event_zone))
+        vevent.add("dtend", event.end.astimezone(event_zone))
     vevent.add("dtstamp", event.updated_at or datetime.now(timezone.utc))
     vevent.add("status", _map_status(event.status))
     if event.rrule:
@@ -68,10 +71,16 @@ def _new_calendar() -> ICalCalendar:
     return cal
 
 
+def _to_ical(cal: ICalCalendar) -> str:
+    # Adds the VTIMEZONE definitions for every TZID used, as RFC 5545 requires.
+    cal.add_missing_timezones()
+    return cal.to_ical().decode("utf-8")
+
+
 def serialize_event_ical(event: Event) -> str:
     cal = _new_calendar()
     cal.add_component(build_event_ical(event))
-    return cal.to_ical().decode("utf-8")
+    return _to_ical(cal)
 
 
 def event_ical_text(event: Event) -> str:
@@ -91,4 +100,4 @@ def build_calendar_feed(events) -> str:
             continue
         cal.add_component(build_event_ical(event))
 
-    return cal.to_ical().decode("utf-8")
+    return _to_ical(cal)

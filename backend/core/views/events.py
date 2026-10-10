@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from django.db import transaction
 from django.db.models import Q
-from ninja import Router
+from ninja import Query, Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -59,6 +59,7 @@ def _serialize_event(event: Event) -> dict:
         "start": make_aware(event.start),
         "end": make_aware(event.end),
         "all_day": event.all_day,
+        "timezone": event.timezone,
         "show_recurrence_count": event.show_recurrence_count,
         "rrule": event.rrule,
         "uid": event.uid,
@@ -76,17 +77,8 @@ def _serialize_event(event: Event) -> dict:
     }
 
 
-@router.get("/calendars/{calendar_id}/events", response=list[OccurrenceOut], auth=django_auth)
-def list_events(request, calendar_id: str, start: datetime, end: datetime):
-    calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
-    range_start = make_aware(start)
-    range_end = make_aware(end)
-    if range_start >= range_end:
-        raise HttpError(422, "end must be after start")
-
+def _calendar_occurrences(user, calendar: Calendar, membership, range_start: datetime, range_end: datetime) -> list[OccurrenceOut]:
+    """Occurrences of one calendar in the range, as visible to `user`."""
     events = Event.objects.filter(
         Q(calendar=calendar),
         Q(start__lt=range_end),
@@ -94,8 +86,8 @@ def list_events(request, calendar_id: str, start: datetime, end: datetime):
     ).select_related("calendar", "category", "resource")
 
     hidden = {EventStatus.REJECTED, EventStatus.CANCELLED}
-    user_id = str(request.user.id)
-    invited_to = participant_event_ids(request.user)
+    user_id = str(user.id)
+    invited_to = participant_event_ids(user)
     can_decide_by_resource: dict[str | None, bool] = {}
     out = []
     for event, occ_start, occ_end in expand_events(events, range_start, range_end):
@@ -109,6 +101,7 @@ def list_events(request, calendar_id: str, start: datetime, end: datetime):
                 continue
         out.append(OccurrenceOut(
             event_id=str(event.id),
+            calendar_id=str(event.calendar_id),
             title=event.title,
             description=event.description,
             start=occ_start,
@@ -120,17 +113,52 @@ def list_events(request, calendar_id: str, start: datetime, end: datetime):
                 else None
             ),
             status=event.status,
-            color=event.calendar.color,
-            dark_color=event.calendar.dark_color,
             category_id=str(event.category_id) if event.category_id else None,
             category_name=event.category.name if event.category else None,
             category_color=event.category.color if event.category else None,
             resource_id=str(event.resource_id) if event.resource_id else None,
             resource_name=event.resource.name if event.resource else None,
             creator_id=str(event.creator_id),
-            can_edit=can_modify_event(event, str(request.user.id), membership.role),
+            can_edit=can_modify_event(event, user_id, membership.role),
             is_recurring=bool(event.rrule),
         ))
+    return out
+
+
+def _parse_range(start: datetime, end: datetime) -> tuple[datetime, datetime]:
+    range_start = make_aware(start)
+    range_end = make_aware(end)
+    if range_start >= range_end:
+        raise HttpError(422, "end must be after start")
+    return range_start, range_end
+
+
+@router.get("/events", response=list[OccurrenceOut], auth=django_auth)
+def list_events_of_calendars(
+    request,
+    start: datetime,
+    end: datetime,
+    calendar_ids: list[str] = Query(...),
+):
+    """Occurrences of several calendars at once; calendars the user can't read are skipped."""
+    range_start, range_end = _parse_range(start, end)
+    out = []
+    for calendar in Calendar.objects.filter(id__in=calendar_ids):
+        membership = get_membership(calendar, request.user)
+        if membership is not None:
+            out.extend(_calendar_occurrences(request.user, calendar, membership, range_start, range_end))
+    out.sort(key=lambda x: x.start)
+    return out
+
+
+@router.get("/calendars/{calendar_id}/events", response=list[OccurrenceOut], auth=django_auth)
+def list_events(request, calendar_id: str, start: datetime, end: datetime):
+    calendar = Calendar.objects.get(id=calendar_id)
+    membership = get_membership(calendar, request.user)
+    if membership is None:
+        raise HttpError(403, "Not a member of this calendar")
+    range_start, range_end = _parse_range(start, end)
+    out = _calendar_occurrences(request.user, calendar, membership, range_start, range_end)
     out.sort(key=lambda x: x.start)
     return out
 
@@ -177,6 +205,7 @@ def create_event(request, calendar_id: str, payload: EventCreate):
             start=start,
             end=end,
             all_day=payload.all_day,
+            timezone=payload.timezone or "UTC",
             show_recurrence_count=payload.show_recurrence_count,
             rrule=payload.rrule,
             category=category,
@@ -316,6 +345,10 @@ def update_event(request, event_id: str, payload: EventUpdate):
         or event.all_day != old_values["all_day"]
         or event.rrule != old_values["rrule"]
     )
+    # Clients send their zone with every save; it only replaces the event's zone along with a new
+    # schedule, so editing e.g. the title from another zone leaves the series where it is.
+    if rescheduled and data.get("timezone"):
+        event.timezone = data["timezone"]
     resource_changed = (resource.id if resource else None) != old_values["resource"]
 
     with transaction.atomic():
@@ -486,6 +519,20 @@ def add_event_participant(request, event_id: str, payload: EventParticipantCreat
     if not can_modify_event(event, str(request.user.id), membership.role):
         raise HttpError(403, "You cannot modify this event")
     participant = _create_participant(event, request.user, payload)
+    return _serialize_participant(participant)
+
+
+@router.patch("/events/{event_id}/participants/me", response=EventParticipantOut, auth=django_auth)
+def update_my_participation(request, event_id: str, payload: EventParticipantUpdate):
+    """Answers an invitation: sets the status of the current user's own participation."""
+    try:
+        participant = EventParticipant.objects.select_related("user").get(event_id=event_id, user=request.user)
+    except EventParticipant.DoesNotExist:
+        raise HttpError(404, "You are not a participant of this event")
+    if payload.status is None or payload.status not in PARTICIPANT_STATUSES:
+        raise HttpError(422, "Invalid participant status")
+    participant.status = payload.status
+    participant.save()
     return _serialize_participant(participant)
 
 

@@ -1,5 +1,5 @@
 from core.models.base import EventStatus, ParticipantStatus, Role, default_weekend_days, new_uuid7
-from core.models.calendars import Calendar, CalendarApprover, CalendarGroup, CalendarMember
+from core.models.calendars import Calendar, CalendarApprover, CalendarGroup, CalendarMember, OverviewSettings
 from core.models.events import Event, EventActivity, EventComment, EventParticipant, Notification
 from core.models.folders import Folder
 from core.models.resources import Category, Resource, ResourceApprover
@@ -21,6 +21,7 @@ __all__ = [
     "CalendarMember",
     "CalendarGroup",
     "CalendarApprover",
+    "OverviewSettings",
     "Resource",
     "ResourceApprover",
     "Category",

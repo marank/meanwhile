@@ -1,46 +1,46 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { readStorage, writeStorage } from '@/services/storage'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 const STORAGE_KEY = 'calendar-theme'
 
 export const useThemeStore = defineStore('theme', () => {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const media = window.matchMedia('(prefers-color-scheme: dark)')
+  const stored = readStorage(STORAGE_KEY)
   const preference = ref<ThemePreference>(
     stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system',
   )
-  const systemDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const systemDark = ref(media.matches)
   const resolved = computed<'light' | 'dark'>(() =>
     preference.value === 'system' ? (systemDark.value ? 'dark' : 'light') : preference.value,
   )
+  const isDark = computed(() => resolved.value === 'dark')
   let initialized = false
 
   function applyTheme() {
-    const dark = resolved.value === 'dark'
-    document.documentElement.dataset.colorScheme = resolved.value
     document.documentElement.style.colorScheme = resolved.value
-    document.documentElement.classList.toggle('dark', dark)
+    document.documentElement.classList.toggle('dark', isDark.value)
   }
 
   function setPreference(value: ThemePreference) {
     preference.value = value
-    localStorage.setItem(STORAGE_KEY, value)
+    writeStorage(STORAGE_KEY, value)
   }
 
   function toggle() {
-    setPreference(resolved.value === 'dark' ? 'light' : 'dark')
+    setPreference(isDark.value ? 'light' : 'dark')
   }
 
   function init() {
     if (initialized) return
     initialized = true
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
     media.addEventListener('change', (event) => {
       systemDark.value = event.matches
     })
     watch(resolved, applyTheme, { immediate: true })
   }
 
-  return { preference, resolved, setPreference, toggle, init }
+  return { preference, resolved, isDark, setPreference, toggle, init }
 })

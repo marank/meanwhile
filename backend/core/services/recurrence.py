@@ -3,6 +3,7 @@ Recurrence expansion and conflict detection.
 """
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rrulestr
 
@@ -13,6 +14,21 @@ def make_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def zone(name: str | None):
+    """The zone for an IANA name; unknown names fall back to UTC."""
+    try:
+        return ZoneInfo(name or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        return timezone.utc
+
+
+def _rule(event: Event, event_start: datetime):
+    # Timed events repeat in their own zone, so weekdays and wall-clock times stay put across
+    # midnight in UTC and daylight saving changes. All-day events are dates and repeat in UTC.
+    dtstart = event_start if event.all_day else event_start.astimezone(zone(event.timezone))
+    return rrulestr(event.rrule, dtstart=dtstart)
 
 
 def expand_event(
@@ -32,7 +48,7 @@ def expand_event(
             return [(event_start, event_end)]
         return []
 
-    rule = rrulestr(event.rrule, dtstart=event_start)
+    rule = _rule(event, event_start)
     starts = rule.between(range_start - duration, range_end, inc=True)
     occurrences = []
     for start in starts[:max_occurrences]:
@@ -47,7 +63,7 @@ def recurrence_count(event: Event, occurrence_start: datetime) -> int:
     if event.rrule is None:
         return 0
     event_start = make_aware(event.start)
-    rule = rrulestr(event.rrule, dtstart=event_start)
+    rule = _rule(event, event_start)
     return max(
         0, len(rule.between(event_start, make_aware(occurrence_start), inc=True)) - 1
     )

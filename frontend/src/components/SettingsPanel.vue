@@ -1,29 +1,37 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  title: string
-  description: string
-  loading?: boolean
-  flush?: boolean
-}>(), {
-  loading: false,
-  flush: false,
-})
+withDefaults(
+  defineProps<{
+    title: string
+    description?: string
+    loading?: boolean
+    flush?: boolean
+  }>(),
+  {
+    description: '',
+    loading: false,
+    flush: false,
+  },
+)
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+  <section class="overflow-hidden rounded-xl border border-line bg-surface">
     <header class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
       <div class="min-w-0">
         <h2 class="font-semibold text-gray-800">{{ title }}</h2>
-        <p class="mt-1 text-sm text-gray-500">{{ description }}</p>
+        <p v-if="description" class="mt-1 text-sm text-gray-500">{{ description }}</p>
       </div>
       <div v-if="$slots.actions" class="shrink-0">
         <slot name="actions" />
       </div>
     </header>
 
-    <div class="border-t border-gray-200">
-      <div v-if="loading" class="flex min-h-40 items-center justify-center px-6 py-10 text-sm text-gray-500" role="status">
+    <div class="border-t border-line">
+      <div
+        v-if="loading"
+        class="flex min-h-40 items-center justify-center px-6 py-10 text-sm text-gray-500"
+        role="status"
+      >
         {{ $t('app.loading') }}
       </div>
       <div v-else :class="flush ? '' : 'p-5 sm:p-6'">

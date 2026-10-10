@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import AppLogo from '@/components/AppLogo.vue'
+import { errorMessage } from '@/services/errors'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 
 const props = defineProps<{ mode?: 'login' | 'register' }>()
 
 const auth = useAuthStore()
+const settings = useSettingsStore()
 const router = useRouter()
-const route = useRoute()
+const { t } = useI18n()
 
-const isRegister = computed(() => props.mode === 'register' || route.name === 'register')
+const isRegister = computed(() => props.mode === 'register')
 
 const email = ref('')
 const displayName = ref('')
@@ -27,60 +32,35 @@ async function submit() {
       await auth.login(email.value, password.value)
     }
     router.push('/calendar')
-  } catch (e: any) {
-    const detail = (e as any).detail
-    if (Array.isArray(detail?.errors)) {
-      error.value = detail.errors.map((err: any) => err.message || err.code).filter(Boolean).join(', ')
-    } else if (typeof detail?.detail === 'string') {
-      error.value = detail.detail
-    } else if (typeof detail === 'string') {
-      error.value = detail
-    } else {
-      error.value = (e as Error).message || 'Authentication failed'
-    }
+  } catch (e) {
+    error.value = errorMessage(e, t('app.actionFailed'))
   } finally {
     busy.value = false
   }
 }
-
-function toggleMode() {
-  router.push(isRegister.value ? '/login' : '/register')
-}
 </script>
 
 <template>
-  <div class="min-h-full flex items-center justify-center bg-gray-50 p-6">
-    <div class="w-full max-w-md bg-white rounded-xl shadow-md p-8">
+  <div class="min-h-full flex items-center justify-center bg-surface-muted p-6">
+    <div class="w-full max-w-md bg-surface rounded-xl shadow-md p-8">
       <div class="flex items-center justify-center gap-3 mb-6">
-        <div class="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xl">
-          C
-        </div>
-        <h1 class="text-2xl font-bold text-gray-800">{{ $t('app.name') }}</h1>
+        <AppLogo size="lg" />
+        <h1 class="text-2xl font-bold text-gray-800">{{ settings.appName }}</h1>
       </div>
 
       <h2 class="text-lg font-medium text-gray-700 mb-4 text-center">
         {{ isRegister ? $t('auth.register') : $t('auth.login') }}
       </h2>
 
-      <form @submit.prevent="submit" class="space-y-4">
+      <form class="space-y-4" @submit.prevent="submit">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.email') }}</label>
-          <input
-            v-model="email"
-            type="email"
-            required
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-          />
+          <input v-model="email" type="email" required class="w-full px-3 py-2 border border-line rounded-lg" />
         </div>
 
         <div v-if="isRegister">
           <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.displayName') }}</label>
-          <input
-            v-model="displayName"
-            type="text"
-            required
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-          />
+          <input v-model="displayName" type="text" required class="w-full px-3 py-2 border border-line rounded-lg" />
         </div>
 
         <div>
@@ -90,11 +70,13 @@ function toggleMode() {
             type="password"
             required
             minlength="8"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-line rounded-lg"
           />
         </div>
 
-        <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded">{{ error }}</p>
+        <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded">
+          {{ error }}
+        </p>
 
         <button
           type="submit"
@@ -106,9 +88,9 @@ function toggleMode() {
       </form>
 
       <p class="mt-4 text-center text-sm text-gray-600">
-        <button @click="toggleMode" class="text-blue-600 hover:underline">
+        <RouterLink :to="isRegister ? '/login' : '/register'" class="text-blue-600 hover:underline">
           {{ isRegister ? $t('auth.hasAccount') : $t('auth.noAccount') }}
-        </button>
+        </RouterLink>
       </p>
     </div>
   </div>

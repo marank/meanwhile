@@ -1,41 +1,29 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
+import { useCalendarStore } from './calendars'
+import { useEventStore } from './events'
+import { useNotificationsStore } from './notifications'
+import { useOverviewStore } from './overview'
 
 export const useAuthStore = defineStore('auth', () => {
-  // `token` is kept for compatibility with components that still pass it,
-  // but it is no longer used for authentication (session cookie instead).
-  const token = ref<string | null>(null)
   const user = ref<api.User | null>(null)
-  const loading = ref(false)
-  const initialized = ref(false)
+  let initPromise: Promise<void> | null = null
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin = computed(() => !!user.value?.is_admin)
 
-  async function init() {
-    if (initialized.value) return
-    loading.value = true
-    try {
-      await api.getCsrf()
-      user.value = await api.me()
-    } catch {
-      user.value = null
-    } finally {
-      loading.value = false
-      initialized.value = true
-    }
-  }
-
-  async function fetchMe() {
-    loading.value = true
-    try {
-      user.value = await api.me()
-    } catch {
-      user.value = null
-    } finally {
-      loading.value = false
-    }
+  /** Restores the session once; later calls wait for the same request. */
+  function init(): Promise<void> {
+    initPromise ??= (async () => {
+      try {
+        await api.getCsrf()
+        user.value = await api.me()
+      } catch {
+        user.value = null
+      }
+    })()
+    return initPromise
   }
 
   async function login(email: string, password: string) {
@@ -46,28 +34,29 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = await api.register({ email, display_name: displayName, password })
   }
 
+  /** Forgets the user and everything loaded for them, so a following login starts clean. */
+  function clearSession() {
+    user.value = null
+    // The next navigation fetches a fresh CSRF token for the new anonymous session.
+    initPromise = null
+    useCalendarStore().reset()
+    useEventStore().reset()
+    useNotificationsStore().reset()
+    useOverviewStore().reset()
+  }
+
   async function logout() {
     try {
       await api.logout()
     } catch {
-      // ignore
+      // the local session is cleared either way
     }
-    token.value = null
-    user.value = null
-    initialized.value = false
+    clearSession()
   }
 
-  return {
-    token,
-    user,
-    loading,
-    initialized,
-    isLoggedIn,
-    isAdmin,
-    login,
-    register,
-    logout,
-    init,
-    fetchMe,
+  async function updateProfile(data: api.ProfileUpdate) {
+    user.value = await api.updateProfile(data)
   }
+
+  return { user, isLoggedIn, isAdmin, init, login, register, logout, clearSession, updateProfile }
 })

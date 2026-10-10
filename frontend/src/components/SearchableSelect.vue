@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronDown, X } from 'lucide-vue-next'
-import { useAuthStore } from '@/stores/auth'
 import * as api from '@/api'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: string | null;
-    entity: 'users' | 'members' | 'groups' | 'resources' | 'categories';
-    calendarId?: string;
-    allowFreeText?: boolean;
-    freeTextValidator?: (value: string) => boolean;
-    placeholder?: string;
-    defaultLimit?: number;
-    debounceMs?: number;
-    minSearchLength?: number;
-    openOnFocus?: boolean;
-    clearable?: boolean;
-    disabled?: boolean;
+    modelValue: string | null
+    entity: api.SearchEntity
+    calendarId?: string
+    allowFreeText?: boolean
+    freeTextValidator?: (value: string) => boolean
+    placeholder?: string
+    defaultLimit?: number
+    debounceMs?: number
+    minSearchLength?: number
+    openOnFocus?: boolean
+    clearable?: boolean
+    disabled?: boolean
+    /** id of the input, for associating a <label for>. */
+    inputId?: string
   }>(),
   {
     defaultLimit: 20,
@@ -29,16 +30,16 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string | null): void;
-  (e: 'select', value: string | null, option: api.SearchResult | null): void;
+  'update:modelValue': [value: string | null]
+  select: [value: string | null, option: api.SearchResult | null]
 }>()
 
-const auth = useAuthStore()
 const { t } = useI18n()
 
 const root = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
-const listboxId = computed(() => `${props.entity}-searchable-listbox`)
+const listRef = ref<HTMLElement | null>(null)
+const listboxId = useId()
 const query = ref('')
 const preload = ref<api.SearchResult[]>([])
 const results = ref<api.SearchResult[]>([])
@@ -76,9 +77,7 @@ function canSearch(q: string) {
 }
 
 async function fetchResults(q: string) {
-  if (!auth.isLoggedIn) return
   if (!canSearch(q)) {
-    console.log('[SearchableSelect] skipped, too short')
     if (q) results.value = []
     else preload.value = []
     loading.value = false
@@ -110,9 +109,10 @@ function updatePosition() {
   const input = inputRef.value
   if (!input) return
   const rect = input.getBoundingClientRect()
+  // The list is position: fixed, so viewport coordinates apply as they are.
   dropdownStyle.value = {
-    top: `${rect.bottom + window.scrollY}px`,
-    left: `${rect.left + window.scrollX}px`,
+    top: `${rect.bottom}px`,
+    left: `${rect.left}px`,
     width: `${rect.width}px`,
   }
 }
@@ -232,15 +232,18 @@ function onWindowResize() {
   if (isOpen.value) updatePosition()
 }
 
-function onScrollClose() {
-  if (isOpen.value) close()
+// Scrolling the page would detach the fixed list from its input; scrolling the list itself is fine.
+function onScrollClose(event: Event) {
+  if (isOpen.value && !listRef.value?.contains(event.target as Node)) close()
 }
 
+// Shows the option behind a value set from outside (e.g. an existing event's resource) once it's loaded.
 function resolveSelected() {
   if (!props.modelValue) {
     selectedOption.value = null
     return
   }
+  if (selectedOption.value?.id === props.modelValue) return
   const match = options.value.find((o) => o.id === props.modelValue)
   if (match) {
     selectedOption.value = match
@@ -249,7 +252,6 @@ function resolveSelected() {
   } else if (props.allowFreeText) {
     selectedOption.value = null
     if (!isOpen.value) query.value = props.modelValue
-    emit('select', props.modelValue, null)
   }
 }
 
@@ -286,6 +288,7 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
 <template>
   <div ref="root" class="relative">
     <input
+      :id="inputId"
       ref="inputRef"
       :value="query"
       :placeholder="displayPlaceholder"
@@ -295,7 +298,7 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
       :aria-expanded="isOpen"
       aria-autocomplete="list"
       :aria-controls="listboxId"
-      class="w-full border rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 pr-8"
+      class="w-full rounded-lg border px-3 py-2 pr-8 text-sm disabled:bg-surface-muted"
       @focus="onFocus"
       @input="onInput"
       @keydown="onKeydown"
@@ -303,37 +306,29 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
     <button
       v-if="clearable && modelValue && !disabled"
       type="button"
-      :aria-label="t('app.clear')"
+      :aria-label="$t('app.clear')"
       class="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
       @click.stop="clear"
     >
       <X :size="16" />
     </button>
-    <ChevronDown
-      :size="16"
-      class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-    />
+    <ChevronDown :size="16" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
 
     <ul
       v-if="isOpen"
       :id="listboxId"
+      ref="listRef"
       role="listbox"
-      class="fixed z-[100] mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1"
+      class="fixed z-[100] mt-1 max-h-60 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg"
       :style="dropdownStyle"
       @mousedown.prevent
       @mouseleave="activeIndex = -1"
     >
-      <li
-        v-if="loading && !optionCount"
-        class="px-3 py-2 text-sm text-gray-500"
-      >
-        {{ t('app.loading') }}
+      <li v-if="loading && !optionCount" class="px-3 py-2 text-sm text-gray-500">
+        {{ $t('app.loading') }}
       </li>
-      <li
-        v-else-if="!loading && !optionCount"
-        class="px-3 py-2 text-sm text-gray-500"
-      >
-        {{ t('app.noResults') }}
+      <li v-else-if="!loading && !optionCount" class="px-3 py-2 text-sm text-gray-500">
+        {{ $t('app.noResults') }}
       </li>
       <template v-else>
         <li
@@ -343,14 +338,14 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
           :aria-selected="option.id === modelValue"
           class="px-3 py-2 cursor-pointer text-sm"
           :class="[
-            index === activeIndex ? 'bg-[var(--app-surface-muted)]' : '',
-            option.id === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800 dark:text-gray-200',
+            index === activeIndex ? 'bg-surface-muted' : '',
+            option.id === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800',
           ]"
           @mouseenter="activeIndex = index"
           @mouseup="choose(option)"
         >
           <div class="truncate">{{ option.label }}</div>
-          <div v-if="option.subtitle" class="truncate text-xs text-gray-500 dark:text-gray-400">
+          <div v-if="option.subtitle" class="truncate text-xs text-gray-500">
             {{ option.subtitle }}
           </div>
         </li>
@@ -360,13 +355,13 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
           :aria-selected="freeTextValue === modelValue"
           class="px-3 py-2 cursor-pointer text-sm"
           :class="[
-            activeIndex === options.length ? 'bg-[var(--app-surface-muted)]' : '',
-            freeTextValue === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800 dark:text-gray-200',
+            activeIndex === options.length ? 'bg-surface-muted' : '',
+            freeTextValue === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800',
           ]"
           @mouseenter="activeIndex = options.length"
           @mouseup="chooseFreeText"
         >
-          {{ t('app.useValue', { value: freeTextValue }) }}
+          {{ $t('app.useValue', { value: freeTextValue }) }}
         </li>
       </template>
     </ul>

@@ -2,6 +2,7 @@
 Calendar resource endpoints.
 """
 
+from django.db import transaction
 from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
@@ -40,7 +41,18 @@ def list_resources(request, calendar_id: str):
     )
 
 
+def _set_approvers(resource: Resource, user_ids: list[str]):
+    """Replaces the resource's own approvers; each must be a direct member of the calendar."""
+    for user_id in user_ids:
+        if get_direct_membership(resource.calendar_id, user_id) is None:
+            raise HttpError(400, "Approver must be a calendar member")
+    ResourceApprover.objects.filter(resource=resource).exclude(user_id__in=user_ids).delete()
+    for user in User.objects.filter(id__in=user_ids):
+        ResourceApprover.objects.get_or_create(resource=resource, user=user)
+
+
 @router.post("/calendars/{calendar_id}/resources", response=ResourceOut, auth=django_auth)
+@transaction.atomic
 def create_resource(request, calendar_id: str, payload: ResourceCreate):
     calendar = Calendar.objects.get(id=calendar_id)
     _require_editor(request.user, calendar)
@@ -50,18 +62,25 @@ def create_resource(request, calendar_id: str, payload: ResourceCreate):
         description=payload.description,
         color=payload.color,
         requires_approval=payload.requires_approval,
+        is_active=payload.is_active,
     )
+    _set_approvers(resource, payload.approver_ids)
     return resource
 
 
 @router.patch("/calendars/{calendar_id}/resources/{resource_id}", response=ResourceOut, auth=django_auth)
+@transaction.atomic
 def update_resource(request, calendar_id: str, resource_id: str, payload: ResourceUpdate):
     calendar = Calendar.objects.get(id=calendar_id)
     _require_editor(request.user, calendar)
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
-    for attr, value in payload.dict(exclude_unset=True).items():
+    data = payload.dict(exclude_unset=True)
+    approver_ids = data.pop("approver_ids", None)
+    for attr, value in data.items():
         setattr(resource, attr, value)
     resource.save()
+    if approver_ids is not None:
+        _set_approvers(resource, approver_ids)
     return resource
 
 

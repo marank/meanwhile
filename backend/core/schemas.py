@@ -4,12 +4,25 @@ Django Ninja schemas mirroring the FastAPI API contract.
 
 from datetime import datetime
 from typing import Annotated, List, Literal, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ninja import Field, Schema
-from pydantic import model_validator
+from pydantic import AfterValidator, model_validator
 
 
 Weekday = Annotated[int, Field(ge=0, le=6)]
+Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
+
+
+def _known_zone(name: str) -> str:
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError("Unknown time zone")
+    return name
+
+
+TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +49,48 @@ class UserUpdate(Schema):
     display_name: Optional[str] = Field(None, min_length=1, max_length=255)
     time_format: Optional[Literal["auto", "24h", "12h"]] = None
     date_format: Optional[Literal["auto", "dmy", "mdy", "ymd"]] = None
+
+
+class OverviewSettingsOut(Schema):
+    model_config = {"from_attributes": True}
+
+    first_weekday: int
+    show_weekends: bool
+    weekend_days: List[Weekday]
+    show_week_numbers: bool
+    use_calendar_colors: bool
+    base_color: str
+    weekend_color: str
+    today_color: str
+    event_color: str
+    border_color: str
+    outer_border_color: str
+    dark_base_color: str
+    dark_weekend_color: str
+    dark_today_color: str
+    dark_event_color: str
+    dark_border_color: str
+    dark_outer_border_color: str
+
+
+class OverviewSettingsUpdate(Schema):
+    first_weekday: Optional[int] = Field(None, ge=0, le=6)
+    show_weekends: Optional[bool] = None
+    weekend_days: Optional[List[Weekday]] = None
+    show_week_numbers: Optional[bool] = None
+    use_calendar_colors: Optional[bool] = None
+    base_color: Optional[Color] = None
+    weekend_color: Optional[Color] = None
+    today_color: Optional[Color] = None
+    event_color: Optional[Color] = None
+    border_color: Optional[Color] = None
+    outer_border_color: Optional[Color] = None
+    dark_base_color: Optional[Color] = None
+    dark_weekend_color: Optional[Color] = None
+    dark_today_color: Optional[Color] = None
+    dark_event_color: Optional[Color] = None
+    dark_border_color: Optional[Color] = None
+    dark_outer_border_color: Optional[Color] = None
 
 
 class AppPasswordCreate(Schema):
@@ -89,11 +144,14 @@ class GroupDetailOut(GroupOut):
 class GroupCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
+    member_ids: List[str] = []
 
 
 class GroupUpdate(Schema):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
+    # Replaces the member list when given.
+    member_ids: Optional[List[str]] = None
 
 
 class AdminUserOut(Schema):
@@ -235,33 +293,46 @@ class MyMembershipOut(Schema):
 class CalendarCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
-    color: Optional[str] = "#3b82f6"
-    dark_color: str = "#60a5fa"
     force_all_day: bool = False
     first_weekday: Optional[int] = Field(None, ge=0, le=6)
     show_weekends: Optional[bool] = None
     weekend_days: Optional[List[Weekday]] = None
     show_week_numbers: Optional[bool] = None
-    today_color: str = "#eff6ff"
-    dark_today_color: str = "#27272a"
-    weekend_color: str = "#f9fafb"
-    dark_weekend_color: str = "#18181b"
+    # Colors left out start with the default preset.
+    base_color: Optional[Color] = None
+    weekend_color: Optional[Color] = None
+    today_color: Optional[Color] = None
+    event_color: Optional[Color] = None
+    border_color: Optional[Color] = None
+    outer_border_color: Optional[Color] = None
+    dark_base_color: Optional[Color] = None
+    dark_weekend_color: Optional[Color] = None
+    dark_today_color: Optional[Color] = None
+    dark_event_color: Optional[Color] = None
+    dark_border_color: Optional[Color] = None
+    dark_outer_border_color: Optional[Color] = None
 
 
 class CalendarUpdate(Schema):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
-    color: Optional[str] = None
-    dark_color: Optional[str] = None
     force_all_day: Optional[bool] = None
     first_weekday: Optional[int] = Field(None, ge=0, le=6)
     show_weekends: Optional[bool] = None
     weekend_days: Optional[List[Weekday]] = None
     show_week_numbers: Optional[bool] = None
-    today_color: Optional[str] = None
-    dark_today_color: Optional[str] = None
-    weekend_color: Optional[str] = None
-    dark_weekend_color: Optional[str] = None
+    base_color: Optional[Color] = None
+    weekend_color: Optional[Color] = None
+    today_color: Optional[Color] = None
+    event_color: Optional[Color] = None
+    border_color: Optional[Color] = None
+    outer_border_color: Optional[Color] = None
+    dark_base_color: Optional[Color] = None
+    dark_weekend_color: Optional[Color] = None
+    dark_today_color: Optional[Color] = None
+    dark_event_color: Optional[Color] = None
+    dark_border_color: Optional[Color] = None
+    dark_outer_border_color: Optional[Color] = None
     is_public: Optional[bool] = None
     public_role: Optional[Literal["viewer", "contributor", "editor"]] = None
 
@@ -272,17 +343,23 @@ class CalendarOut(Schema):
     id: str
     name: str
     description: Optional[str]
-    color: str
-    dark_color: str
     force_all_day: bool
     first_weekday: int
     show_weekends: bool
     weekend_days: List[Weekday]
     show_week_numbers: bool
-    today_color: str
-    dark_today_color: str
+    base_color: str
     weekend_color: str
+    today_color: str
+    event_color: str
+    border_color: str
+    outer_border_color: str
+    dark_base_color: str
     dark_weekend_color: str
+    dark_today_color: str
+    dark_event_color: str
+    dark_border_color: str
+    dark_outer_border_color: str
     is_public: bool
     public_role: str
     owner_id: str
@@ -343,6 +420,8 @@ class ResourceCreate(Schema):
     description: Optional[str] = None
     color: Optional[str] = "#f59e0b"
     requires_approval: bool = False
+    is_active: bool = True
+    approver_ids: List[str] = []
 
 
 class ResourceUpdate(Schema):
@@ -351,6 +430,8 @@ class ResourceUpdate(Schema):
     color: Optional[str] = None
     requires_approval: Optional[bool] = None
     is_active: Optional[bool] = None
+    # Replaces the resource's own approvers when given.
+    approver_ids: Optional[List[str]] = None
 
 
 class ResourceOut(Schema):
@@ -423,6 +504,7 @@ class EventCreate(Schema):
     start: datetime
     end: datetime
     all_day: bool = False
+    timezone: Optional[TimeZoneName] = None
     show_recurrence_count: bool = False
     rrule: Optional[str] = None
     category_id: Optional[str] = None
@@ -436,6 +518,7 @@ class EventUpdate(Schema):
     start: Optional[datetime] = None
     end: Optional[datetime] = None
     all_day: Optional[bool] = None
+    timezone: Optional[TimeZoneName] = None
     show_recurrence_count: Optional[bool] = None
     rrule: Optional[str] = None
     category_id: Optional[str] = None
@@ -484,6 +567,7 @@ class EventOut(Schema):
     start: datetime
     end: datetime
     all_day: bool
+    timezone: str
     show_recurrence_count: bool
     rrule: Optional[str]
     uid: str
@@ -504,6 +588,8 @@ class EventOut(Schema):
 
 class OccurrenceOut(Schema):
     event_id: str
+    # Clients take the event colors from the calendar, so they follow color changes right away.
+    calendar_id: str
     title: str
     description: Optional[str]
     start: datetime
@@ -511,8 +597,6 @@ class OccurrenceOut(Schema):
     all_day: bool
     recurrence_count: Optional[int]
     status: str
-    color: Optional[str]
-    dark_color: Optional[str]
     category_id: Optional[str]
     category_name: Optional[str]
     category_color: Optional[str]

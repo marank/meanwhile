@@ -6,6 +6,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
+import { setUnauthorizedHandler } from './api'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 
@@ -16,7 +17,13 @@ app.use(i18n)
 app.use(router)
 
 useThemeStore().init()
-const auth = useAuthStore()
-auth.fetchMe().then(() => {
-  app.mount('#app')
+
+// An expired session ends up on the login page instead of failing every action.
+setUnauthorizedHandler(() => {
+  const auth = useAuthStore()
+  if (!auth.isLoggedIn) return
+  auth.clearSession()
+  void router.push('/login')
 })
+
+app.mount('#app')

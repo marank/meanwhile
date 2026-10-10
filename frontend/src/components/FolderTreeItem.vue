@@ -1,122 +1,85 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import type Sortable from 'sortablejs'
+import { ChevronDown, ChevronRight, Folder as FolderIcon } from 'lucide-vue-next'
 import type { CalendarListItem, Folder } from '@/api'
+import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import { useCalendarStore } from '@/stores/calendars'
-import { useThemeStore } from '@/stores/theme'
+import { useSidebarSortable } from '@/composables/useSidebarSortable'
 
 const props = defineProps<{
   folder: Folder
-  selectedId: string
-  onSortEnd?: (evt: Sortable.SortableEvent) => void
+  onSortEnd: (event: Sortable.SortableEvent) => void
 }>()
 
 const emit = defineEmits<{
-  (e: 'select-calendar', id: string): void
-  (e: 'select-folder', id: string): void
-  (e: 'delete-folder', id: string): void
-  (e: 'goto-settings', item: CalendarListItem): void
-  (e: 'context-menu-folder', event: MouseEvent, folder: Folder): void
-  (e: 'context-menu-calendar', event: MouseEvent, item: CalendarListItem): void
+  select: [id: string]
+  folderMenu: [event: MouseEvent, folder: Folder]
+  calendarMenu: [event: MouseEvent, item: CalendarListItem]
 }>()
 
 const store = useCalendarStore()
-const themeStore = useThemeStore()
 const expanded = ref(true)
-const isSelected = computed(() => props.selectedId === props.folder.id)
 const childList = ref<HTMLElement | null>(null)
-let sortable: Sortable | null = null
+const childFolders = computed(() => store.childFolders(props.folder.id))
+const calendars = computed(() => store.calendarsIn(props.folder.id))
+const hasChildren = computed(() => childFolders.value.length > 0 || calendars.value.length > 0)
 
-function childrenOf(parentId: string | null): Folder[] {
-  return store.folders.filter((f) => f.parent_id === parentId)
+useSidebarSortable(childList, props.onSortEnd)
+
+function openContextMenu(event: MouseEvent) {
+  emit('select', props.folder.id)
+  emit('folderMenu', event, props.folder)
 }
-
-function calendarsInFolder(folderId: string): CalendarListItem[] {
-  return store.items.filter((i) => i.membership.folder_id === folderId)
-}
-
-onMounted(() => {
-  if (!childList.value || !props.onSortEnd) return
-  import('sortablejs').then((module) => {
-    const Sortable = module.default
-    sortable = Sortable.create(childList.value!, {
-      group: 'sidebar',
-      animation: 150,
-      draggable: '.sidebar-item',
-      filter: '.sidebar-no-drag',
-      preventOnFilter: false,
-      onEnd: props.onSortEnd,
-    })
-  })
-})
-
-onUnmounted(() => {
-  sortable?.destroy()
-  sortable = null
-})
 </script>
 
 <template>
   <div class="sidebar-item" data-type="folder" :data-id="folder.id">
     <div
-      class="flex items-center h-8 gap-1 px-2 py-1 rounded cursor-pointer group"
-      :class="{ 'bg-blue-100 dark:bg-blue-900': isSelected }"
-      @contextmenu.stop.prevent="emit('select-folder', folder.id); emit('context-menu-folder', $event, folder)"
-      @click="emit('select-folder', folder.id)"
+      class="flex h-8 cursor-pointer items-center gap-1 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      :class="{ 'bg-blue-100 dark:bg-blue-900': store.selectedId === folder.id }"
+      role="button"
+      tabindex="0"
+      :aria-current="store.selectedId === folder.id || undefined"
+      @click="emit('select', folder.id)"
+      @keydown.enter.space.self.prevent="emit('select', folder.id)"
+      @keydown.right.self.prevent="expanded = true"
+      @keydown.left.self.prevent="expanded = false"
+      @contextmenu.stop.prevent="openContextMenu"
     >
       <button
-        @click.stop="expanded = !expanded"
+        v-if="hasChildren"
+        type="button"
         class="sidebar-no-drag text-gray-400 hover:text-gray-600 focus:outline-none"
-        v-if="childrenOf(folder.id).length || calendarsInFolder(folder.id).length"
+        :aria-expanded="expanded"
+        @click.stop="expanded = !expanded"
       >
-        <svg v-if="expanded" class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-        </svg>
-        <svg v-else class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-        </svg>
+        <ChevronDown v-if="expanded" :size="12" :stroke-width="3" />
+        <ChevronRight v-else :size="12" :stroke-width="3" />
       </button>
       <span v-else class="w-3"></span>
-      <svg class="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-      </svg>
-      <span class="text-sm text-gray-700 flex-1 truncate">{{ folder.name }}</span>
+      <FolderIcon :size="16" class="text-yellow-500" fill="currentColor" />
+      <span class="flex-1 truncate text-sm text-gray-700">{{ folder.name }}</span>
     </div>
 
-    <div
-      v-if="expanded"
-      ref="childList"
-      class="sidebar-list folder-children ml-4"
-      :data-folder-id="folder.id"
-    >
-      <div
-        v-for="item in calendarsInFolder(folder.id)"
+    <!-- v-show keeps the list element, so it stays registered with Sortable while collapsed. -->
+    <div v-show="expanded" ref="childList" class="sidebar-list ml-4" :data-folder-id="folder.id">
+      <SidebarCalendarItem
+        v-for="item in calendars"
         :key="item.calendar.id"
-        class="sidebar-item group flex items-center h-8 gap-2 px-2 py-1 rounded cursor-pointer"
-        :class="{ 'bg-blue-100 dark:bg-blue-900': selectedId === item.calendar.id }"
-        data-type="calendar"
-        :data-id="item.calendar.id"
-        @click="emit('select-calendar', item.calendar.id)"
-        @contextmenu.stop.prevent="emit('select-calendar', item.calendar.id); emit('context-menu-calendar', $event, item)"
-      >
-        <span
-          class="w-3 h-3 rounded-full border border-white shadow-sm"
-          :style="{ backgroundColor: themeStore.resolved === 'dark' ? item.calendar.dark_color : item.calendar.color }"
-        ></span>
-        <span class="text-sm text-gray-700 truncate flex-1">{{ item.calendar.name }}</span>
-      </div>
+        :item="item"
+        :selected="store.selectedId === item.calendar.id"
+        @select="emit('select', $event)"
+        @context-menu="(event, calendar) => emit('calendarMenu', event, calendar)"
+      />
       <FolderTreeItem
-        v-for="child in childrenOf(folder.id)"
+        v-for="child in childFolders"
         :key="child.id"
         :folder="child"
-        :selectedId="selectedId"
         :on-sort-end="onSortEnd"
-        @select-calendar="emit('select-calendar', $event)"
-        @select-folder="emit('select-folder', $event)"
-        @delete-folder="emit('delete-folder', $event)"
-        @goto-settings="emit('goto-settings', $event)"
-        @context-menu-folder="(event: MouseEvent, folder: Folder) => emit('context-menu-folder', event, folder)"
-        @context-menu-calendar="(event: MouseEvent, item: CalendarListItem) => emit('context-menu-calendar', event, item)"
+        @select="emit('select', $event)"
+        @folder-menu="(event, folder) => emit('folderMenu', event, folder)"
+        @calendar-menu="(event, item) => emit('calendarMenu', event, item)"
       />
     </div>
   </div>

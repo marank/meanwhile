@@ -59,7 +59,16 @@ Build for production:
 pnpm build
 ```
 
-The Vite dev proxy forwards `/api` and `/ics` to `http://localhost:8000`.
+Checks:
+
+```bash
+pnpm test:unit      # Vitest
+pnpm lint           # ESLint (fixes what it can)
+pnpm format         # Prettier
+pnpm type-check     # vue-tsc
+```
+
+The Vite dev proxy forwards `/api`, `/ics` and `/caldav` to `http://localhost:8000`.
 
 ## Configuration
 

@@ -21,6 +21,7 @@ from core.models import (
     get_or_create_app_settings,
 )
 from core.models.base import Role
+from core.models.calendar_colors import COLOR_FIELDS, DEFAULT_COLORS
 from core.schemas import (
     ApproverCreate,
     CalendarCreate,
@@ -132,17 +133,12 @@ def create_calendar(request, payload: CalendarCreate):
     calendar = Calendar.objects.create(
         name=payload.name,
         description=payload.description,
-        color=payload.color or "#3b82f6",
-        dark_color=payload.dark_color,
         force_all_day=payload.force_all_day,
         first_weekday=defaults["first_weekday"],
         show_weekends=defaults["show_weekends"],
         weekend_days=defaults["weekend_days"],
         show_week_numbers=defaults["show_week_numbers"],
-        today_color=payload.today_color,
-        weekend_color=payload.weekend_color,
-        dark_today_color=payload.dark_today_color,
-        dark_weekend_color=payload.dark_weekend_color,
+        **{field: getattr(payload, field) or DEFAULT_COLORS[field] for field in COLOR_FIELDS},
         owner=user,
         feed_token=secrets.token_urlsafe(32),
     )

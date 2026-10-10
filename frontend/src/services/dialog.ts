@@ -7,8 +7,7 @@ interface DialogState {
   kind: DialogKind
   title: string
   message: string
-  defaultValue: string
-  resolve: ((value: any) => void) | null
+  resolve: ((value: unknown) => void) | null
 }
 
 export const dialog = reactive<DialogState>({
@@ -16,25 +15,18 @@ export const dialog = reactive<DialogState>({
   kind: 'alert',
   title: '',
   message: '',
-  defaultValue: '',
   resolve: null,
 })
 
 export const inputValue = ref('')
 
-function openDialog<T>(
-  kind: DialogKind,
-  message: string,
-  title: string,
-  defaultValue = '',
-): Promise<T> {
-  return new Promise((resolve) => {
+function openDialog<T>(kind: DialogKind, message: string, title: string, defaultValue = ''): Promise<T> {
+  return new Promise<T>((resolve) => {
     dialog.kind = kind
     dialog.title = title
     dialog.message = message
-    dialog.defaultValue = defaultValue
     inputValue.value = defaultValue
-    dialog.resolve = resolve
+    dialog.resolve = resolve as (value: unknown) => void
     dialog.open = true
   })
 }
@@ -47,18 +39,13 @@ export function confirm(message: string, title = ''): Promise<boolean> {
   return openDialog<boolean>('confirm', message, title)
 }
 
-export function prompt(
-  message: string,
-  defaultValue = '',
-  title = '',
-): Promise<string | null> {
+export function prompt(message: string, defaultValue = '', title = ''): Promise<string | null> {
   return openDialog<string | null>('prompt', message, title, defaultValue)
 }
 
-export function submitDialog(value?: any) {
-  if (dialog.resolve) {
-    dialog.resolve(value)
-  }
+/** Closes the dialog with the answer for the promise returned by alert/confirm/prompt. */
+export function submitDialog(value?: unknown) {
+  dialog.resolve?.(value)
   dialog.open = false
   dialog.resolve = null
 }

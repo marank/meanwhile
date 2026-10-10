@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import type Sortable from 'sortablejs'
+import { CalendarDays } from 'lucide-vue-next'
 import FolderTreeItem from './FolderTreeItem.vue'
+import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'
-import { useCalendarStore } from '@/stores/calendars'
-import { useThemeStore } from '@/stores/theme'
-import { useAuthStore } from '@/stores/auth'
+import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
+import { useAction } from '@/composables/useAction'
+import { useLoader } from '@/composables/useLoader'
 import { confirm, prompt } from '@/services/dialog'
-import * as api from '@/api'
-import type { CalendarListItem, Folder } from '@/api'
+import { readStorage, writeStorage } from '@/services/storage'
+import { useSidebarSortable } from '@/composables/useSidebarSortable'
+import type { CalendarListItem, Folder, SidebarReorderItem } from '@/api'
 
 const SIDEBAR_WIDTH_KEY = 'calendar_sidebar_width'
 const MIN_WIDTH = 180
@@ -18,260 +21,135 @@ const MAX_WIDTH = 500
 const DEFAULT_WIDTH = 256
 
 const store = useCalendarStore()
-const themeStore = useThemeStore()
-const auth = useAuthStore()
 const router = useRouter()
 const { t } = useI18n()
+const { run } = useAction()
 
-const sidebarWidth = ref(DEFAULT_WIDTH)
+const sidebarWidth = ref(clampWidth(Number.parseInt(readStorage(SIDEBAR_WIDTH_KEY) ?? '', 10)))
 const isResizing = ref(false)
 const rootList = ref<HTMLElement | null>(null)
-let rootSortable: Sortable | null = null
 
-onMounted(async () => {
-  await store.load()
-  await nextTick()
-  initRootSortable()
-  const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY)
-  if (saved) {
-    const parsed = Number.parseInt(saved, 10)
-    if (!Number.isNaN(parsed)) {
-      sidebarWidth.value = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, parsed))
-    }
-  }
-})
+useLoader(store.load)
+useSidebarSortable(rootList, handleSortEnd)
 
-onUnmounted(() => {
-  rootSortable?.destroy()
-  rootSortable = null
-})
-
-function initRootSortable() {
-  if (!rootList.value || rootSortable) return
-  import('sortablejs').then((module) => {
-    const Sortable = module.default
-    rootSortable = Sortable.create(rootList.value!, {
-      group: 'sidebar',
-      animation: 150,
-      draggable: '.sidebar-item',
-      filter: '.sidebar-no-drag',
-      preventOnFilter: false,
-      onEnd: handleSortEnd,
-    })
-  })
+function clampWidth(width: number): number {
+  return Number.isNaN(width) ? DEFAULT_WIDTH : Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width))
 }
 
-function isRootList(element: HTMLElement) {
-  return element === rootList.value
+function select(id: string) {
+  router.push(store.selectionPath(id))
 }
 
-function targetFolderIdOf(element: HTMLElement): string | null {
-  if (isRootList(element)) return null
-  const folderId = element.dataset.folderId
-  if (folderId) return folderId
-  const parent = element.closest('[data-folder-id]') as HTMLElement | null
-  return parent?.dataset.folderId ?? null
+// Drag and drop
+
+function targetFolderIdOf(list: HTMLElement): string | null {
+  if (list === rootList.value) return null
+  return list.closest<HTMLElement>('[data-folder-id]')?.dataset.folderId ?? null
 }
 
-function descendantsOf(folderId: string): string[] {
-  const result: string[] = []
-  const direct = store.folders.filter((f) => f.parent_id === folderId)
-  for (const child of direct) {
-    result.push(child.id)
-    result.push(...descendantsOf(child.id))
-  }
-  return result
+function positionsIn(list: HTMLElement, parentId: string | null): SidebarReorderItem[] {
+  return Array.from(list.querySelectorAll<HTMLElement>(':scope > .sidebar-item:not(.sidebar-no-drag)')).flatMap(
+    (element, position) => {
+      const { type, id } = element.dataset
+      if ((type !== 'folder' && type !== 'calendar') || !id) return []
+      return [{ type, id, parent_id: parentId, position }]
+    },
+  )
 }
 
-function applyLocalReordering(
-  updates: { type: 'folder' | 'calendar'; id: string; parent_id: string | null; position: number }[],
-) {
-  for (const update of updates) {
-    if (update.type === 'folder') {
-      const folder = store.folders.find((f) => f.id === update.id)
-      if (folder) {
-        folder.parent_id = update.parent_id
-        folder.position = update.position
-      }
-    } else {
-      const item = store.items.find((i) => i.calendar.id === update.id)
-      if (item) {
-        item.membership.folder_id = update.parent_id
-        item.membership.position = update.position
-      }
-    }
-  }
+async function handleSortEnd(event: Sortable.SortableEvent) {
+  const to = event.to
+  const from = event.from
+  const toFolderId = targetFolderIdOf(to)
+  const { type, id } = event.item.dataset
 
-  store.folders = store.folders
-    .slice()
-    .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
-
-  store.items = store.items
-    .slice()
-    .sort(
-      (a, b) =>
-        a.membership.position - b.membership.position ||
-        a.calendar.name.localeCompare(b.calendar.name),
-    )
-}
-
-async function handleSortEnd(evt: Sortable.SortableEvent) {
-  if (!auth.isLoggedIn) return
-
-  const to = evt.to as HTMLElement
-  const from = evt.from as HTMLElement
-  const toTarget = targetFolderIdOf(to)
-  const fromTarget = targetFolderIdOf(from)
-
-  const item = evt.item
-  const itemType = item.dataset.type
-  const itemId = item.dataset.id
+  // A folder can't move into itself or one of its own subfolders; restore the stored order.
   if (
-    itemType === 'folder' &&
-    (toTarget === itemId || descendantsOf(itemId!).includes(toTarget ?? ''))
+    type === 'folder' &&
+    id &&
+    toFolderId &&
+    (toFolderId === id || store.descendantFolderIds(id).includes(toFolderId))
   ) {
     await store.load()
     return
   }
 
-  const sidebarUpdates: { type: 'folder' | 'calendar'; id: string; parent_id: string | null; position: number }[] = []
-
-  function collectFromContainer(container: HTMLElement, targetFolderId: string | null) {
-    const children = container.querySelectorAll(':scope > .sidebar-item:not(.sidebar-no-drag)')
-    children.forEach((el, index) => {
-      const type = (el as HTMLElement).dataset.type as 'folder' | 'calendar' | undefined
-      const id = (el as HTMLElement).dataset.id
-      if (!type || !id) return
-      sidebarUpdates.push({ type, id, parent_id: targetFolderId, position: index })
-    })
-  }
-
-  collectFromContainer(to, toTarget)
-  if (to !== from) {
-    collectFromContainer(from, fromTarget)
-  }
-
-  applyLocalReordering(sidebarUpdates)
-
-  try {
-    await api.reorderSidebar(sidebarUpdates)
-  } catch (e) {
-    console.error(e)
-    await store.load()
-  }
+  const updates = positionsIn(to, toFolderId)
+  if (to !== from) updates.push(...positionsIn(from, targetFolderIdOf(from)))
+  await run(() => store.reorder(updates))
 }
 
-const topFolders = computed(() => store.folders.filter((f) => !f.parent_id))
-const ungrouped = computed(() => store.items.filter((i) => !i.membership.folder_id))
+// Context menu
 
-function calendarColor(calendar: CalendarListItem['calendar']) {
-  return themeStore.resolved === 'dark' ? calendar.dark_color : calendar.color
-}
-
-async function createCalendar() {
-  const name = await prompt(
-    t('app.calendarNamePrompt'),
-    '',
-    t('app.newCalendar'),
-  )
-  if (!name) return
-  await store.create(name)
-}
-
-async function createFolder(parentId?: string | null) {
-  const name = await prompt(
-    t('app.folderNamePrompt'),
-    '',
-    t('app.createFolder'),
-  )
-  if (!name || !auth.isLoggedIn) return
-  await api.createFolder(name, parentId || undefined)
-  await store.load()
-}
-
-function selectCalendar(id: string) {
-  store.select(id)
-  router.push('/calendar')
-}
-
-function selectFolder(id: string) {
-  store.select(id)
-  router.push('/calendar')
-}
-
-function gotoSettings(item: CalendarListItem) {
-  router.push(`/settings/${item.calendar.id}`)
-}
-
-async function deleteFolder(id: string) {
-  const ok = await confirm(t('app.deleteFolderText'), t('app.deleteFolderTitle'))
-  if (!ok || !auth.isLoggedIn) return
-  await api.deleteFolder(id)
-  await store.load()
-}
-
-const contextMenu = ref<{ visible: boolean; x: number; y: number; items: MenuItem[] }>({
-  visible: false,
-  x: 0,
-  y: 0,
-  items: [],
-})
+const contextMenu = ref<{ x: number; y: number; items: MenuItem[] } | null>(null)
 
 function openMenu(event: MouseEvent, items: MenuItem[]) {
-  event.preventDefault()
-  if (items.length === 0) return
-  contextMenu.value = { visible: true, x: event.clientX, y: event.clientY, items }
+  if (!items.length) return
+  // Opened from the keyboard (context menu key, Shift+F10), the event has no pointer position.
+  if (event.clientX || event.clientY) {
+    contextMenu.value = { x: event.clientX, y: event.clientY, items }
+  } else {
+    const rect = (event.target as Element).getBoundingClientRect()
+    contextMenu.value = { x: rect.left + 16, y: rect.bottom, items }
+  }
 }
 
-function closeMenu() {
-  contextMenu.value.visible = false
+function rootMenuItems(): MenuItem[] {
+  return [{ label: t('app.createFolder'), action: () => createFolder(null) }]
 }
 
 function folderMenuItems(folder: Folder): MenuItem[] {
   return [
     { label: t('app.createFolder'), action: () => createFolder(folder.id) },
     { label: t('app.rename'), action: () => renameFolder(folder) },
-    { label: t('app.delete'), action: () => deleteFolder(folder.id) },
-  ]
-}
-
-function rootMenuItems(): MenuItem[] {
-  return [
-    { label: t('app.createFolder'), action: () => createFolder() },
+    { label: t('app.delete'), action: () => deleteFolder(folder) },
   ]
 }
 
 function calendarMenuItems(item: CalendarListItem): MenuItem[] {
-  if (item.membership.role !== 'owner') {
-    return []
-  }
+  if (item.membership.role !== 'owner') return []
   return [
     { label: t('app.rename'), action: () => renameCalendar(item) },
-    { label: t('app.delete'), action: () => deleteCalendarWithConfirm(item) },
-    { label: t('app.settings'), action: () => gotoSettings(item) },
+    { label: t('app.delete'), action: () => deleteCalendar(item) },
+    { label: t('app.settings'), action: () => router.push(`/settings/${item.calendar.id}`) },
   ]
 }
 
-async function renameFolder(folder: Folder) {
-  const name = await prompt(t('app.folderNamePrompt'), folder.name, t('app.rename'))
-  if (!name || !auth.isLoggedIn) return
-  await api.updateFolder(folder.id, { name })
-  await store.load()
+// Actions
+
+async function createCalendar() {
+  const name = await prompt(t('app.calendarNamePrompt'), '', t('app.newCalendar'))
+  if (name) await run(async () => select((await store.createCalendar(name)).id))
 }
 
 async function renameCalendar(item: CalendarListItem) {
   const name = await prompt(t('app.calendarNamePrompt'), item.calendar.name, t('app.rename'))
-  if (!name || !auth.isLoggedIn) return
-  await api.updateCalendar(item.calendar.id, { name })
-  await store.load()
+  if (name) await run(() => store.updateCalendar(item.calendar.id, { name }))
 }
 
-async function deleteCalendarWithConfirm(item: CalendarListItem) {
-  const ok = await confirm(t('app.deleteCalendarText'), t('app.deleteCalendarTitle'))
-  if (!ok || !auth.isLoggedIn) return
-  await api.deleteCalendar(item.calendar.id)
-  await store.load()
+async function deleteCalendar(item: CalendarListItem) {
+  if (await confirm(t('app.deleteCalendarText'), t('app.deleteCalendarTitle'))) {
+    await run(() => store.deleteCalendar(item.calendar.id))
+  }
 }
+
+async function createFolder(parentId: string | null) {
+  const name = await prompt(t('app.folderNamePrompt'), '', t('app.createFolder'))
+  if (name) await run(() => store.createFolder(name, parentId))
+}
+
+async function renameFolder(folder: Folder) {
+  const name = await prompt(t('app.folderNamePrompt'), folder.name, t('app.rename'))
+  if (name) await run(() => store.renameFolder(folder.id, name))
+}
+
+async function deleteFolder(folder: Folder) {
+  if (await confirm(t('app.deleteFolderText'), t('app.deleteFolderTitle'))) {
+    await run(() => store.deleteFolder(folder.id))
+  }
+}
+
+// Resizing
 
 function startResize(event: MouseEvent) {
   event.preventDefault()
@@ -280,15 +158,14 @@ function startResize(event: MouseEvent) {
   const startX = event.clientX
   const startWidth = sidebarWidth.value
 
-  function onMouseMove(e: MouseEvent) {
-    const delta = e.clientX - startX
-    sidebarWidth.value = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta))
+  function onMouseMove(moveEvent: MouseEvent) {
+    sidebarWidth.value = clampWidth(startWidth + moveEvent.clientX - startX)
   }
 
   function onMouseUp() {
     isResizing.value = false
     document.body.style.userSelect = ''
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
+    writeStorage(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('mouseup', onMouseUp)
   }
@@ -299,80 +176,69 @@ function startResize(event: MouseEvent) {
 </script>
 
 <template>
-  <aside
-    class="relative bg-white border-r border-gray-200 flex flex-col"
-    :style="{ width: `${sidebarWidth}px` }"
-  >
+  <aside class="relative flex flex-col border-r border-line bg-surface" :style="{ width: `${sidebarWidth}px` }">
     <div
       ref="rootList"
-      class="sidebar-list flex-1 overflow-y-auto p-2 space-y-1"
+      class="sidebar-list flex-1 space-y-1 overflow-y-auto p-2"
       @contextmenu.prevent="openMenu($event, rootMenuItems())"
     >
       <div
-        @click="selectCalendar('all')"
-        class="sidebar-item sidebar-no-drag flex items-center h-8 gap-2 px-2 py-1 rounded cursor-pointer"
+        class="sidebar-item sidebar-no-drag flex h-8 cursor-pointer items-center gap-2 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         :class="{ 'bg-blue-100 dark:bg-blue-900': store.allSelected }"
+        role="button"
+        tabindex="0"
+        :aria-current="store.allSelected || undefined"
+        @click="select(ALL_CALENDARS)"
+        @keydown.enter.space.prevent="select(ALL_CALENDARS)"
       >
-        <svg class="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" />
-        </svg>
+        <CalendarDays :size="16" class="text-gray-500" />
         <span class="text-sm font-medium text-gray-700">{{ $t('app.allCalendars') }}</span>
       </div>
 
       <FolderTreeItem
-        v-for="folder in topFolders"
+        v-for="folder in store.childFolders(null)"
         :key="folder.id"
         :folder="folder"
-        :selectedId="store.selectedId"
         :on-sort-end="handleSortEnd"
-        @select-calendar="selectCalendar"
-        @select-folder="selectFolder"
-        @delete-folder="deleteFolder"
-        @goto-settings="gotoSettings"
-        @context-menu-folder="(e: MouseEvent, f: Folder) => openMenu(e, folderMenuItems(f))"
-        @context-menu-calendar="(e: MouseEvent, i: CalendarListItem) => openMenu(e, calendarMenuItems(i))"
+        @select="select"
+        @folder-menu="(event, folder) => openMenu(event, folderMenuItems(folder))"
+        @calendar-menu="(event, item) => openMenu(event, calendarMenuItems(item))"
       />
 
-      <div
-        v-for="item in ungrouped"
+      <SidebarCalendarItem
+        v-for="item in store.calendarsIn(null)"
         :key="item.calendar.id"
-        class="sidebar-item flex items-center h-8 gap-2 px-2 py-1 ml-4 rounded cursor-pointer group"
-        :class="{ 'bg-blue-100 dark:bg-blue-900': store.selectedId === item.calendar.id }"
-        data-type="calendar"
-        :data-id="item.calendar.id"
-        @click="selectCalendar(item.calendar.id)"
-        @contextmenu.stop.prevent="selectCalendar(item.calendar.id); openMenu($event, calendarMenuItems(item))"
-      >
-        <span
-          class="w-3 h-3 rounded-full border border-white shadow-sm"
-          :style="{ backgroundColor: calendarColor(item.calendar) }"
-        ></span>
-        <span class="text-sm text-gray-700 truncate flex-1">{{ item.calendar.name }}</span>
-      </div>
+        :item="item"
+        :selected="store.selectedId === item.calendar.id"
+        class="ml-4"
+        @select="select"
+        @context-menu="(event, calendar) => openMenu(event, calendarMenuItems(calendar))"
+      />
     </div>
 
     <ContextMenu
-      v-if="contextMenu.visible"
+      v-if="contextMenu"
       :x="contextMenu.x"
       :y="contextMenu.y"
       :items="contextMenu.items"
-      @close="closeMenu"
+      @close="contextMenu = null"
     />
 
-    <div class="p-3 border-t border-gray-100">
+    <div class="border-t border-line p-3">
       <button
+        type="button"
+        class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700"
         @click="createCalendar"
-        class="w-full py-2 px-3 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"
       >
         {{ $t('app.newCalendar') }}
       </button>
     </div>
 
     <div
-      class="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-200/50 active:bg-blue-300/50 transition-colors"
+      class="absolute bottom-0 right-0 top-0 w-2 cursor-col-resize transition-colors hover:bg-blue-200/50 active:bg-blue-300/50"
       :class="{ 'bg-blue-200/50': isResizing }"
-      @mousedown="startResize"
       aria-hidden="true"
+      @mousedown="startResize"
     ></div>
   </aside>
 </template>
