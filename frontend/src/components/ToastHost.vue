@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { CircleCheck, CircleX, X } from 'lucide-vue-next'
-import { dismissToast, toasts } from '@/services/toast'
+import { Bell, CircleCheck, CircleX, X } from 'lucide-vue-next'
+import { dismissToast, toasts, type ToastTone } from '@/services/toast'
+
+const toneClasses: Record<ToastTone, string> = {
+  success: 'border-green-200 text-green-800',
+  error: 'border-red-200 text-red-800',
+  info: 'border-blue-200 text-blue-800',
+}
 </script>
 
 <template>
@@ -13,10 +19,11 @@ import { dismissToast, toasts } from '@/services/toast'
         v-for="item in toasts"
         :key="item.id"
         class="pointer-events-auto flex w-full items-start gap-3 rounded-lg border bg-surface p-4 shadow-lg"
-        :class="item.tone === 'success' ? 'border-green-200 text-green-800' : 'border-red-200 text-red-800'"
+        :class="toneClasses[item.tone]"
         role="status"
       >
         <CircleCheck v-if="item.tone === 'success'" class="mt-0.5 shrink-0" :size="20" />
+        <Bell v-else-if="item.tone === 'info'" class="mt-0.5 shrink-0" :size="20" />
         <CircleX v-else class="mt-0.5 shrink-0" :size="20" />
         <p class="flex-1 text-sm font-medium">{{ item.message }}</p>
         <button

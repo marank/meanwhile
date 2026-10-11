@@ -2,11 +2,11 @@
 Event and participant endpoints.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from django.db import transaction
 from django.db.models import Q
-from ninja import Query, Router
+from ninja import Query
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -17,21 +17,25 @@ from core.schemas import (
     EventCreate,
     EventOut,
     EventParticipantCreate,
-    EventParticipantInvite,
     EventParticipantOut,
     EventParticipantUpdate,
+    EventRemindersIn,
+    EventRemindersOut,
     EventUpdate,
     OccurrenceOut,
+    OccurrenceScope,
 )
 from core.services.activity import record_activity
 from core.services.bookings import (
-    can_decide_booking,
+    approvers_of,
+    awaiting_resources,
+    booked_resources,
     can_modify_event,
-    find_conflicting_approved_bookings,
-    get_resource_approvers,
-    initial_booking_status,
+    decidable_resources,
+    find_booking_conflicts,
+    is_in_approver_pool,
+    update_booking_status,
 )
-from core.services.ical import serialize_event_ical
 from core.services.notifications import notify
 from core.services.permissions import (
     get_membership,
@@ -39,7 +43,25 @@ from core.services.permissions import (
     has_at_least_role,
     participant_event_ids,
 )
-from core.services.recurrence import expand_events, make_aware, recurrence_count
+from core.services.recurrence import (
+    expand_events,
+    format_exdate,
+    is_series,
+    make_aware,
+    occurrence_index,
+    parse_exdates,
+    recurrence_count,
+)
+from core.services.reminders import reminder_minutes, set_reminders
+from core.services.series import (
+    end_before,
+    is_occurrence,
+    override_for,
+    remap_exceptions,
+    remove_occurrence,
+    snapshot,
+    split,
+)
 
 router = CSRFRouter()
 
@@ -56,19 +78,26 @@ def _serialize_event(event: Event) -> dict:
         "creator_email": event.creator_email,
         "title": event.title,
         "description": event.description,
+        "location": event.location,
+        "location_resource_id": str(event.location_resource_id) if event.location_resource_id else None,
+        "location_resource_name": event.location_resource.name if event.location_resource else None,
         "start": make_aware(event.start),
         "end": make_aware(event.end),
         "all_day": event.all_day,
         "timezone": event.timezone,
         "show_recurrence_count": event.show_recurrence_count,
         "rrule": event.rrule,
+        "rdates": event.rdates or [],
         "uid": event.uid,
+        "parent_id": str(event.parent_id) if event.parent_id else None,
+        "recurrence_id": make_aware(event.recurrence_id) if event.recurrence_id else None,
         "category_id": str(event.category_id) if event.category_id else None,
         "category_name": event.category.name if event.category else None,
         "category_color": event.category.color if event.category else None,
         "resource_id": str(event.resource_id) if event.resource_id else None,
         "resource_name": event.resource.name if event.resource else None,
         "status": event.status,
+        "awaiting_approval": [r.name for r in awaiting_resources(event)],
         "decided_by": str(event.decided_by_id) if event.decided_by_id else None,
         "decided_at": event.decided_at,
         "decision_note": event.decision_note,
@@ -82,22 +111,23 @@ def _calendar_occurrences(user, calendar: Calendar, membership, range_start: dat
     events = Event.objects.filter(
         Q(calendar=calendar),
         Q(start__lt=range_end),
-        Q(rrule__isnull=False) | Q(all_day=True) | Q(end__gt=range_start),
-    ).select_related("calendar", "category", "resource")
+        Q(rrule__isnull=False) | ~Q(rdates=[]) | Q(all_day=True) | Q(end__gt=range_start),
+    ).select_related("calendar", "category", "resource", "location_resource")
 
     hidden = {EventStatus.REJECTED, EventStatus.CANCELLED}
     user_id = str(user.id)
     invited_to = participant_event_ids(user)
-    can_decide_by_resource: dict[str | None, bool] = {}
+    can_decide: dict[tuple, bool] = {}
     out = []
     for event, occ_start, occ_end in expand_events(events, range_start, range_end):
         if event.status in hidden and str(event.creator_id) != user_id:
             continue
         if event.status == EventStatus.PENDING and str(event.creator_id) != user_id and event.id not in invited_to:
             # Pending bookings are only shown to the requester, participants and approvers.
-            if event.resource_id not in can_decide_by_resource:
-                can_decide_by_resource[event.resource_id] = can_decide_booking(calendar, event.resource, user_id)
-            if not can_decide_by_resource[event.resource_id]:
+            key = tuple(sorted(str(i) for i in event.awaiting_approval or []))
+            if key not in can_decide:
+                can_decide[key] = is_in_approver_pool(event, user_id=user_id)
+            if not can_decide[key]:
                 continue
         out.append(OccurrenceOut(
             event_id=str(event.id),
@@ -109,7 +139,7 @@ def _calendar_occurrences(user, calendar: Calendar, membership, range_start: dat
             all_day=event.all_day,
             recurrence_count=(
                 recurrence_count(event, occ_start)
-                if event.show_recurrence_count and event.rrule
+                if event.show_recurrence_count and is_series(event)
                 else None
             ),
             status=event.status,
@@ -118,9 +148,15 @@ def _calendar_occurrences(user, calendar: Calendar, membership, range_start: dat
             category_color=event.category.color if event.category else None,
             resource_id=str(event.resource_id) if event.resource_id else None,
             resource_name=event.resource.name if event.resource else None,
+            location=event.location,
+            location_resource_id=str(event.location_resource_id) if event.location_resource_id else None,
             creator_id=str(event.creator_id),
             can_edit=can_modify_event(event, user_id, membership.role),
-            is_recurring=bool(event.rrule),
+            is_recurring=is_series(event) or bool(event.parent_id),
+            series_id=str(event.parent_id or event.id) if is_series(event) or event.parent_id else None,
+            recurrence_id=(
+                make_aware(event.recurrence_id) if event.parent_id else occ_start if is_series(event) else None
+            ),
         ))
     return out
 
@@ -188,20 +224,16 @@ def create_event(request, calendar_id: str, payload: EventCreate):
         if category is None:
             raise HttpError(404, "Category not found")
 
-    resource = None
-    if payload.resource_id:
-        resource = Resource.objects.filter(
-            id=payload.resource_id, calendar=calendar, is_active=True, archived_at__isnull=True
-        ).first()
-        if resource is None:
-            raise HttpError(404, "Resource not found")
+    resource = _bookable(calendar, payload.resource_id, location=False)
+    location_resource = _bookable(calendar, payload.location_resource_id, location=True)
 
     with transaction.atomic():
-        event = Event.objects.create(
+        event = Event(
             calendar=calendar,
             creator=request.user,
             title=payload.title if payload.title is not None else "",
             description=payload.description,
+            location=location_resource.name if location_resource else (payload.location or ""),
             start=start,
             end=end,
             all_day=payload.all_day,
@@ -210,36 +242,20 @@ def create_event(request, calendar_id: str, payload: EventCreate):
             rrule=payload.rrule,
             category=category,
             resource=resource,
-            uid="",
-            status=initial_booking_status(resource, str(request.user.id)),
+            location_resource=location_resource,
         )
-        if event.status == EventStatus.APPROVED:
-            # Booked by someone who may approve it: the approval step is skipped.
-            event.decided_by = request.user
-            event.decided_at = datetime.now(timezone.utc)
         event.uid = str(event.id)
+        update_booking_status(event, request.user, booked_resources(event))
         event.save()
+        _check_booking_conflicts(event)
 
-        if resource:
-            conflicts = find_conflicting_approved_bookings(resource, event)
-            if conflicts:
-                raise HttpError(
-                    409,
-                    {
-                        "message": "This booking conflicts with an approved booking",
-                        "conflicts": [str(c.id) for c in conflicts],
-                    },
-                )
-
-        event.raw_ical = serialize_event_ical(event)
-        event.save()
         record_activity(event, str(request.user.id), "created")
         if payload.participants:
             for invite in payload.participants:
                 _create_participant(event, request.user, invite)
-        if event.status == EventStatus.PENDING and resource is not None:
+        if event.status == EventStatus.PENDING:
             notify(
-                [str(a.id) for a in get_resource_approvers(resource)] + [str(calendar.owner_id)],
+                [str(a.id) for a in approvers_of(awaiting_resources(event))] + [str(calendar.owner_id)],
                 "approval_requested",
                 str(request.user.id),
                 event.title,
@@ -254,41 +270,86 @@ def create_event(request, calendar_id: str, payload: EventCreate):
 def get_event(request, event_id: str):
     event, _ = get_visible_event(event_id, request.user)
     data = _serialize_event(event)
-    data["can_decide"] = event.status == EventStatus.PENDING and can_decide_booking(
-        event.calendar, event.resource, str(request.user.id)
+    data["can_decide"] = event.status == EventStatus.PENDING and bool(
+        decidable_resources(event, str(request.user.id))
     )
     return EventOut.model_validate(data)
 
 
-@router.patch("/events/{event_id}", response=EventOut, auth=django_auth)
-def update_event(request, event_id: str, payload: EventUpdate):
+def _bookable(calendar: Calendar, resource_id: str | None, location: bool) -> Resource | None:
+    """A resource of the calendar that can be booked now, as location or as resource."""
+    if not resource_id:
+        return None
+    resource = Resource.objects.filter(
+        id=resource_id, calendar=calendar, is_active=True, archived_at__isnull=True, is_location=location
+    ).first()
+    if resource is None:
+        raise HttpError(404, "Location not found" if location else "Resource not found")
+    return resource
+
+
+def _check_booking_conflicts(event: Event) -> None:
+    conflicts = find_booking_conflicts(event)
+    if conflicts:
+        raise HttpError(
+            409,
+            {
+                "message": "This booking conflicts with an approved booking",
+                "conflicts": [str(c.id) for c in conflicts],
+            },
+        )
+
+
+def _modifiable_event(event_id: str, user: User) -> tuple[Event, object]:
     try:
-        event = Event.objects.get(id=event_id)
+        event = Event.objects.select_related("calendar").get(id=event_id)
     except Event.DoesNotExist:
         raise HttpError(404, "Event not found")
-    calendar = event.calendar
-    membership = get_membership(calendar, request.user)
+    membership = get_membership(event.calendar, user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
-    if not can_modify_event(event, str(request.user.id), membership.role):
+    if not can_modify_event(event, str(user.id), membership.role):
         raise HttpError(403, "You do not have permission to edit this event")
-    if calendar.force_all_day and payload.all_day is False:
-        raise HttpError(422, "This calendar only allows all-day events")
+    return event, membership
 
+
+@router.patch("/events/{event_id}", response=EventOut, auth=django_auth)
+def update_event(request, event_id: str, payload: EventUpdate):
+    event, _ = _modifiable_event(event_id, request.user)
+    data = payload.dict(exclude_unset=True)
+    if event.parent_id and data.get("rrule"):
+        raise HttpError(422, "A changed occurrence of a series can't repeat itself")
+    with transaction.atomic():
+        _apply_update(request, event, data)
+    return EventOut.model_validate(_serialize_event(event))
+
+
+def _apply_update(request, event: Event, data: dict) -> None:
+    """Applies the fields in `data` to the event, with the checks and side effects of an edit."""
+    calendar = event.calendar
+    if calendar.force_all_day and data.get("all_day") is False:
+        raise HttpError(422, "This calendar only allows all-day events")
+    if event.parent_id:
+        # A changed occurrence takes its recurrence from the series.
+        data.pop("rrule", None)
+        data.pop("show_recurrence_count", None)
+
+    before = snapshot(event)
     old_status = event.status
     old_values = {
         "title": event.title,
         "description": event.description,
+        "location": event.location,
         "start": make_aware(event.start),
         "end": make_aware(event.end),
         "all_day": event.all_day,
         "rrule": event.rrule,
         "category": event.category_id,
         "resource": event.resource_id,
+        "location_resource": event.location_resource_id,
         "show_recurrence_count": event.show_recurrence_count,
     }
 
-    data = payload.dict(exclude_unset=True)
     start = make_aware(data["start"]) if "start" in data else make_aware(event.start)
     end = make_aware(data["end"]) if "end" in data else make_aware(event.end)
     all_day = data["all_day"] if "all_day" in data else event.all_day
@@ -312,20 +373,27 @@ def update_event(request, event_id: str, payload: EventUpdate):
 
     resource = event.resource
     if "resource_id" in data:
-        if not data["resource_id"]:
-            resource = None
-        else:
-            resource = Resource.objects.filter(
-                id=data["resource_id"], calendar=calendar, is_active=True, archived_at__isnull=True
-            ).first()
-            if resource is None:
-                raise HttpError(404, "Resource not found")
+        resource = _bookable(calendar, data["resource_id"], location=False)
+    location_resource = event.location_resource
+    if "location_resource_id" in data:
+        location_resource = _bookable(calendar, data["location_resource_id"], location=True)
+    elif location_resource and data.get("location") not in (None, location_resource.name):
+        # Another location typed in place of the booked one gives that booking up.
+        location_resource = None
 
     if "title" in data:
         event.title = data["title"] or ""
     if "description" in data:
         event.description = data["description"]
+    if location_resource is not None:
+        event.location = location_resource.name
+    elif "location" in data:
+        event.location = data["location"] or ""
     if "start" in data:
+        if event.rdates and not event.parent_id:
+            # Moving the series moves its extra dates along.
+            delta = start - make_aware(event.start)
+            event.rdates = sorted(format_exdate(d + delta) for d in parse_exdates(event.rdates))
         event.start = start
     if "end" in data:
         event.end = end
@@ -350,93 +418,152 @@ def update_event(request, event_id: str, payload: EventUpdate):
     if rescheduled and data.get("timezone"):
         event.timezone = data["timezone"]
     resource_changed = (resource.id if resource else None) != old_values["resource"]
+    location_changed = (location_resource.id if location_resource else None) != old_values["location_resource"]
+    event.resource = resource
+    event.location_resource = location_resource
 
-    with transaction.atomic():
-        if resource_changed:
-            event.resource_id = resource.id if resource else None
-            event.status = initial_booking_status(resource, str(request.user.id))
-            self_approved = event.status == EventStatus.APPROVED
-            event.decided_by = request.user if self_approved else None
-            event.decided_at = datetime.now(timezone.utc) if self_approved else None
-            event.decision_note = None
-        elif (
-            rescheduled
-            and resource is not None
-            and resource.requires_approval
-            and event.status in {EventStatus.APPROVED, EventStatus.CONFIRMED}
-            # A change made by someone who may approve the booking keeps it approved.
-            and not can_decide_booking(calendar, resource, str(request.user.id))
-        ):
-            event.status = EventStatus.PENDING
-            event.decided_by = None
-            event.decided_at = None
-            event.decision_note = None
+    # New bookings, and all bookings at a new time, need approval again unless the user may
+    # approve them; the others keep their state.
+    recheck = [r for r, changed in ((resource, resource_changed), (location_resource, location_changed)) if r and changed]
+    active = event.status in {EventStatus.APPROVED, EventStatus.CONFIRMED, EventStatus.PENDING}
+    if rescheduled and active:
+        recheck = booked_resources(event)
+    if resource_changed or location_changed or (rescheduled and active):
+        update_booking_status(event, request.user, recheck)
+    _check_booking_conflicts(event)
 
-        if resource:
-            conflicts = find_conflicting_approved_bookings(resource, event)
-            if conflicts:
-                raise HttpError(
-                    409,
-                    {
-                        "message": "This booking conflicts with an approved booking",
-                        "conflicts": [str(c.id) for c in conflicts],
-                    },
-                )
+    changed = []
+    for field, attr in (
+        ("title", "title"),
+        ("description", "description"),
+        ("location", "location"),
+        ("start", "start"),
+        ("end", "end"),
+        ("all_day", "all_day"),
+        ("rrule", "rrule"),
+        ("category", "category_id"),
+        ("resource", "resource_id"),
+        ("location_resource", "location_resource_id"),
+        ("show_recurrence_count", "show_recurrence_count"),
+    ):
+        value = getattr(event, attr)
+        if attr in ("start", "end"):
+            value = make_aware(value)
+        if value != old_values[field]:
+            changed.append(field)
 
-        changed = []
-        for field, attr in (
-            ("title", "title"),
-            ("description", "description"),
-            ("start", "start"),
-            ("end", "end"),
-            ("all_day", "all_day"),
-            ("rrule", "rrule"),
-            ("category", "category_id"),
-            ("resource", "resource_id"),
-            ("show_recurrence_count", "show_recurrence_count"),
-        ):
-            value = getattr(event, attr)
-            if attr in ("start", "end"):
-                value = make_aware(value)
-            if value != old_values[field]:
-                changed.append(field)
-
-        event.raw_ical = serialize_event_ical(event)
+    event.save()
+    if rescheduled and not event.parent_id:
+        remap_exceptions(event, before)
         event.save()
-        status_reset = (
-            event.status == EventStatus.PENDING and old_status != EventStatus.PENDING
+    status_reset = (
+        event.status == EventStatus.PENDING and old_status != EventStatus.PENDING
+    )
+    if changed:
+        details = {"fields": changed}
+        if status_reset:
+            details["status"] = "pending"
+        record_activity(event, str(request.user.id), "updated", details)
+    if status_reset:
+        notify(
+            [str(a.id) for a in approvers_of(awaiting_resources(event))] + [str(calendar.owner_id)],
+            "approval_requested",
+            str(request.user.id),
+            event.title,
+            calendar_id=str(calendar.id),
+            event_id=str(event.id),
         )
-        if changed:
-            details = {"fields": changed}
-            if status_reset:
-                details["status"] = "pending"
-            record_activity(event, str(request.user.id), "updated", details)
-        if status_reset and resource is not None:
-            notify(
-                [str(a.id) for a in get_resource_approvers(resource)] + [str(calendar.owner_id)],
-                "approval_requested",
-                str(request.user.id),
-                event.title,
-                calendar_id=str(calendar.id),
-                event_id=str(event.id),
-            )
-
-    return EventOut.model_validate(_serialize_event(event))
 
 
 @router.delete("/events/{event_id}", auth=django_auth)
 def delete_event(request, event_id: str):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
-    membership = get_membership(event.calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
-    if not can_modify_event(event, str(request.user.id), membership.role):
-        raise HttpError(403, "You do not have permission to delete this event")
-    event.delete()
+    event, _ = _modifiable_event(event_id, request.user)
+    with transaction.atomic():
+        if event.parent_id:
+            # Deleting a changed occurrence removes it from the series instead of restoring it.
+            remove_occurrence(event.parent, event.recurrence_id)
+            record_activity(event.parent, str(request.user.id), "occurrence_deleted", _occurrence_details(event.recurrence_id))
+        else:
+            event.delete()
     return {"ok": True}
+
+
+def _occurrence_details(start: datetime) -> dict:
+    return {"occurrence": make_aware(start).isoformat()}
+
+
+def _series_occurrence(event_id: str, user: User, recurrence_id: datetime) -> Event:
+    series, _ = _modifiable_event(event_id, user)
+    if not is_series(series) or series.parent_id:
+        raise HttpError(422, "This event is not a series")
+    if not is_occurrence(series, recurrence_id):
+        raise HttpError(404, "The series has no occurrence at that time")
+    return series
+
+
+@router.patch("/events/{event_id}/occurrences/{recurrence_id}", response=EventOut, auth=django_auth)
+def update_occurrence(
+    request, event_id: str, recurrence_id: datetime, payload: EventUpdate, scope: OccurrenceScope = "this"
+):
+    """Changes one occurrence of a series ("this"), it and the later ones ("following"), or all.
+
+    `recurrence_id` is the original start of the occurrence; start and end in the payload are
+    the occurrence's new times. Returns the event that was changed.
+    """
+    rid = make_aware(recurrence_id)
+    series = _series_occurrence(event_id, request.user, rid)
+    data = payload.dict(exclude_unset=True)
+    with transaction.atomic():
+        if scope == "this":
+            override = override_for(series, rid)
+            _apply_update(request, override, data)
+            record_activity(series, str(request.user.id), "occurrence_changed", _occurrence_details(rid))
+            return EventOut.model_validate(_serialize_event(override))
+        if scope == "following" and occurrence_index(series, rid) > 0:
+            following = split(series, rid)
+            record_activity(following, str(request.user.id), "created")
+            record_activity(series, str(request.user.id), "series_ended", _occurrence_details(rid))
+            _apply_update(request, following, data)
+            return EventOut.model_validate(_serialize_event(following))
+        # The whole series: the occurrence's new times move the series by as much.
+        occurrence_end = rid + (make_aware(series.end) - make_aware(series.start))
+        if "start" in data:
+            data["start"] = make_aware(series.start) + (make_aware(data["start"]) - rid)
+        if "end" in data:
+            data["end"] = make_aware(series.end) + (make_aware(data["end"]) - occurrence_end)
+        _apply_update(request, series, data)
+        return EventOut.model_validate(_serialize_event(series))
+
+
+@router.delete("/events/{event_id}/occurrences/{recurrence_id}", auth=django_auth)
+def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: OccurrenceScope = "this"):
+    """Removes one occurrence of a series ("this"), it and the later ones ("following"), or all."""
+    rid = make_aware(recurrence_id)
+    series = _series_occurrence(event_id, request.user, rid)
+    with transaction.atomic():
+        if scope == "all" or (scope == "following" and occurrence_index(series, rid) == 0):
+            series.delete()
+        elif scope == "following":
+            end_before(series, rid)
+            record_activity(series, str(request.user.id), "series_ended", _occurrence_details(rid))
+        else:
+            remove_occurrence(series, rid)
+            record_activity(series, str(request.user.id), "occurrence_deleted", _occurrence_details(rid))
+    return {"ok": True}
+
+
+@router.get("/events/{event_id}/reminders", response=EventRemindersOut, auth=django_auth)
+def get_reminders(request, event_id: str):
+    """The current user's own reminders for the event (of a series: for all its occurrences)."""
+    event, _ = get_visible_event(event_id, request.user)
+    return {"minutes": reminder_minutes(event, request.user)}
+
+
+@router.put("/events/{event_id}/reminders", response=EventRemindersOut, auth=django_auth)
+def put_reminders(request, event_id: str, payload: EventRemindersIn):
+    # Everyone who sees an event may be reminded of it, viewers included; it concerns only them.
+    event, _ = get_visible_event(event_id, request.user)
+    return {"minutes": set_reminders(event, request.user, payload.minutes)}
 
 
 # ---------------------------------------------------------------------------

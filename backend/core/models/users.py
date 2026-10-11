@@ -50,6 +50,9 @@ class User(AbstractUser):
         choices=[("auto", "auto"), ("dmy", "dmy"), ("mdy", "mdy"), ("ymd", "ymd")],
         default="auto",
     )
+    # IANA zone of the user's browser, kept current by the app; empty until first seen.
+    # Times that clients send without a zone ("floating") are read in it.
+    timezone = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -10,6 +10,8 @@ const props = withDefaults(
     entity: api.SearchEntity
     calendarId?: string
     allowFreeText?: boolean
+    /** With allowFreeText: typed text is the value right away, as in a plain text field; options stay suggestions. */
+    liveFreeText?: boolean
     freeTextValidator?: (value: string) => boolean
     placeholder?: string
     defaultLimit?: number
@@ -63,7 +65,7 @@ const options = computed<api.SearchResult[]>(() => {
 
 const freeTextValue = computed(() => {
   const value = query.value.trim()
-  if (!props.allowFreeText || !value) return null
+  if (!props.allowFreeText || props.liveFreeText || !value) return null
   if (props.freeTextValidator && !props.freeTextValidator(value)) return null
   const lower = value.toLowerCase()
   if (options.value.some((o) => o.label.toLowerCase() === lower || o.id === value)) return null
@@ -144,6 +146,11 @@ function onInput(event: Event) {
   const value = (event.target as HTMLInputElement).value
   query.value = value
   const trimmed = value.trim()
+  if (props.allowFreeText && props.liveFreeText) {
+    selectedOption.value = null
+    emit('update:modelValue', trimmed || null)
+    emit('select', trimmed || null, null)
+  }
   if (trimmed.length < props.minSearchLength) {
     results.value = []
     close()

@@ -5,28 +5,59 @@ Radicale storage plugin backed by the Django ORM.
 import contextlib
 import errno
 import hashlib
-from datetime import date, datetime, timezone
+from contextvars import ContextVar
+import json
+import re
+from datetime import datetime, timedelta, timezone
 
-import vobject
-from django.db import connection
+from django.db import connection, transaction
+from django.db.models import Max, Prefetch, Q
 from email.utils import format_datetime
 from radicale import item as radicale_item
 from radicale import pathutils, storage
 
-from core.models import Calendar, Event, User
-from core.models.base import EventStatus
-from core.services.bookings import find_conflicting_approved_bookings
+from core.caldav.parsing import parse_series, to_utc
+from core.models import Calendar, Category, DeletedEvent, Event, EventParticipant, EventReminder, User
+from core.models.base import EventStatus, Role
+from core.services.bookings import booked_resources, can_modify_event, find_booking_conflicts
+from core.services.calendars import create_calendar
 from core.services.ical import event_ical_text
-from core.services.recurrence import zone
+from core.services.permissions import accessible_calendars, get_membership, has_at_least_role
+from core.services.activity import record_activity
+from core.services.notifications import notify
+from core.services.recurrence import format_exdate, is_series, make_aware, parse_exdates
+from core.signals import DELETED_EVENT_RETENTION
 
 # CalDAV only knows the calendar, not who is asking, so it shares what everyone may see,
 # like the ICS feed: pending, rejected and cancelled bookings stay out.
 _SHARED_STATUSES = {EventStatus.CONFIRMED, EventStatus.APPROVED}
 
+_SYNC_TOKEN_PREFIX = "http://radicale.org/ns/sync/"
+# Transactions may commit in another order than their timestamps; a sync looks back this far
+# so that a change committed late is still reported.
+_SYNC_OVERLAP = timedelta(seconds=30)
 
-def _forbidden(message: str) -> ValueError:
-    # Radicale answers a ValueError carrying EACCES with 403 Forbidden.
-    return ValueError(f"[Errno {errno.EACCES}] {message}")
+
+# Login of the user the current request runs for; Radicale hands it to Storage.acquire_lock.
+_acting_login: ContextVar[str] = ContextVar("caldav_acting_login", default="")
+
+
+@contextlib.contextmanager
+def acting_as(login: str):
+    token = _acting_login.set(login or "")
+    try:
+        yield
+    finally:
+        _acting_login.reset(token)
+
+
+class Forbidden(ValueError):
+    """A write the acting user may not make; answered with 403 Forbidden."""
+
+
+def _forbidden(message: str) -> Forbidden:
+    # Radicale answers a ValueError carrying EACCES from PUT with 403; core.caldav.app does so for the rest.
+    return Forbidden(f"[Errno {errno.EACCES}] {message}")
 
 
 def _http_datetime(dt: datetime | None) -> str:
@@ -37,69 +68,38 @@ def _http_datetime(dt: datetime | None) -> str:
     return format_datetime(dt)
 
 
-def _to_utc(dt: datetime | date) -> datetime:
-    if isinstance(dt, datetime):
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    return datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+def _hex_color(value: str | None) -> str | None:
+    """"#rrggbb" from a client's color; Apple adds an alpha channel ("#FF2968FF")."""
+    if not value or not re.fullmatch(r"#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?", value.strip()):
+        return None
+    return value.strip()[:7].lower()
 
 
-def _parse_vevent_data(text: str):
-    try:
-        vcal = vobject.readOne(text)
-    except Exception as exc:
-        raise RuntimeError("Failed to parse iCalendar object") from exc
-
-    vevent = vcal
-    if hasattr(vcal, "vevent"):
-        vevent = vcal.vevent
-
-    summary = ""
-    if hasattr(vevent, "summary"):
-        summary = str(vevent.summary.value)
-
-    description = None
-    if hasattr(vevent, "description"):
-        description = str(vevent.description.value)
-
-    dtstart = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
-    dtend = vevent.dtend.value if hasattr(vevent, "dtend") else None
-    if dtend is None and dtstart is not None:
-        dtend = dtstart
-
-    all_day = isinstance(dtstart, date) and not isinstance(dtstart, datetime)
-    start = _to_utc(dtstart) if dtstart else datetime.now(timezone.utc)
-    end = _to_utc(dtend) if dtend else start
-
-    rrule = None
-    if hasattr(vevent, "rrule"):
-        rrule = str(vevent.rrule.value)
-
-    # The zone the client planned the event in, so its recurrences repeat in local time.
-    event_timezone = "UTC"
-    if not all_day and hasattr(vevent, "dtstart"):
-        params = vevent.dtstart.params
-        # vobject moves the TZID parameter aside when it resolves the zone.
-        tzid = (params.get("X-VOBJ-ORIGINAL-TZID") or params.get("TZID") or [None])[0]
-        tzid = tzid or getattr(getattr(dtstart, "tzinfo", None), "zone", None)
-        if tzid and zone(tzid) is not timezone.utc:
-            event_timezone = tzid
-
-    uid = None
-    if hasattr(vevent, "uid"):
-        uid = str(vevent.uid.value)
-
+def _fields(event: Event) -> dict:
+    """What a client changes of an event, to record which of it changed."""
     return {
-        "title": summary,
-        "description": description,
-        "start": start,
-        "end": end,
-        "all_day": all_day,
-        "timezone": event_timezone,
-        "rrule": rrule,
-        "uid": uid,
-    }, text
+        "title": event.title,
+        "description": event.description,
+        "start": make_aware(event.start),
+        "end": make_aware(event.end),
+        "all_day": event.all_day,
+        "rrule": event.rrule,
+        "location": event.location,
+        "category": event.category_id,
+    }
+
+
+def _href(event: Event) -> str:
+    return event.href or f"{event.uid}.ics"
+
+
+def _dav_name(calendar: Calendar) -> str:
+    return calendar.dav_name or calendar.id
+
+
+def calendar_by_dav_name(calendars, name: str) -> Calendar | None:
+    """The calendar a path segment names: the client's name for it, or its id."""
+    return calendars.filter(Q(id=name) | Q(dav_name=name)).first()
 
 
 class Collection(storage.BaseCollection):
@@ -125,17 +125,31 @@ class Collection(storage.BaseCollection):
     def is_principal(self) -> bool:
         return self._is_principal or (bool(self.path) and "/" not in self.path)
 
-    def _etag_text(self) -> str:
-        parts = []
-        for item in self.get_all():
-            parts.append(f"{item.href}/{item.etag}")
-        parts.append(str(self.get_meta()))
-        return "\n".join(parts)
+    def _state(self) -> tuple[int, str]:
+        """When the calendar last changed (in microseconds) and a digest of what clients see of it."""
+        digest = hashlib.sha256(json.dumps(self.get_meta(), sort_keys=True).encode())
+        if self._calendar is None:
+            return 0, digest.hexdigest()
+        # Item content only changes along with updated_at, so hrefs and timestamps identify it.
+        rows = (
+            Event.objects.filter(calendar=self._calendar, parent__isnull=True, status__in=_SHARED_STATUSES)
+            .order_by("id")
+            .values_list("href", "uid", "updated_at")
+        )
+        for href, uid, updated_at in rows:
+            digest.update(f"{href or uid + '.ics'}/{updated_at.isoformat()}\n".encode())
+        latest = [
+            self._calendar.updated_at,
+            # Hidden events count too: a booking that turns hidden must be removed from clients.
+            Event.objects.filter(calendar=self._calendar).aggregate(m=Max("updated_at"))["m"],
+            DeletedEvent.objects.filter(calendar_id=self._calendar.id).aggregate(m=Max("deleted_at"))["m"],
+        ]
+        changed_at = max(to_utc(t) for t in latest if t is not None)
+        return int(changed_at.timestamp() * 1_000_000), digest.hexdigest()
 
     @property
     def etag(self) -> str:
-        data = self._etag_text()
-        return f'"{hashlib.sha256(data.encode()).hexdigest()}"'
+        return f'"{self._state()[1]}"'
 
     def get_meta(self, key: str | None = None):
         meta = {}
@@ -152,6 +166,7 @@ class Collection(storage.BaseCollection):
                 "D:displayname": self._calendar.name,
                 "C:calendar-description": self._calendar.description or "",
                 "C:supported-calendar-component-set": "VEVENT",
+                "ICAL:calendar-color": self._calendar.event_color,
             }
         if key is None:
             return meta
@@ -160,12 +175,21 @@ class Collection(storage.BaseCollection):
     def set_meta(self, props: dict[str, str]) -> None:
         if self._calendar is None:
             return
+        _, role = self._actor()
+        if role != Role.OWNER:
+            # Same rule as the API: only the owner changes calendar details.
+            raise _forbidden("Only the owner can change calendar details")
         name = props.get("D:displayname")
         if name:
             self._calendar.name = name
         description = props.get("C:calendar-description")
         if description is not None:
             self._calendar.description = description
+        color = _hex_color(props.get("ICAL:calendar-color"))
+        if color and color != self._calendar.event_color:
+            # Clients show one color per calendar: the color of its events, in both themes.
+            self._calendar.event_color = color
+            self._calendar.dark_event_color = color
         self._calendar.save()
 
     @property
@@ -175,140 +199,325 @@ class Collection(storage.BaseCollection):
         return _http_datetime(datetime.now(timezone.utc))
 
     def sync(self, old_token: str = ""):
-        token = f"http://radicale.org/ns/sync/{self.etag.strip(chr(34))}"
+        changed_at, digest = self._state()
+        token = f"{_SYNC_TOKEN_PREFIX}{changed_at}-{digest}"
+        if not old_token or self._calendar is None:
+            return token, [item.href for item in self.get_all()]
         if old_token == token:
             return token, []
-        return token, [item.href for item in self.get_all()]
+        # Radicale answers a ValueError with "invalid sync token", and the client syncs everything.
+        try:
+            since_micros = int(old_token.removeprefix(_SYNC_TOKEN_PREFIX).split("-", 1)[0])
+            since = datetime.fromtimestamp(since_micros / 1_000_000, timezone.utc)
+        except (ValueError, OverflowError, OSError) as exc:
+            raise ValueError(f"Unknown sync token {old_token!r}") from exc
+        if since < datetime.now(timezone.utc) - DELETED_EVENT_RETENTION:
+            raise ValueError("Sync token is older than the record of deleted events")
+        since -= _SYNC_OVERLAP
+        # Events no longer shown (deleted, or bookings now pending, rejected or cancelled) are
+        # reported too; Radicale answers them with 404, which tells the client to drop them.
+        changed = {
+            href or f"{uid}.ics"
+            for href, uid in Event.objects.filter(
+                calendar=self._calendar, parent__isnull=True, updated_at__gt=since
+            ).values_list("href", "uid")
+        }
+        changed.update(
+            DeletedEvent.objects.filter(
+                calendar_id=self._calendar.id, deleted_at__gt=since
+            ).values_list("href", flat=True)
+        )
+        return token, sorted(changed)
+
+    def _viewer(self) -> User | None:
+        """The user the request runs for; each user's reminders are written as their alarms."""
+        login = _acting_login.get()
+        if getattr(self, "_viewer_login", None) != login:
+            self._viewer_login = login
+            self._viewer_user = User.objects.filter(email__iexact=login).first() if login else None
+        return self._viewer_user
+
+    def _events(self):
+        """The calendar's series and single events, with what writing them needs."""
+        viewer = self._viewer()
+        return (
+            Event.objects.filter(calendar=self._calendar, parent__isnull=True)
+            .select_related("calendar", "category", "resource", "location_resource", "creator")
+            .prefetch_related(
+                Prefetch("overrides", queryset=Event.objects.select_related("category", "resource", "location_resource")),
+                "participants__user",
+                "overrides__participants__user",
+                Prefetch(
+                    "reminders",
+                    queryset=EventReminder.objects.filter(user=viewer) if viewer else EventReminder.objects.none(),
+                    to_attr="viewer_reminders",
+                ),
+            )
+        )
+
+    def _item(self, event: Event) -> radicale_item.Item:
+        return radicale_item.Item(
+            text=event_ical_text(event, self._viewer()),
+            href=_href(event),
+            last_modified=_http_datetime(event.updated_at),
+            collection=self,
+        )
+
+    def _events_by_href(self, hrefs, shared_only: bool = True) -> dict[str, Event]:
+        # Events created in the app have no href of their own and are found by "{uid}.ics".
+        uids = {h[:-4] for h in hrefs if h.endswith(".ics")}
+        events = self._events().filter(
+            Q(href__in=hrefs) | (Q(href__isnull=True) | Q(href="")) & Q(uid__in=uids),
+        )
+        if shared_only:
+            events = events.filter(status__in=_SHARED_STATUSES)
+        return {_href(e): e for e in events}
 
     def get_all(self):
         if self._calendar is None:
             return []
-        events = Event.objects.filter(calendar=self._calendar, status__in=_SHARED_STATUSES)
+        events = self._events().filter(status__in=_SHARED_STATUSES)
         for event in events:
-            text = event_ical_text(event)
-            href = f"{event.uid}.ics"
-            last_modified = _http_datetime(event.updated_at)
-            yield radicale_item.Item(
-                text=text,
-                href=href,
-                last_modified=last_modified,
-                collection=self,
-            )
+            yield self._item(event)
 
     def get_multi(self, hrefs):
+        # Radicale passes a generator, and the hrefs are read twice below.
+        hrefs = list(hrefs)
         if self._calendar is None:
             for href in hrefs:
                 yield href, None
             return
-        requested = {h.strip("/") for h in hrefs}
-        uid_set = {h[:-4] if h.endswith(".ics") else h for h in requested}
-        events = Event.objects.filter(
-            calendar=self._calendar, uid__in=uid_set, status__in=_SHARED_STATUSES
-        )
-        by_uid = {e.uid: e for e in events}
+        by_href = self._events_by_href(hrefs)
         for href in hrefs:
-            uid = href[:-4] if href.endswith(".ics") else href
-            event = by_uid.get(uid)
-            if event is None:
-                yield href, None
-                continue
-            text = event_ical_text(event)
-            yield href, radicale_item.Item(
-                text=text,
-                href=href,
-                last_modified=_http_datetime(event.updated_at),
-                collection=self,
-            )
+            event = by_href.get(href)
+            yield href, self._item(event) if event is not None else None
+
+    def _actor(self) -> tuple[User, str]:
+        """The user writing to this calendar and their role; writes need at least contributor."""
+        login = _acting_login.get()
+        user = User.objects.filter(email__iexact=login, is_active=True).first() if login else None
+        membership = get_membership(self._calendar, user) if user else None
+        if membership is None or not has_at_least_role(membership, Role.CONTRIBUTOR):
+            raise _forbidden("No write access to this calendar")
+        return user, membership.role
 
     def has_uid(self, uid: str) -> bool:
         if self._calendar is None:
             return False
-        return Event.objects.filter(calendar=self._calendar, uid=uid).exists()
+        return Event.objects.filter(calendar=self._calendar, parent__isnull=True, uid=uid).exists()
 
     def upload(self, href: str, item: radicale_item.Item):
         if self._calendar is None:
             raise RuntimeError("Cannot upload to this collection")
 
-        data, raw_text = _parse_vevent_data(item.serialize())
+        actor, role = self._actor()
+        raw_text = item.serialize()
+        # Times without a zone are meant in the writer's own zone.
+        data, overrides = parse_series(raw_text, actor.timezone or "UTC")
         uid = data["uid"] or (href[:-4] if href.endswith(".ics") else href)
+        if len(uid) > 255 or len(href) > 255:
+            raise ValueError("UID and file name may have at most 255 characters")
+        if self._calendar.force_all_day and not all(c["all_day"] for c in [data, *overrides]):
+            raise _forbidden(f"Calendar {self._calendar.id} only allows all-day events")
 
-        existing = Event.objects.filter(calendar=self._calendar, uid=uid).first()
+        existing = self._events_by_href([href], shared_only=False).get(href)
         if existing is not None and existing.status not in _SHARED_STATUSES:
             # Pending, rejected and cancelled bookings are hidden from CalDAV and can't be changed here.
             raise _forbidden(f"Event {uid} cannot be changed via CalDAV")
+        if existing is not None and not can_modify_event(existing, str(actor.id), role):
+            # Same rule as the API: contributors only change their own events.
+            raise _forbidden(f"Event {uid} may only be changed by its creator or an editor")
 
         old_item = None
-        if existing:
-            rescheduled = (
-                _to_utc(existing.start) != _to_utc(data["start"])
-                or _to_utc(existing.end) != _to_utc(data["end"])
-                or existing.all_day != data["all_day"]
-                or (existing.rrule or None) != (data["rrule"] or None)
-                # Another zone moves the occurrences of a series, not those of a single event.
-                or (bool(data["rrule"]) and existing.timezone != data["timezone"])
-            )
-            resource = existing.resource
-            if rescheduled and resource is not None and resource.requires_approval:
-                # CalDAV doesn't tell who is writing, so it can't decide whether the new time
-                # needs approval again; such bookings are rescheduled in the app.
-                raise _forbidden(f"Booking {uid} must be rescheduled in the app")
-            old_text = event_ical_text(existing)
-            old_item = radicale_item.Item(
-                text=old_text,
-                href=href,
-                last_modified=_http_datetime(existing.updated_at),
-                collection=self,
-            )
-            existing.title = data["title"]
-            existing.description = data["description"]
-            existing.start = data["start"]
-            existing.end = data["end"]
-            existing.all_day = data["all_day"]
-            existing.timezone = data["timezone"]
-            existing.rrule = data["rrule"]
-            existing.raw_ical = raw_text
-            # The booking status is never changed via CalDAV.
-            if rescheduled and resource is not None:
-                if find_conflicting_approved_bookings(resource, existing):
-                    raise ValueError(f"Booking {uid} conflicts with an approved booking")
-            existing.save()
-        else:
-            existing = Event.objects.create(
-                calendar=self._calendar,
-                creator=self._calendar.owner,
-                title=data["title"],
-                description=data["description"],
-                start=data["start"],
-                end=data["end"],
-                all_day=data["all_day"],
-                timezone=data["timezone"],
-                rrule=data["rrule"],
-                uid=uid,
-                raw_ical=raw_text,
-                status=EventStatus.CONFIRMED,
-            )
+        created = existing is None
+        with transaction.atomic():
+            if existing:
+                rdates = sorted(format_exdate(d) for d in data["rdates"])
+                rescheduled = (
+                    to_utc(existing.start) != to_utc(data["start"])
+                    or to_utc(existing.end) != to_utc(data["end"])
+                    or existing.all_day != data["all_day"]
+                    or (existing.rrule or None) != (data["rrule"] or None)
+                    or (existing.rdates or []) != rdates
+                    # Another zone moves the occurrences of a series, not those of a single event.
+                    or (bool(data["rrule"]) and existing.timezone != data["timezone"])
+                )
+                booked = booked_resources(existing)
+                if rescheduled and any(r.requires_approval for r in booked):
+                    # A new time may need approval again, which would hide the booking from the client
+                    # that just wrote it; such bookings are rescheduled in the app.
+                    raise _forbidden(f"Booking {uid} must be rescheduled in the app")
+                old_item = self._item(existing)
+                before = _fields(existing)
+                self._apply(existing, data)
+                existing.raw_ical = raw_text
+                # The booking status is never changed via CalDAV.
+                if rescheduled and booked:
+                    if find_booking_conflicts(existing):
+                        raise ValueError(f"Booking {uid} conflicts with an approved booking")
+            else:
+                existing = Event(
+                    calendar=self._calendar,
+                    creator=actor,
+                    uid=uid,
+                    href=href,
+                    raw_ical=raw_text,
+                    status=EventStatus.CONFIRMED,
+                )
+                self._apply(existing, data)
+            removed, changed = self._store_exceptions(existing, data, overrides, actor)
+            self._store_participants(existing, data, actor)
+            self._store_reminders(existing, actor, data["alarms"])
 
-        return radicale_item.Item(
-            text=raw_text,
-            href=href,
-            last_modified=_http_datetime(existing.updated_at),
-            collection=self,
-        ), old_item
+            if created:
+                record_activity(existing, str(actor.id), "created")
+            else:
+                fields = [name for name, value in _fields(existing).items() if before[name] != value]
+                if fields:
+                    record_activity(existing, str(actor.id), "updated", {"fields": fields})
+                for kind, starts in (("occurrence_deleted", removed), ("occurrence_changed", changed)):
+                    for start in sorted(starts):
+                        record_activity(existing, str(actor.id), kind, {"occurrence": start.isoformat()})
+
+        return self._item(Event.objects.get(pk=existing.pk)), old_item
+
+    def _category(self, names: list[str]) -> Category | None:
+        """The calendar's category among the client's CATEGORIES, if one of them is."""
+        wanted = [n.lower() for n in names]
+        by_name = {c.name.lower(): c for c in self._calendar.categories.all()}
+        return next((by_name[n] for n in wanted if n in by_name), None)
+
+    def _apply(self, event: Event, data: dict) -> None:
+        event.title = data["title"]
+        event.description = data["description"]
+        event.start = data["start"]
+        event.end = data["end"]
+        event.all_day = data["all_day"]
+        event.timezone = data["timezone"]
+        event.category = self._category(data["categories"])
+        # A booked location is changed in the app only; otherwise the client's location is the event's.
+        if event.location_resource_id is None:
+            event.location = data["location"]
+        if not event.parent_id:
+            event.rrule = data["rrule"]
+            event.rdates = sorted(format_exdate(d) for d in data["rdates"])
+
+    def _store_exceptions(self, series: Event, data: dict, overrides: list[dict], actor: User):
+        """Saves the series with the removed and changed occurrences the client sent.
+
+        Returns the starts of the occurrences that were newly removed and those changed.
+        """
+        current = {make_aware(o.recurrence_id): o for o in series.overrides.all()} if series.pk else {}
+        old_exdates = parse_exdates(series.exdates)
+        # Changes others may not see (e.g. a pending booking) are served as removed occurrences;
+        # they come back as EXDATE and stay as they are.
+        hidden = {rid for rid, o in current.items() if o.status not in _SHARED_STATUSES}
+        exdates = data["exdates"] - hidden if is_series(series) else set()
+        series.exdates = sorted(format_exdate(d) for d in exdates)
+        series.save()
+
+        incoming = {o["recurrence_id"]: o for o in overrides if o["recurrence_id"] not in hidden}
+        for rid, override in current.items():
+            if rid not in incoming and rid not in hidden:
+                override.delete()
+
+        booked = booked_resources(series)
+        duration = make_aware(series.end) - make_aware(series.start)
+        changed = set()
+        for rid, override_data in incoming.items():
+            override = current.get(rid)
+            before = (
+                (make_aware(override.start), make_aware(override.end), override.all_day)
+                if override
+                else (rid, rid + duration, series.all_day)
+            )
+            moved = before != (override_data["start"], override_data["end"], override_data["all_day"])
+            if moved and any(r.requires_approval for r in booked):
+                raise _forbidden(f"Booking {series.uid} must be rescheduled in the app")
+            if override is None:
+                override = Event(
+                    calendar=series.calendar,
+                    creator=actor,
+                    parent=series,
+                    recurrence_id=rid,
+                    uid=series.uid,
+                    status=series.status,
+                    resource=series.resource,
+                    location_resource=series.location_resource,
+                    awaiting_approval=list(series.awaiting_approval or []),
+                )
+                old_fields = None
+            else:
+                old_fields = _fields(override)
+            self._apply(override, override_data)
+            if moved and booked and find_booking_conflicts(override):
+                raise ValueError(f"Booking {series.uid} conflicts with an approved booking")
+            override.save()
+            self._store_participants(override, override_data, actor)
+            if old_fields != _fields(override):
+                changed.add(rid)
+        return exdates - old_exdates, changed
+
+    def _store_participants(self, event: Event, data: dict, actor: User) -> None:
+        """Makes the event's participants those the client lists as attendees."""
+        organizer = data["organizer"] or event.creator.email.lower()
+        wanted = {email: status for email, status in data["attendees"] if email and email != organizer}
+        current = {p.email.lower(): p for p in event.participants.all()}
+        for email, participant in current.items():
+            if email not in wanted:
+                participant.delete()
+        for email, status in wanted.items():
+            participant = current.get(email)
+            if participant is not None:
+                if participant.status != status:
+                    participant.status = status
+                    participant.save()
+                continue
+            user = User.objects.filter(email__iexact=email).first()
+            EventParticipant.objects.create(event=event, user=user, email=email, status=status)
+            if user is not None:
+                notify(
+                    [str(user.id)],
+                    "participant_added",
+                    str(actor.id),
+                    event.title or "Untitled event",
+                    calendar_id=str(event.calendar_id),
+                    event_id=str(event.id),
+                    data={"email": email},
+                )
+
+    def _store_reminders(self, series: Event, actor: User, minutes: list[int] | None) -> None:
+        """The writer's reminders are the alarms the client sent; others' reminders stay as they are."""
+        EventReminder.objects.filter(event=series, user=actor).exclude(minutes_before__in=minutes or []).delete()
+        for before in minutes or []:
+            EventReminder.objects.get_or_create(event=series, user=actor, minutes_before=before)
 
     def delete(self, href: str | None = None) -> None:
         if self._calendar is None:
-            return
+            raise _forbidden("Only events and calendars can be deleted")
         if href is None:
+            # The whole calendar: same rule as the API, only its owner deletes it.
+            _, role = self._actor()
+            if role != Role.OWNER:
+                raise _forbidden("Only the owner can delete this calendar")
+            self._calendar.delete()
             return
-        uid = href[:-4] if href.endswith(".ics") else href
         # Hidden bookings (pending, rejected, cancelled) can't be deleted via CalDAV either.
-        Event.objects.filter(calendar=self._calendar, uid=uid, status__in=_SHARED_STATUSES).delete()
+        event = self._events_by_href([href]).get(href)
+        if event is None:
+            return
+        actor, role = self._actor()
+        if not can_modify_event(event, str(actor.id), role):
+            raise _forbidden(f"Event {href} may only be deleted by its creator or an editor")
+        event.delete()
 
 
 class Storage(storage.BaseStorage):
     @contextlib.contextmanager
     def acquire_lock(self, mode: str, user: str = "", *args, **kwargs):
-        yield
+        # The database does the locking; this only remembers who the request runs for.
+        with acting_as(user):
+            yield
 
     def _user_by_email(self, email: str) -> User | None:
         return User.objects.filter(email__iexact=email).first()
@@ -323,11 +532,12 @@ class Storage(storage.BaseStorage):
                 return None
             return Collection(self.configuration, path, user=user, is_principal=True)
         if len(parts) == 2:
-            owner_email, calendar_id = parts[0], parts[1]
-            owner = self._user_by_email(owner_email)
-            if owner is None:
+            # Calendars are served under their owner and under every user who has access to them,
+            # so each user's calendar home lists the calendars shared with them, too.
+            user = self._user_by_email(parts[0])
+            if user is None:
                 return None
-            calendar = Calendar.objects.filter(id=calendar_id, owner=owner).first()
+            calendar = calendar_by_dav_name(accessible_calendars(user), parts[1])
             if calendar is None:
                 return None
             return Collection(self.configuration, path, calendar=calendar)
@@ -356,11 +566,10 @@ class Storage(storage.BaseStorage):
                 if coll is not None:
                     yield coll
                 if depth != "0" and coll is not None and coll.is_principal:
-                    calendars = Calendar.objects.filter(owner=coll._user)
-                    for calendar in calendars:
+                    for calendar in accessible_calendars(coll._user).order_by("name"):
                         yield Collection(
                             self.configuration,
-                            f"/{coll._user.email}/{calendar.id}",
+                            f"/{coll._user.email}/{_dav_name(calendar)}",
                             calendar=calendar,
                         )
                 return
@@ -386,10 +595,73 @@ class Storage(storage.BaseStorage):
             connection.close()
 
     def create_collection(self, href: str, items=None, props=None):
-        raise RuntimeError("CalDAV calendar creation is disabled")
+        """Creates a calendar for a client (MKCALENDAR, or MKCOL from the Radicale web interface)."""
+        parts = [p for p in pathutils.strip_path(href).split("/") if p]
+        if len(parts) == 1:
+            # Radicale asks for a principal on first login; every user already has one.
+            return self._collection_from_path(href)
+        props = props or {}
+        if len(parts) != 2 or props.get("tag") != "VCALENDAR":
+            raise _forbidden("Only calendars can be created, directly in the calendar home")
+        if items is not None:
+            raise _forbidden("Calendars can't be uploaded as a whole; create one and add its events")
+        components = props.get("C:supported-calendar-component-set")
+        if components and "VEVENT" not in components.split(","):
+            # e.g. a task list (VTODO) from a reminders app
+            raise _forbidden("Calendars hold events only")
+        owner = User.objects.filter(email__iexact=_acting_login.get(), is_active=True).first()
+        if owner is None or owner.email.lower() != parts[0].lower():
+            raise _forbidden("Calendars are created in your own calendar home only")
+        if Calendar.objects.filter(dav_name=parts[1]).exists():
+            raise pathutils.CollidingPathError(href)
+        calendar = create_calendar(
+            owner,
+            name=props.get("D:displayname") or parts[1],
+            description=props.get("C:calendar-description") or None,
+            dav_name=parts[1],
+        )
+        return Collection(self.configuration, href, calendar=calendar)
 
     def move(self, item, to_collection, to_href: str) -> None:
-        raise NotImplementedError
+        """Renames an event or moves it to another calendar, e.g. when a client changes its calendar."""
+        source = item.collection
+        target = to_collection._calendar
+        event = source._events_by_href([item.href]).get(item.href)
+        if event is None or target is None:
+            raise ValueError(f"Cannot move {item.href}")
+        actor, role = source._actor()
+        if not can_modify_event(event, str(actor.id), role):
+            raise _forbidden(f"Event {item.href} may only be moved by its creator or an editor")
+        _, target_role = to_collection._actor()
+
+        moving = target.id != event.calendar_id
+        if moving:
+            if booked_resources(event) or event.overrides.filter(
+                Q(resource__isnull=False) | Q(location_resource__isnull=False)
+            ).exists():
+                # Resources belong to their calendar, and so do the bookings of them.
+                raise _forbidden("Bookings can't be moved to another calendar")
+            if target.force_all_day and (event.all_day is False or event.overrides.filter(all_day=False).exists()):
+                raise _forbidden(f"Calendar {target.id} only allows all-day events")
+
+        old_calendar_id, old_href = event.calendar_id, _href(event)
+        with transaction.atomic():
+            replaced = to_collection._events_by_href([to_href], shared_only=False).get(to_href)
+            if replaced is not None and replaced.pk != event.pk:
+                # Radicale only gets here with "Overwrite: T".
+                if not can_modify_event(replaced, str(actor.id), target_role):
+                    raise _forbidden(f"Event {to_href} may only be replaced by its creator or an editor")
+                replaced.delete()
+            if moving:
+                event.calendar = target
+                # Categories belong to their calendar.
+                event.category = None
+                event.overrides.update(calendar=target, category=None)
+            event.href = to_href
+            event.save()
+            if moving or old_href != to_href:
+                # Clients syncing the old place learn that the event is gone from there.
+                DeletedEvent.objects.create(calendar_id=old_calendar_id, href=old_href)
 
     def verify(self) -> bool:
         return True

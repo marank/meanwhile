@@ -4,7 +4,6 @@ import { Plus } from 'lucide-vue-next'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import * as api from '@/api'
 import { useAction } from '@/composables/useAction'
-import { useLoader } from '@/composables/useLoader'
 import { participantStatusLabel, participantStatuses } from '@/services/labels'
 
 /** A participant of an event that hasn't been saved yet; sent along when the event is created. */
@@ -30,14 +29,15 @@ const props = defineProps<{
 }>()
 
 const pending = defineModel<PendingParticipant[]>('pending', { required: true })
+/** The saved participants of an existing event, loaded by the dialog; null while loading. */
+const participants = defineModel<api.EventParticipant[] | null>('participants', { default: null })
 
 const { busy, run } = useAction()
-const participants = ref<api.EventParticipant[]>([])
 const inputValue = ref<string | null>(null)
 const selectedUser = ref<api.SearchResult | null>(null)
 
 const items = computed<ParticipantItem[]>(() => [
-  ...participants.value.map((participant) => ({
+  ...(participants.value ?? []).map((participant) => ({
     key: participant.id,
     email: participant.email,
     display_name: participant.display_name,
@@ -63,8 +63,8 @@ const groups = computed(() =>
 
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
-// New events have no saved participants to load.
-const { loading } = useLoader(load, { immediate: !!props.eventId })
+// New events have no saved participants to wait for.
+const loading = computed(() => !!props.eventId && participants.value === null)
 
 async function load() {
   if (props.eventId) participants.value = await api.listEventParticipants(props.eventId)

@@ -2,7 +2,6 @@
 Global search endpoint.
 """
 
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -33,14 +32,15 @@ def search(
         return search_users(q, limit)
     if entity == "groups":
         return search_groups(q, limit)
-    if entity in {"resources", "categories", "members"}:
+    if entity in {"resources", "locations", "categories", "members"}:
         if calendar_id is None:
             raise HttpError(422, "calendar_id is required for this entity")
         calendar = Calendar.objects.get(id=calendar_id)
         if get_membership(calendar, request.user) is None and not calendar.is_public:
             raise HttpError(403, "Not a member of this calendar")
-        if entity == "resources":
-            return search_resources(calendar_id, q, limit)
+        if entity in {"resources", "locations"}:
+            # "locations": the resources offered in an event's location field; "resources" the others.
+            return search_resources(calendar_id, q, limit, locations=entity == "locations")
         if entity == "members":
             return search_calendar_members(calendar_id, q, limit)
         return search_categories(calendar_id, q, limit)

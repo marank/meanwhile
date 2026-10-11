@@ -28,6 +28,7 @@ def http_error(request, exc: HttpError):
 from core.views import (  # noqa: E402
     admin,
     approvals,
+    availability,
     calendars,
     categories,
     comments,
@@ -56,3 +57,4 @@ api.add_router("", events.router)
 api.add_router("", comments.router)
 api.add_router("", notifications.router)
 api.add_router("", approvals.router)
+api.add_router("", availability.router)

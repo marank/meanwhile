@@ -2,7 +2,6 @@
 Sidebar reorder endpoint (folders + calendar memberships).
 """
 
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 

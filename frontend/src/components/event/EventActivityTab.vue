@@ -48,6 +48,11 @@ const { loading } = useLoader(async () => {
   ])
 })
 
+function occurrenceDate(entry: api.EventActivity): string {
+  const occurrence = entry.details?.occurrence
+  return occurrence ? formatDateTime(occurrence) : ''
+}
+
 function activityText(entry: api.EventActivity): string {
   const name = entry.actor_name || t('app.someone')
   const fields = (entry.details?.fields || []).map((field) => t(`activity.field.${field}`)).join(', ')
@@ -65,6 +70,12 @@ function activityText(entry: api.EventActivity): string {
       return note ? t('activity.rejectedWithNote', { name, note }) : t('activity.rejected', { name })
     case 'cancelled':
       return t('activity.cancelled', { name })
+    case 'occurrence_changed':
+      return t('activity.occurrenceChanged', { name, date: occurrenceDate(entry) })
+    case 'occurrence_deleted':
+      return t('activity.occurrenceDeleted', { name, date: occurrenceDate(entry) })
+    case 'series_ended':
+      return t('activity.seriesEnded', { name, date: occurrenceDate(entry) })
     default:
       return entry.action
   }

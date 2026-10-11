@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Calendar, Check, Mail, X } from 'lucide-vue-next'
+import { Bell, Calendar, Check, Mail, X } from 'lucide-vue-next'
 import EventModal from '@/components/event/EventModal.vue'
 import IconButton from '@/components/IconButton.vue'
 import TabBar from '@/components/TabBar.vue'
@@ -118,6 +118,7 @@ async function respondToInvitation(notification: AppNotification, status: api.Pa
         <div class="shrink-0 mt-0.5">
           <Check v-if="n.type === 'approval_requested'" :size="20" class="text-blue-600" />
           <Mail v-else-if="isInvitation(n)" :size="20" class="text-green-600" />
+          <Bell v-else-if="n.type === 'event_reminder'" :size="20" class="text-blue-600" />
           <Calendar v-else :size="20" class="text-gray-500" />
         </div>
         <div class="min-w-0 flex-1">

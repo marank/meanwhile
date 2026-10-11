@@ -34,6 +34,18 @@ function ok() {
   >
     <p class="text-gray-700">{{ dialog.message }}</p>
 
+    <div v-if="dialog.kind === 'choice'" class="mt-4 flex flex-col gap-2">
+      <button
+        v-for="choice in dialog.choices"
+        :key="choice.value"
+        type="button"
+        class="rounded-lg border border-line px-4 py-2 text-left hover:bg-hover"
+        @click="submitDialog(choice.value)"
+      >
+        {{ choice.label }}
+      </button>
+    </div>
+
     <div v-if="dialog.kind === 'prompt'" class="mt-4">
       <input
         ref="inputRef"
@@ -52,9 +64,14 @@ function ok() {
           class="px-4 py-2 rounded-lg border border-line hover:bg-hover"
           @click="cancel"
         >
-          {{ dialog.kind === 'prompt' ? $t('app.cancel') : $t('app.no') }}
+          {{ dialog.kind === 'confirm' ? $t('app.no') : $t('app.cancel') }}
         </button>
-        <button type="button" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" @click="ok">
+        <button
+          v-if="dialog.kind !== 'choice'"
+          type="button"
+          class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          @click="ok"
+        >
           {{ dialog.kind === 'confirm' ? $t('app.yes') : $t('app.ok') }}
         </button>
       </div>

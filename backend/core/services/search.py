@@ -56,13 +56,16 @@ def search_groups(q: str, limit: int = MAX_LIMIT):
     ]
 
 
-def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT):
+def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT, locations: bool = False):
+    """Bookable resources: places for an event's location field, or the others for its resource field."""
     # Only offer resources that can be booked: active and not archived (deleted).
-    query = Resource.objects.filter(calendar_id=calendar_id, is_active=True, archived_at__isnull=True)
+    query = Resource.objects.filter(
+        calendar_id=calendar_id, is_active=True, archived_at__isnull=True, is_location=locations
+    )
     if q.strip():
         query = query.filter(name__icontains=q.strip())
     resources = query.order_by("name").values(
-        "id", "name", "description", "requires_approval", "color"
+        "id", "name", "description", "requires_approval", "color", "is_location"
     )[:limit]
     return [
         {
@@ -70,7 +73,7 @@ def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT):
             "type": "resource",
             "label": r["name"],
             "subtitle": r["description"],
-            "meta": {"requires_approval": r["requires_approval"], "color": r["color"]},
+            "meta": {"requires_approval": r["requires_approval"], "color": r["color"], "is_location": r["is_location"]},
         }
         for r in resources
     ]

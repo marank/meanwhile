@@ -2,7 +2,6 @@
 Common view helpers.
 """
 
-from django.shortcuts import get_object_or_404
 from ninja.errors import HttpError
 
 

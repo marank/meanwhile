@@ -4,8 +4,6 @@ Calendar, membership, feed and group-link endpoints.
 
 import secrets
 
-from django.db import transaction
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -18,10 +16,9 @@ from core.models import (
     Folder,
     User,
     UserGroup,
-    get_or_create_app_settings,
 )
 from core.models.base import Role
-from core.models.calendar_colors import COLOR_FIELDS, DEFAULT_COLORS
+from core.models.calendar_colors import COLOR_FIELDS
 from core.schemas import (
     ApproverCreate,
     CalendarCreate,
@@ -38,11 +35,11 @@ from core.schemas import (
     FeedUrlOut,
     MyMembershipOut,
 )
+from core.services.calendars import create_calendar as create_calendar_for
 from core.services.notifications import notify
 from core.services.permissions import (
     get_direct_membership,
     get_membership,
-    has_at_least_role,
     is_owner,
     role_weight,
 )
@@ -122,34 +119,17 @@ def list_calendars(request):
 
 @router.post("/calendars", response=CalendarOut, auth=django_auth)
 def create_calendar(request, payload: CalendarCreate):
-    user = request.user
-    app_settings = get_or_create_app_settings()
-    defaults = {
-        "first_weekday": payload.first_weekday if payload.first_weekday is not None else app_settings.default_first_weekday,
-        "show_weekends": payload.show_weekends if payload.show_weekends is not None else app_settings.default_show_weekends,
-        "weekend_days": sorted(set(payload.weekend_days)) if payload.weekend_days is not None else app_settings.default_weekend_days,
-        "show_week_numbers": payload.show_week_numbers if payload.show_week_numbers is not None else app_settings.default_show_week_numbers,
-    }
-    calendar = Calendar.objects.create(
+    return create_calendar_for(
+        request.user,
         name=payload.name,
         description=payload.description,
         force_all_day=payload.force_all_day,
-        first_weekday=defaults["first_weekday"],
-        show_weekends=defaults["show_weekends"],
-        weekend_days=defaults["weekend_days"],
-        show_week_numbers=defaults["show_week_numbers"],
-        **{field: getattr(payload, field) or DEFAULT_COLORS[field] for field in COLOR_FIELDS},
-        owner=user,
-        feed_token=secrets.token_urlsafe(32),
+        first_weekday=payload.first_weekday,
+        show_weekends=payload.show_weekends,
+        weekend_days=payload.weekend_days,
+        show_week_numbers=payload.show_week_numbers,
+        colors={field: getattr(payload, field) for field in COLOR_FIELDS},
     )
-    CalendarMember.objects.create(
-        calendar=calendar,
-        user=user,
-        role=Role.OWNER,
-        folder_id=None,
-        position=0,
-    )
-    return calendar
 
 
 @router.get("/calendars/{calendar_id}", response=CalendarOut, auth=django_auth)

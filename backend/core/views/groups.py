@@ -3,7 +3,6 @@ User group endpoints.
 """
 
 from django.db.models import Count
-from ninja import Router
 from ninja.security import django_auth
 
 from core.api import CSRFRouter

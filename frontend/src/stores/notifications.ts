@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api'
+import { dueReminderText } from '@/services/reminders'
+import { toast } from '@/services/toast'
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -12,6 +14,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
   let loadVersion = 0
   let timer: number | undefined
 
+  /** Reminders that just came due also pop up, wherever one is in the app. */
+  function showReminders(reminders: api.DueReminder[] | undefined) {
+    for (const reminder of reminders ?? []) toast.info(dueReminderText(reminder))
+  }
+
   /** Loads the current tab; when loads overlap (fast tab switches), only the latest one is applied. */
   async function load() {
     const version = ++loadVersion
@@ -20,6 +27,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
       api.getOpenNotificationCounts(),
       api.getUnreadCount(),
     ])
+    // Each reminder is handed out once, so it pops up even if a newer load wins.
+    showReminders(unread.reminders)
     if (version !== loadVersion) return
     items.value = list
     openCounts.value = counts
@@ -33,7 +42,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   async function refreshCount() {
     try {
-      unreadCount.value = (await api.getUnreadCount()).count
+      const { count, reminders } = await api.getUnreadCount()
+      unreadCount.value = count
+      showReminders(reminders)
     } catch {
       // ignore transient errors
     }

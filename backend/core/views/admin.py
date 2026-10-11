@@ -3,15 +3,13 @@ Admin endpoints for users and global settings.
 """
 
 import secrets
-from typing import Optional
 
 from django.db.models import Prefetch
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from core.api import CSRFRouter
-from core.models import AppSettings, User, UserGroup, get_or_create_app_settings
+from core.models import User, UserGroup, get_or_create_app_settings
 from core.schemas import (
     AdminPasswordResetOut,
     AdminUserCreate,

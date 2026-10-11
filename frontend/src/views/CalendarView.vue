@@ -30,6 +30,7 @@ import { useThemeStore } from '@/stores/theme'
 import { overviewPalette, paletteColors, themeColors } from '@/services/calendarColors'
 import { contrastColor } from '@/services/color'
 import { alert } from '@/services/dialog'
+import { chooseScope, type OccurrenceRef } from '@/services/occurrences'
 import { browserTimeZone, hour12, toDateInputValue } from '@/services/datetime'
 import { bookingErrorMessage } from '@/services/errors'
 import { useLoader } from '@/composables/useLoader'
@@ -74,7 +75,7 @@ function eventLabel(occ: Occurrence): string {
   } else if (occ.status === 'pending') {
     title = `${title} (${t('event.pending')})`
   }
-  return occ.resource_name ? `${title} · ${occ.resource_name}` : title
+  return [title, occ.location, occ.resource_name].filter(Boolean).join(' · ')
 }
 
 function renderEventContent(info: EventDisplayInfo) {
@@ -124,11 +125,11 @@ const fcEvents = computed(() =>
       start: occ.start,
       end: occ.end,
       allDay: occ.all_day,
-      startEditable: occ.can_edit && !occ.is_recurring,
-      durationEditable: occ.can_edit && !occ.is_recurring,
+      startEditable: occ.can_edit,
+      durationEditable: occ.can_edit,
       color,
       contrastColor: contrastColor(color),
-      extendedProps: { eventId: occ.event_id, categoryColor: occ.category_color, status: occ.status },
+      extendedProps: { occurrence: occ, categoryColor: occ.category_color, status: occ.status },
     }
   }),
 )
@@ -163,6 +164,7 @@ function reloadVisibleRange(force = false) {
 
 const showModal = ref(false)
 const modalEventId = ref<string | null>(null)
+const modalOccurrence = ref<OccurrenceRef | null>(null)
 const modalDate = ref<Date>(new Date())
 const modalEndDate = ref<Date | undefined>(undefined)
 const modalAllDay = ref<boolean | undefined>(undefined)
@@ -177,14 +179,22 @@ function openCreateModal(start: Date, end?: Date, allDay?: boolean) {
   showModal.value = true
 }
 
-function openEditModal(eventId: string) {
-  modalEventId.value = eventId
+/** An occurrence of a series (not a changed one, which is an event of its own). */
+function seriesOccurrence(occ: Occurrence): OccurrenceRef | null {
+  if (!occ.series_id || occ.series_id !== occ.event_id || !occ.recurrence_id) return null
+  return { recurrenceId: occ.recurrence_id, start: occ.start, end: occ.end }
+}
+
+function openEditModal(occ: Occurrence) {
+  modalEventId.value = occ.event_id
+  modalOccurrence.value = seriesOccurrence(occ)
   showModal.value = true
 }
 
 function closeModal() {
   showModal.value = false
   modalEventId.value = null
+  modalOccurrence.value = null
   modalEndDate.value = undefined
   modalAllDay.value = undefined
 }
@@ -265,13 +275,20 @@ async function handleEventChange(info: EventDropInfo | EventResizeDoneInfo) {
     start = event.start.toISOString()
     end = (event.end ?? new Date(event.start.getTime() + HOUR_MS)).toISOString()
   }
+  const data = { start, end, all_day: event.allDay, timezone: browserTimeZone() }
+  const occ = event.extendedProps.occurrence as Occurrence
+  const occurrence = seriesOccurrence(occ)
   try {
-    await api.updateEvent(event.extendedProps.eventId as string, {
-      start,
-      end,
-      all_day: event.allDay,
-      timezone: browserTimeZone(),
-    })
+    if (occurrence) {
+      const scope = await chooseScope('edit')
+      if (!scope) {
+        info.revert()
+        return
+      }
+      await api.updateOccurrence(occ.event_id, occurrence.recurrenceId, scope, data)
+    } else {
+      await api.updateEvent(occ.event_id, data)
+    }
     reloadVisibleRange(true)
   } catch (error) {
     info.revert()
@@ -327,7 +344,7 @@ const calendarOptions = computed(() => ({
     const end = info.allDay ? new Date(info.end.getTime() - DAY_MS) : info.end
     openCreateModal(info.start, end, info.allDay)
   },
-  eventClick: (info: EventClickInfo) => openEditModal(info.event.extendedProps.eventId as string),
+  eventClick: (info: EventClickInfo) => openEditModal(info.event.extendedProps.occurrence as Occurrence),
   eventContent: renderEventContent,
   events: fcEvents.value,
   dayMaxEvents: true,
@@ -354,6 +371,7 @@ const calendarOptions = computed(() => ({
       v-if="showModal"
       :calendar-id="calendarStore.selectedCalendar?.id"
       :event-id="modalEventId"
+      :occurrence="modalOccurrence"
       :default-start="modalDate"
       :default-end="modalEndDate"
       :default-all-day="modalAllDay"

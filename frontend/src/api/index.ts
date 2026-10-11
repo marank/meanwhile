@@ -31,7 +31,10 @@ import type {
   Folder,
   GrantableRole,
   NotificationGroup,
+  DueReminder,
+  Availability,
   Occurrence,
+  OccurrenceScope,
   OverviewSettings,
   ProfileUpdate,
   Resource,
@@ -214,6 +217,41 @@ export const updateEvent = (eventId: string, data: Partial<EventInput>) =>
 
 export const deleteEvent = (eventId: string) => api<void>(`/api/events/${eventId}`, { method: 'DELETE' })
 
+const occurrencePath = (seriesId: string, recurrenceId: string, scope: OccurrenceScope) =>
+  `/api/events/${seriesId}/occurrences/${encodeURIComponent(recurrenceId)}?scope=${scope}`
+
+/** Changes one occurrence of a series, it and the later ones, or all; start and end are the occurrence's. */
+export const updateOccurrence = (
+  seriesId: string,
+  recurrenceId: string,
+  scope: OccurrenceScope,
+  data: Partial<EventInput>,
+) => api<Event>(occurrencePath(seriesId, recurrenceId, scope), { method: 'PATCH', body: data })
+
+/** When the users and resources are taken in [start, end); `excludeEventId` doesn't count. */
+export const getAvailability = (
+  start: string,
+  end: string,
+  userIds: string[],
+  resourceIds: string[],
+  excludeEventId?: string | null,
+) => {
+  const params = new URLSearchParams({ start, end })
+  for (const id of userIds) params.append('user_ids', id)
+  for (const id of resourceIds) params.append('resource_ids', id)
+  if (excludeEventId) params.set('exclude_event_id', excludeEventId)
+  return api<Availability>(`/api/availability?${params}`)
+}
+
+/** The current user's own reminders, in minutes before each occurrence. */
+export const getReminders = (eventId: string) => api<{ minutes: number[] }>(`/api/events/${eventId}/reminders`)
+
+export const setReminders = (eventId: string, minutes: number[]) =>
+  api<{ minutes: number[] }>(`/api/events/${eventId}/reminders`, { method: 'PUT', body: { minutes } })
+
+export const deleteOccurrence = (seriesId: string, recurrenceId: string, scope: OccurrenceScope) =>
+  api<void>(occurrencePath(seriesId, recurrenceId, scope), { method: 'DELETE' })
+
 // Comments & activity
 export const listComments = (eventId: string) => api<EventComment[]>(`/api/events/${eventId}/comments`)
 
@@ -255,7 +293,8 @@ export const listNotifications = (group?: NotificationGroup, limit = 50) => {
 export const getOpenNotificationCounts = () =>
   api<{ approvals: number; invitations: number }>('/api/notifications/open-counts')
 
-export const getUnreadCount = () => api<{ count: number }>('/api/notifications/unread-count')
+/** Also delivers the user's due reminders, which come back in `reminders`. */
+export const getUnreadCount = () => api<{ count: number; reminders: DueReminder[] }>('/api/notifications/unread-count')
 
 export const markNotificationRead = (id: string) =>
   api<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST' })

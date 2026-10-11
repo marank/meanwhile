@@ -22,6 +22,9 @@ class Event(models.Model):
     )
     title = models.CharField(max_length=255, default="", blank=True)
     description = models.TextField(blank=True, null=True)
+    # Where the event takes place, as free text (an address, a link, ...). When a location resource
+    # is booked, it is that resource's name.
+    location = models.CharField(max_length=255, default="", blank=True)
     start = models.DateTimeField()
     end = models.DateTimeField()
     all_day = models.BooleanField(default=False)
@@ -30,7 +33,18 @@ class Event(models.Model):
     timezone = models.CharField(max_length=64, default="UTC")
     show_recurrence_count = models.BooleanField(default=False)
     rrule = models.TextField(blank=True, null=True)
+    # Starts (UTC, ISO 8601) of occurrences removed from the series.
+    exdates = models.JSONField(default=list, blank=True)
+    # Starts (UTC, ISO 8601) of occurrences added to the series besides those of its rrule (RDATE).
+    rdates = models.JSONField(default=list, blank=True)
+    # An event with a parent replaces one occurrence of that series: the one starting at recurrence_id.
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, related_name="overrides", blank=True, null=True
+    )
+    recurrence_id = models.DateTimeField(blank=True, null=True)
     uid = models.CharField(max_length=255, db_index=True)
+    # Name a CalDAV client stored the event under; clients may pick it freely. Empty means "{uid}.ics".
+    href = models.CharField(max_length=255, blank=True, null=True)
     raw_ical = models.TextField(blank=True, null=True)
     category = models.ForeignKey(
         "Category",
@@ -46,9 +60,19 @@ class Event(models.Model):
         blank=True,
         null=True,
     )
+    # The place booked as the event's location (a resource marked as location); besides `resource`.
+    location_resource = models.ForeignKey(
+        Resource,
+        on_delete=models.SET_NULL,
+        related_name="location_events",
+        blank=True,
+        null=True,
+    )
     status = models.CharField(
         max_length=20, choices=EventStatus.CHOICES, default=EventStatus.CONFIRMED
     )
+    # Ids of the booked resources whose approval a pending event still waits for.
+    awaiting_approval = models.JSONField(default=list, blank=True)
     decided_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -64,9 +88,18 @@ class Event(models.Model):
     class Meta:
         db_table = "events"
         constraints = [
+            # Changed occurrences share the UID of their series.
             models.UniqueConstraint(
-                fields=["calendar", "uid"], name="uq_event_calendar_uid"
-            )
+                fields=["calendar", "uid"],
+                condition=models.Q(parent__isnull=True),
+                name="uq_event_calendar_uid",
+            ),
+            models.UniqueConstraint(
+                fields=["calendar", "href"], name="uq_event_calendar_href"
+            ),
+            models.UniqueConstraint(
+                fields=["parent", "recurrence_id"], name="uq_event_parent_recurrence_id"
+            ),
         ]
 
     @property
@@ -79,6 +112,58 @@ class Event(models.Model):
 
     def __str__(self) -> str:
         return self.title or "Untitled event"
+
+
+class DeletedEvent(models.Model):
+    """Where a deleted event was, so CalDAV clients learn about the deletion when they sync."""
+
+    # No foreign key: the record of an event outlives it, and a deleted calendar takes its records along.
+    calendar_id = models.CharField(max_length=36, db_index=True)
+    href = models.CharField(max_length=255)
+    deleted_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "deleted_events"
+
+
+class EventReminder(models.Model):
+    """A reminder of one user before every occurrence of an event (of a series: of all of them)."""
+
+    id = models.CharField(
+        primary_key=True, max_length=36, default=new_uuid7, editable=False
+    )
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="reminders"
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    minutes_before = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "event_reminders"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "user", "minutes_before"], name="uq_event_reminder"
+            )
+        ]
+
+
+class ReminderDelivery(models.Model):
+    """A reminder that went out for one occurrence, so it goes out only once."""
+
+    reminder = models.ForeignKey(
+        EventReminder, on_delete=models.CASCADE, related_name="deliveries"
+    )
+    occurrence_start = models.DateTimeField()
+    delivered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "reminder_deliveries"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reminder", "occurrence_start"], name="uq_reminder_delivery"
+            )
+        ]
 
 
 class EventParticipant(models.Model):

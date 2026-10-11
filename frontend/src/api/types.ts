@@ -2,6 +2,9 @@ export type CalendarRole = 'owner' | 'editor' | 'contributor' | 'viewer'
 /** Roles that can be granted to members, groups and the public; ownership isn't transferable here. */
 export type GrantableRole = Exclude<CalendarRole, 'owner'>
 export type EventStatus = 'confirmed' | 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+/** Which occurrences of a series a change applies to. */
+export type OccurrenceScope = 'this' | 'following' | 'all'
 export type ParticipantStatus = 'needs_action' | 'accepted' | 'declined' | 'tentative'
 export type NotificationType =
   | 'approval_requested'
@@ -12,6 +15,7 @@ export type NotificationType =
   | 'member_added'
   | 'member_role_changed'
   | 'comment_added'
+  | 'event_reminder'
 
 export interface User {
   id: string
@@ -23,6 +27,8 @@ export interface User {
   is_active: boolean
   time_format: 'auto' | '24h' | '12h'
   date_format: 'auto' | 'dmy' | 'mdy' | 'ymd'
+  /** The zone of the user's browser as last reported; the server reads times without a zone in it. */
+  timezone: string
   created_at: string
 }
 
@@ -254,6 +260,8 @@ export interface Resource {
   description: string | null
   color: string
   requires_approval: boolean
+  /** A place, offered in an event's location field instead of the resource field. */
+  is_location: boolean
   is_active: boolean
   approvers: Approver[]
 }
@@ -263,6 +271,7 @@ export interface ResourceInput {
   description: string | null
   color: string
   requires_approval: boolean
+  is_location: boolean
   is_active: boolean
   /** The resource's own approvers; empty means the calendar's default approvers decide. */
   approver_ids: string[]
@@ -288,6 +297,11 @@ export interface Event {
   creator_email: string | null
   title: string
   description: string | null
+  /** Where it takes place: free text, or the name of the booked place. */
+  location: string
+  /** The place booked as location (a resource marked as location). */
+  location_resource_id: string | null
+  location_resource_name: string | null
   start: string
   end: string
   all_day: boolean
@@ -296,12 +310,18 @@ export interface Event {
   show_recurrence_count: boolean
   rrule: string | null
   uid: string
+  /** Set when this event is a changed occurrence of the series `parent_id`. */
+  parent_id: string | null
+  /** For a changed occurrence: the original start of the occurrence it replaces. */
+  recurrence_id: string | null
   category_id: string | null
   category_name: string | null
   category_color: string | null
   resource_id: string | null
   resource_name: string | null
   status: EventStatus
+  /** Names of the booked place and resource a pending event still waits to have approved. */
+  awaiting_approval: string[]
   decided_by: string | null
   decided_at: string | null
   decision_note: string | null
@@ -326,9 +346,14 @@ export interface Occurrence {
   category_color: string | null
   resource_id: string | null
   resource_name: string | null
+  location: string
+  location_resource_id: string | null
   creator_id: string
   can_edit: boolean
   is_recurring: boolean
+  /** For occurrences of a series: the series and the occurrence's original start. */
+  series_id: string | null
+  recurrence_id: string | null
 }
 
 export interface EventComment {
@@ -346,7 +371,7 @@ export interface EventActivity {
   actor_id: string | null
   actor_name: string | null
   action: string
-  details: { fields?: string[]; status?: string; note?: string } | null
+  details: { fields?: string[]; status?: string; note?: string; occurrence?: string } | null
   created_at: string
 }
 
@@ -383,13 +408,16 @@ export interface EventInput {
   rrule?: string | null
   category_id?: string | null
   resource_id?: string | null
+  /** Free text; with location_resource_id, the server uses that place's name. */
+  location?: string | null
+  location_resource_id?: string | null
   /** Only on creation: participants to invite right away. */
   participants?: EventParticipantCreate[]
 }
 
-export type ProfileUpdate = Partial<Pick<User, 'display_name' | 'time_format' | 'date_format'>>
+export type ProfileUpdate = Partial<Pick<User, 'display_name' | 'time_format' | 'date_format' | 'timezone'>>
 
-export type SearchEntity = 'users' | 'members' | 'groups' | 'resources' | 'categories'
+export type SearchEntity = 'users' | 'members' | 'groups' | 'resources' | 'locations' | 'categories'
 
 export interface SearchResult {
   id: string
@@ -407,7 +435,7 @@ export interface AppNotification {
   calendar_id: string | null
   event_id: string | null
   title: string
-  data: { note?: string; role?: string } | null
+  data: { note?: string; role?: string; start?: string; all_day?: boolean; minutes_before?: number } | null
   read_at: string | null
   created_at: string
   event_status: EventStatus | null
@@ -416,6 +444,35 @@ export interface AppNotification {
 }
 
 export type NotificationGroup = 'approvals' | 'invitations'
+
+export interface BusyPeriod {
+  start: string
+  end: string
+  /** Pending bookings and unanswered invitations. */
+  tentative: boolean
+}
+
+/** When a user or resource is taken; no titles or details. */
+export interface AvailabilityEntry {
+  id: string
+  name: string
+  busy: BusyPeriod[]
+}
+
+export interface Availability {
+  users: AvailabilityEntry[]
+  resources: AvailabilityEntry[]
+}
+
+/** A reminder that has just come due; also stored as a notification. */
+export interface DueReminder {
+  event_id: string
+  title: string
+  /** The occurrence's start; for all-day events midnight in the user's zone. */
+  start: string
+  all_day: boolean
+  minutes_before: number
+}
 
 export interface AppPassword {
   id: string

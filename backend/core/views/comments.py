@@ -2,14 +2,12 @@
 Event comments and activity endpoints.
 """
 
-from datetime import datetime, timezone
 
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from core.api import CSRFRouter
-from core.models import Event, EventActivity, EventComment
+from core.models import EventActivity, EventComment
 from core.models.base import Role
 from core.schemas import ActivityOut, CommentCreate, CommentOut
 from core.services.notifications import notify

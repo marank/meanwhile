@@ -6,7 +6,7 @@ const props = withDefaults(
   defineProps<{
     open: boolean
     title?: string
-    size?: 'md' | 'xl'
+    size?: 'md' | 'xl' | '2xl'
     /** Close when the backdrop is clicked; turn off for forms that would lose their input. */
     dismissible?: boolean
     /** Stack above other open dialogs, e.g. for confirmations raised from within a dialog. */
@@ -39,7 +39,7 @@ useEscapeToClose(
     >
       <div
         class="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border border-transparent bg-surface shadow-2xl dark:border-zinc-600 dark:shadow-black/75"
-        :class="size === 'xl' ? 'max-w-xl' : 'max-w-md'"
+        :class="{ md: 'max-w-md', xl: 'max-w-xl', '2xl': 'max-w-3xl' }[size]"
         role="dialog"
         aria-modal="true"
       >

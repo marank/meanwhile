@@ -4,7 +4,6 @@ Calendar resource endpoints.
 
 from django.db import transaction
 from django.utils import timezone
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -62,6 +61,7 @@ def create_resource(request, calendar_id: str, payload: ResourceCreate):
         description=payload.description,
         color=payload.color,
         requires_approval=payload.requires_approval,
+        is_location=payload.is_location,
         is_active=payload.is_active,
     )
     _set_approvers(resource, payload.approver_ids)

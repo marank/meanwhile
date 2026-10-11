@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
+import { browserTimeZone } from '@/services/datetime'
 import { useCalendarStore } from './calendars'
 import { useEventStore } from './events'
 import { useNotificationsStore } from './notifications'
@@ -12,6 +13,22 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin = computed(() => !!user.value?.is_admin)
+
+  // The server reads times that calendar apps send without a zone in the user's zone,
+  // so it learns the browser's zone whenever it differs.
+  watch(user, (current) => {
+    const zone = browserTimeZone()
+    if (current && zone && current.timezone !== zone) {
+      api.updateProfile({ timezone: zone }).then(
+        (updated) => {
+          if (user.value?.id === updated.id) user.value = updated
+        },
+        () => {
+          // tried again on the next load
+        },
+      )
+    }
+  })
 
   /** Restores the session once; later calls wait for the same request. */
   function init(): Promise<void> {

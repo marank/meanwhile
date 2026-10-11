@@ -18,6 +18,7 @@ interface ResourceForm {
   description: string
   color: string
   requires_approval: boolean
+  is_location: boolean
   is_active: boolean
   approval_mode: 'default' | 'custom'
   approvers: api.Approver[]
@@ -95,6 +96,7 @@ function startAdd() {
     description: '',
     color: '#f59e0b',
     requires_approval: false,
+    is_location: false,
     is_active: true,
     approval_mode: 'default',
     approvers: [],
@@ -108,6 +110,7 @@ function startEdit(resource: api.Resource) {
     description: resource.description || '',
     color: resource.color,
     requires_approval: resource.requires_approval,
+    is_location: resource.is_location,
     is_active: resource.is_active,
     approval_mode: resource.approvers.length ? 'custom' : 'default',
     approvers: [...resource.approvers],
@@ -137,6 +140,7 @@ async function save() {
     description: value.description || null,
     color: value.color,
     requires_approval: value.requires_approval,
+    is_location: value.is_location,
     is_active: value.is_active,
     // Own approvers only apply while approval is required; otherwise the defaults take over.
     approver_ids: ownApprovers ? value.approvers.map((a) => a.user_id) : [],
@@ -228,7 +232,14 @@ async function remove(id: string) {
               <td class="px-4 py-2">
                 <span class="block h-5 w-5 rounded" :style="{ backgroundColor: resource.color }"></span>
               </td>
-              <td class="px-4 py-2 font-medium text-gray-800">{{ resource.name }}</td>
+              <td class="px-4 py-2 font-medium text-gray-800">
+                {{ resource.name }}
+                <span
+                  v-if="resource.is_location"
+                  class="ml-1.5 rounded bg-surface-muted px-1.5 py-0.5 text-xs font-normal text-gray-600"
+                  >{{ $t('app.locationBadge') }}</span
+                >
+              </td>
               <td class="px-4 py-2 text-gray-500">{{ resource.description || '—' }}</td>
               <td class="px-4 py-2" :class="resource.requires_approval ? 'text-gray-800' : 'text-gray-500'">
                 {{ approvalLabel(resource) }}
@@ -278,6 +289,11 @@ async function remove(id: string) {
           <SettingsToggle v-model="form.requires_approval" :title="$t('app.requiresApproval')" />
           <SettingsToggle v-model="form.is_active" :title="$t('app.active')" />
         </div>
+        <SettingsToggle
+          v-model="form.is_location"
+          :title="$t('app.isLocation')"
+          :description="$t('app.isLocationHint')"
+        />
         <fieldset v-if="form.requires_approval" class="space-y-3 rounded-lg border border-line p-4">
           <legend class="px-1 text-sm font-medium text-gray-700">{{ $t('app.approvedBy') }}</legend>
           <label class="flex items-center gap-2 text-sm">

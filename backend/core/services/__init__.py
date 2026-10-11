@@ -3,8 +3,8 @@ from core.services.bookings import (
     can_modify_event,
     find_conflicting_approved_bookings,
     get_resource_approvers,
-    initial_booking_status,
     is_in_approver_pool,
+    update_booking_status,
 )
 from core.services.ical import build_calendar_feed, build_event_ical, event_ical_text
 from core.services.notifications import notify
@@ -17,8 +17,8 @@ __all__ = [
     "can_modify_event",
     "find_conflicting_approved_bookings",
     "get_resource_approvers",
-    "initial_booking_status",
     "is_in_approver_pool",
+    "update_booking_status",
     "build_calendar_feed",
     "build_event_ical",
     "event_ical_text",

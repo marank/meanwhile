@@ -45,6 +45,9 @@ class Resource(models.Model):
     description = models.TextField(blank=True, null=True)
     color = models.CharField(max_length=7, default="#f59e0b")
     requires_approval = models.BooleanField(default=False)
+    # A place (e.g. a room): offered in an event's location field instead of the resource field;
+    # picking it there books it, one event at a time like any resource.
+    is_location = models.BooleanField(default=False)
     # Inactive resources stay manageable but can't be booked; archived ones count as deleted
     # and are kept only so existing bookings still reference them.
     is_active = models.BooleanField(default=True)

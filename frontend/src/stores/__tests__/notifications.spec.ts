@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api'
+import { toast } from '@/services/toast'
 import { useNotificationsStore } from '../notifications'
 import { deferred } from './deferred'
 
@@ -17,7 +18,7 @@ describe('notifications store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(api.getOpenNotificationCounts).mockResolvedValue({ approvals: 0, invitations: 0 })
-    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 0 })
+    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 0, reminders: [] })
   })
 
   it('shows the tab selected last, even if an earlier tab answers later', async () => {
@@ -44,5 +45,20 @@ describe('notifications store', () => {
     store.reset()
     expect(store.items).toEqual([])
     expect(store.group).toBeNull()
+  })
+
+  it('pops up reminders that came due', async () => {
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => {})
+    vi.mocked(api.getUnreadCount).mockResolvedValue({
+      count: 1,
+      reminders: [
+        { event_id: 'e', title: 'Standup', start: '2030-01-07T09:00:00Z', all_day: false, minutes_before: 15 },
+      ],
+    })
+    const store = useNotificationsStore()
+    await store.refreshCount()
+    expect(store.unreadCount).toBe(1)
+    expect(info).toHaveBeenCalledOnce()
+    expect(info.mock.calls[0]![0]).toContain('Standup')
   })
 })

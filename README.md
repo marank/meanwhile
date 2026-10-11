@@ -88,11 +88,21 @@ The SPA uses session-cookie authentication via `django-allauth` headless browser
 
 ## CalDAV
 
-CalDAV clients can connect to `/caldav`. Use the email as username and either the account password or a generated app password. If any app password exists for a user, the account password is rejected for CalDAV.
+CalDAV clients can connect to `/caldav`; clients that only get the server address find it via `/.well-known/caldav`. Use the email as username and either the account password or a generated app password. If any app password exists for a user, the account password is rejected for CalDAV.
+
+Every calendar a user can access appears in their calendar home, shared ones included. Clients can create calendars there and their owners can delete them. Categories, the booked resource (as location) and participants are synchronized; each user's reminders appear as alarms in their own clients only. Times sent without a zone are read in the user's zone, which the web app keeps up to date from the browser.
+
+## Reminders
+
+Users set their own reminders per event. Due reminders become in-app notifications whenever the app asks for the unread count (about once a minute while it is open). To deliver them while nobody has the app open, run this every minute, e.g. from cron:
+
+```bash
+DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py send_reminders
+```
 
 ## iCal feed
 
-Each calendar has a feed at `/ics/{feed_token}.ics`. The token can be rotated from the calendar settings.
+Each calendar has a feed at `/ics/{feed_token}.ics`. The token can be rotated from the calendar settings. The feed carries the calendar's name and color, categories and resources, but no participants or reminders, since anyone with the link can read it.
 
 ## Deployment with Docker
 

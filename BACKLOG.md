@@ -18,17 +18,17 @@ Features and improvements proposed for future releases.
 
 ### Events and recurrence
 
-10. **Per-occurrence editing** of recurring events using `RECURRENCE-ID` ("this event", "this and following", "entire series"); also enables drag & drop for recurring events.
-11. **Event reminders** — multiple reminders per event, in-app first, then email; per-user/calendar defaults.
-12. **Event attachments** — documents or links, with storage limits and file validation.
-13. **Event templates** — presets for duration, category, resource and recurrence.
-14. **Duplicate / copy event** — copy an event to another date or calendar.
+10. **Reminder defaults and email reminders** — per-user and per-calendar default reminders for new events; reminders by email once SMTP is set up (in-app reminders and CalDAV alarms exist).
+11. **Event attachments** — documents or links, with storage limits and file validation.
+12. **Event templates** — presets for duration, category, resource and recurrence.
+13. **Duplicate / copy event** — copy an event to another date or calendar.
 
 ### Collaboration
 
-15. **Invite/accept flow** — added members accept or decline membership, with expiration and resend.
-16. **Email notifications** via SMTP for invitations, approval requests, decisions, comments and reminders, with per-user preferences.
-17. **Free/busy view** — compare members, calendars or resources without exposing private details.
+14. **Invite/accept flow** — added members accept or decline membership, with expiration and resend.
+15. **Email notifications** via SMTP for invitations, approval requests, decisions, comments and reminders, with per-user preferences.
+16. **Invitations by email (iMIP)** — send participants an invitation with the event as `.ics` attachment (METHOD:REQUEST), so they can accept or decline from any mail program; read the replies (METHOD:REPLY) back into their participation status, and send updates and cancellations when the event changes. Participants without an account are reached this way, too.
+17. **Free/busy across days** — a week view of the availability of members and resources, and suggestions of free times (the event dialog shows one day).
 
 ### Resource booking
 
@@ -43,6 +43,7 @@ Features and improvements proposed for future releases.
 23. **Data export and backup** — user/calendar export, admin backup and restore workflow.
 24. **Admin dashboard** — users, active calendars, pending approvals, resource usage, recent activity.
 25. **Soft deletion and trash** — recover deleted events and calendars for a configurable period.
+26. **Failed CalDAV logins must not block the app** — Radicale waits about a second after every failed login, and with gunicorn's 4 sync workers ([Dockerfile](backend/Dockerfile)) four wrong logins per second leave no worker for the web app and API. Run gunicorn with threads (`--worker-class gthread --threads 8`) and rate-limit `/caldav` in the reverse proxy (e.g. nginx `limit_req` or fail2ban on 401 answers).
 
 ## Known v1 limitations
 
@@ -50,7 +51,5 @@ Features and improvements proposed for future releases.
 - Avatars are initials-based; no image upload.
 - Approval decisions are in-app only, no emails.
 - No separate admin role; calendar owners manage their calendars.
-- Recurring events are edited as a whole series; per-occurrence editing is future work. Recurring events cannot be moved or resized by drag & drop.
-- Event activity history is not recorded for changes made through CalDAV clients.
 - Outlook does not support native CalDAV; use iCal subscription or the Outlook CalDav Synchronizer plugin on classic Outlook.
-- Resource/approval metadata is not exposed to generic CalDAV clients; it remains a web-app concept.
+- Bookings are made, rescheduled and decided in the app; CalDAV clients see the booked resource as location and pending bookings not at all.

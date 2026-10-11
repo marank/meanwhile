@@ -14,19 +14,9 @@ django_application = get_wsgi_application()
 
 # Import after Django apps are configured so settings/ORM access is safe.
 from django.conf import settings  # noqa: E402
-from radicale.app import Application as RadicaleApplication  # noqa: E402
-from radicale.config import load as load_radicale_config  # noqa: E402
+from core.caldav.app import create_application  # noqa: E402
 
-_radicale_config = load_radicale_config()
-_radicale_config.update(
-    {
-        "auth": {"type": "core.caldav.auth"},
-        "rights": {"type": "core.caldav.rights"},
-        "storage": {"type": "core.caldav.storage"},
-    },
-    source="calendar-app-inline",
-)
-radicale_application = RadicaleApplication(_radicale_config)
+radicale_application = create_application()
 
 _caldav_prefix = settings.CALDAV_PATH.rstrip("/") or "/caldav"
 

@@ -5,18 +5,20 @@ Approval workflow endpoints.
 from datetime import datetime, timezone
 
 from django.db.models import Q
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from core.api import CSRFRouter
-from core.models import CalendarApprover, Event, Resource, ResourceApprover
+from core.models import Event
 from core.models.base import EventStatus, Role
 from core.schemas import ApprovalAction, ApprovalOut, ApproverOut
 from core.services.activity import record_activity
 from core.services.bookings import (
-    find_conflicting_approved_bookings,
-    get_resource_approvers,
+    approvers_of,
+    awaiting_resources,
+    booked_resources,
+    decidable_resources,
+    find_booking_conflicts,
     is_in_approver_pool,
 )
 from core.services.notifications import notify
@@ -27,9 +29,7 @@ router = CSRFRouter()
 
 
 def _approval_recipients(event: Event):
-    recipients = []
-    if event.resource is not None:
-        recipients += [str(a.id) for a in get_resource_approvers(event.resource)]
+    recipients = [str(a.id) for a in approvers_of(booked_resources(event))]
     recipients.append(str(event.calendar.owner_id))
     return recipients
 
@@ -55,7 +55,11 @@ def _serialize_event(event: Event) -> dict:
         "category_color": event.category.color if event.category else None,
         "resource_id": str(event.resource_id) if event.resource_id else None,
         "resource_name": event.resource.name if event.resource else None,
+        "location": event.location,
+        "location_resource_id": str(event.location_resource_id) if event.location_resource_id else None,
+        "location_resource_name": event.location_resource.name if event.location_resource else None,
         "status": event.status,
+        "awaiting_approval": [r.name for r in awaiting_resources(event)],
         "decided_by": str(event.decided_by_id) if event.decided_by_id else None,
         "decided_at": event.decided_at,
         "decision_note": event.decision_note,
@@ -72,7 +76,7 @@ def _serialize_approval(event: Event) -> dict:
             email=a.email,
             display_name=a.display_name,
         )
-        for a in (get_resource_approvers(event.resource) if event.resource else [])
+        for a in approvers_of(awaiting_resources(event))
     ]
     return data
 
@@ -81,17 +85,15 @@ def _serialize_approval(event: Event) -> dict:
 def list_pending_approvals(request):
     user = request.user
     pending = (
-        Event.objects.filter(
-            status=EventStatus.PENDING,
-            resource__isnull=False,
-        )
+        Event.objects.filter(status=EventStatus.PENDING)
+        .filter(Q(resource__isnull=False) | Q(location_resource__isnull=False))
         .filter(
             Q(calendar__owner=user)
             | Q(resource__approvers__user=user)
+            | Q(location_resource__approvers__user=user)
             | Q(calendar__approvers__user=user)
         )
-        .select_related("calendar", "category", "resource")
-        .prefetch_related("resource__approvers", "resource__approvers__user")
+        .select_related("calendar", "category", "resource", "location_resource")
         .distinct()
     )
     result = []
@@ -112,11 +114,19 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
     membership = get_membership(event.calendar, request.user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
-    if not is_in_approver_pool(event, user=request.user):
+    # Each approver approves the bookings they are responsible for (e.g. the room or the projector);
+    # the event is approved once none is left.
+    decided = decidable_resources(event, str(request.user.id))
+    if not decided:
         raise HttpError(403, "You cannot approve this booking")
+    decided_ids = {str(r.pk) for r in decided}
+    remaining = [i for i in event.awaiting_approval or [] if str(i) not in decided_ids]
 
-    if event.resource is not None:
-        conflicts = find_conflicting_approved_bookings(event.resource, event)
+    if not remaining:
+        conflicts = find_booking_conflicts(event)
+        # Changed occurrences waiting along with the series are approved with it.
+        for occurrence in event.overrides.filter(status=event.status):
+            conflicts += find_booking_conflicts(occurrence)
         if conflicts:
             raise HttpError(
                 409,
@@ -126,17 +136,21 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
                 },
             )
 
-    event.status = EventStatus.APPROVED
+    previous_status = event.status
+    event.awaiting_approval = remaining
     event.decided_by = request.user
     event.decided_at = datetime.now(timezone.utc)
     event.decision_note = payload.note
+    if not remaining:
+        event.status = EventStatus.APPROVED
     event.save()
-    record_activity(
-        event,
-        str(request.user.id),
-        "approved",
-        {"note": payload.note} if payload.note else None,
-    )
+    _decide_changed_occurrences(event, previous_status, decided_ids)
+    details = {"resources": sorted(r.name for r in decided)}
+    if payload.note:
+        details["note"] = payload.note
+    record_activity(event, str(request.user.id), "approved", details)
+    if remaining:
+        return ApprovalOut.model_validate(_serialize_approval(event))
     notify(
         [str(event.creator_id)],
         "booking_approved",
@@ -147,6 +161,21 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
         data={"note": payload.note} if payload.note else None,
     )
     return ApprovalOut.model_validate(_serialize_approval(event))
+
+
+def _decide_changed_occurrences(series: Event, previous_status: str, decided_ids: set[str] | None = None) -> None:
+    # Changed occurrences that shared the series' status follow its decision.
+    for occurrence in series.overrides.filter(status=previous_status):
+        awaiting = [i for i in occurrence.awaiting_approval or [] if decided_ids is not None and str(i) not in decided_ids]
+        if decided_ids is not None and awaiting:
+            occurrence.awaiting_approval = awaiting
+        else:
+            occurrence.status = series.status if decided_ids is None else EventStatus.APPROVED
+            occurrence.awaiting_approval = []
+        occurrence.decided_by = series.decided_by
+        occurrence.decided_at = series.decided_at
+        occurrence.decision_note = series.decision_note
+        occurrence.save()
 
 
 @router.post("/events/{event_id}/reject", response=ApprovalOut, auth=django_auth)
@@ -162,11 +191,14 @@ def reject_event(request, event_id: str, payload: ApprovalAction):
     if not is_in_approver_pool(event, user=request.user):
         raise HttpError(403, "You cannot reject this booking")
 
+    previous_status = event.status
     event.status = EventStatus.REJECTED
+    event.awaiting_approval = []
     event.decided_by = request.user
     event.decided_at = datetime.now(timezone.utc)
     event.decision_note = payload.note
     event.save()
+    _decide_changed_occurrences(event, previous_status)
     record_activity(
         event,
         str(request.user.id),
@@ -199,12 +231,15 @@ def cancel_event(request, event_id: str):
 
     had_booking = (
         event.status in {EventStatus.PENDING, EventStatus.APPROVED}
-        and event.resource is not None
+        and bool(booked_resources(event))
     )
+    previous_status = event.status
     event.status = EventStatus.CANCELLED
+    event.awaiting_approval = []
     event.decided_by = request.user
     event.decided_at = datetime.now(timezone.utc)
     event.save()
+    _decide_changed_occurrences(event, previous_status)
     record_activity(event, str(request.user.id), "cancelled")
     if had_booking:
         notify(

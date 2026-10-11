@@ -4,7 +4,6 @@ Notification endpoints.
 
 from datetime import datetime, timezone
 
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -13,7 +12,8 @@ from django.db.models import Q
 
 from core.models import EventParticipant, Notification
 from core.models.base import EventStatus
-from core.schemas import NotificationOut, NotificationUpdate
+from core.schemas import NotificationOut
+from core.services.reminders import deliver_due_reminders
 
 router = CSRFRouter()
 
@@ -88,8 +88,10 @@ def open_counts(request):
 
 @router.get("/notifications/unread-count", auth=django_auth)
 def unread_count(request):
+    """The unread count; the app asks for it every minute, which also delivers due reminders."""
+    reminders = deliver_due_reminders(request.user)
     count = Notification.objects.filter(user=request.user, read_at__isnull=True).count()
-    return {"count": count}
+    return {"count": count, "reminders": reminders}
 
 
 @router.post("/notifications/read-all", auth=django_auth)

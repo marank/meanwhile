@@ -1,5 +1,6 @@
 import type { AppNotification, NotificationType, ParticipantStatus } from '@/api'
 import { i18n } from '@/i18n'
+import { reminderText } from './reminders'
 
 export const participantStatuses: ParticipantStatus[] = ['needs_action', 'accepted', 'declined', 'tentative']
 
@@ -24,6 +25,7 @@ const notificationKeys: Record<NotificationType, string> = {
   member_added: 'notifications.memberAdded',
   member_role_changed: 'notifications.memberRoleChanged',
   comment_added: 'notifications.commentAdded',
+  event_reminder: 'reminders.due',
 }
 
 export function notificationText(notification: AppNotification): string {
@@ -31,5 +33,8 @@ export function notificationText(notification: AppNotification): string {
   const key = notificationKeys[notification.type]
   // Types added on the server before the client knows them fall back to the raw title.
   if (!key) return notification.title
+  if (notification.type === 'event_reminder' && notification.data?.start) {
+    return reminderText(notification.title, notification.data.start, !!notification.data.all_day)
+  }
   return t(key, { actor: notification.actor_name || t('app.someone'), title: notification.title })
 }

@@ -42,6 +42,8 @@ class UserOut(Schema):
     is_active: bool
     time_format: str
     date_format: str
+    # IANA zone of the user's browser; empty until the app reported it.
+    timezone: str = ""
     created_at: datetime
 
 
@@ -49,6 +51,7 @@ class UserUpdate(Schema):
     display_name: Optional[str] = Field(None, min_length=1, max_length=255)
     time_format: Optional[Literal["auto", "24h", "12h"]] = None
     date_format: Optional[Literal["auto", "dmy", "mdy", "ymd"]] = None
+    timezone: Optional[TimeZoneName] = None
 
 
 class OverviewSettingsOut(Schema):
@@ -420,6 +423,7 @@ class ResourceCreate(Schema):
     description: Optional[str] = None
     color: Optional[str] = "#f59e0b"
     requires_approval: bool = False
+    is_location: bool = False
     is_active: bool = True
     approver_ids: List[str] = []
 
@@ -429,6 +433,7 @@ class ResourceUpdate(Schema):
     description: Optional[str] = None
     color: Optional[str] = None
     requires_approval: Optional[bool] = None
+    is_location: Optional[bool] = None
     is_active: Optional[bool] = None
     # Replaces the resource's own approvers when given.
     approver_ids: Optional[List[str]] = None
@@ -443,6 +448,7 @@ class ResourceOut(Schema):
     description: Optional[str]
     color: str
     requires_approval: bool
+    is_location: bool
     is_active: bool
     approvers: List[ApproverOut]
     created_at: datetime
@@ -501,6 +507,9 @@ class EventParticipantInvite(Schema):
 class EventCreate(Schema):
     title: Optional[str] = Field(default=None, max_length=255)
     description: Optional[str] = None
+    location: Optional[str] = Field(default=None, max_length=255)
+    # A resource marked as location to book; the location then is its name.
+    location_resource_id: Optional[str] = None
     start: datetime
     end: datetime
     all_day: bool = False
@@ -515,6 +524,8 @@ class EventCreate(Schema):
 class EventUpdate(Schema):
     title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
+    location: Optional[str] = Field(None, max_length=255)
+    location_resource_id: Optional[str] = None
     start: Optional[datetime] = None
     end: Optional[datetime] = None
     all_day: Optional[bool] = None
@@ -535,6 +546,15 @@ class EventParticipantCreate(Schema):
         if self.user_id is None and self.email is None:
             raise ValueError("Either user_id or email is required")
         return self
+
+
+class EventRemindersIn(Schema):
+    # Minutes before each occurrence's start; 0 is at the start.
+    minutes: List[int]
+
+
+class EventRemindersOut(Schema):
+    minutes: List[int]
 
 
 class EventParticipantUpdate(Schema):
@@ -564,19 +584,29 @@ class EventOut(Schema):
     creator_email: Optional[str] = None
     title: str
     description: Optional[str]
+    location: str = ""
+    location_resource_id: Optional[str] = None
+    location_resource_name: Optional[str] = None
     start: datetime
     end: datetime
     all_day: bool
     timezone: str
     show_recurrence_count: bool
     rrule: Optional[str]
+    # Extra occurrence starts besides those of the rule (RDATE), e.g. from other clients.
+    rdates: List[datetime] = []
     uid: str
+    # Set when the event is a changed occurrence of the series parent_id.
+    parent_id: Optional[str] = None
+    recurrence_id: Optional[datetime] = None
     category_id: Optional[str]
     category_name: Optional[str]
     category_color: Optional[str]
     resource_id: Optional[str]
     resource_name: Optional[str]
     status: str
+    # Names of the booked resources a pending event still waits to have approved.
+    awaiting_approval: List[str] = []
     decided_by: Optional[str]
     decided_at: Optional[datetime]
     decision_note: Optional[str]
@@ -584,6 +614,9 @@ class EventOut(Schema):
     updated_at: datetime
     # Whether the current user may approve or reject this pending booking.
     can_decide: bool = False
+
+
+OccurrenceScope = Literal["this", "following", "all"]
 
 
 class OccurrenceOut(Schema):
@@ -602,9 +635,15 @@ class OccurrenceOut(Schema):
     category_color: Optional[str]
     resource_id: Optional[str]
     resource_name: Optional[str]
+    location: str = ""
+    location_resource_id: Optional[str] = None
     creator_id: str
     can_edit: bool
     is_recurring: bool
+    # For occurrences of a series: the series and the occurrence's original start, which
+    # identify it in /events/{series_id}/occurrences/{recurrence_id}.
+    series_id: Optional[str] = None
+    recurrence_id: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------
@@ -711,3 +750,21 @@ class SidebarReorderRequest(Schema):
 class BookingConflict(Schema):
     message: str = "Resource booking conflict"
     conflicts: List[dict]
+
+
+class BusyPeriod(Schema):
+    start: datetime
+    end: datetime
+    # Pending bookings and invitations not answered yet.
+    tentative: bool
+
+
+class AvailabilityEntry(Schema):
+    id: str
+    name: str
+    busy: List[BusyPeriod]
+
+
+class AvailabilityOut(Schema):
+    users: List[AvailabilityEntry]
+    resources: List[AvailabilityEntry]

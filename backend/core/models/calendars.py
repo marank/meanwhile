@@ -46,6 +46,8 @@ class Calendar(CalendarAppearance):
     description = models.TextField(blank=True, null=True)
     force_all_day = models.BooleanField(default=False)
     feed_token = models.CharField(max_length=255, unique=True, db_index=True)
+    # Path name a CalDAV client chose when it created the calendar; the id serves as path otherwise.
+    dav_name = models.CharField(max_length=255, unique=True, blank=True, null=True)
     is_public = models.BooleanField(default=False)
     public_role = models.CharField(
         max_length=20, choices=Role.CHOICES, default=Role.VIEWER

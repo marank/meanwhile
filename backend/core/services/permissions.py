@@ -12,7 +12,7 @@ from core.models.calendars import Calendar, CalendarGroup, CalendarMember
 from django.db.models import Q
 
 from core.models.events import Event, EventParticipant
-from core.services.bookings import can_decide_booking
+from core.services.bookings import is_in_approver_pool
 from core.models.users import User
 
 if TYPE_CHECKING:
@@ -124,9 +124,17 @@ def can_see_event(event: Event, user: User, membership) -> bool:
         return True
     if event.status == EventStatus.PENDING:
         # Pending bookings are private to the requester, participants and approvers.
-        return event.id in participant_event_ids(user) or can_decide_booking(
-            event.calendar, event.resource, user_id
-        )
+        return event.id in participant_event_ids(user) or is_in_approver_pool(event, user_id=user_id)
     if event.status in {EventStatus.REJECTED, EventStatus.CANCELLED}:
         return has_at_least_role(membership, Role.EDITOR)
     return True
+
+
+def accessible_calendars(user: User):
+    """Calendars the user can read: own, shared directly or via a group, and public ones."""
+    return Calendar.objects.filter(
+        Q(owner=user)
+        | Q(members__user=user)
+        | Q(calendar_groups__group__in=user.groups.all())
+        | Q(is_public=True)
+    ).distinct()

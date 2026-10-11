@@ -2,7 +2,6 @@
 Sidebar folder endpoints.
 """
 
-from ninja import Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 

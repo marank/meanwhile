@@ -5,7 +5,6 @@ User profile and app-password endpoints.
 import secrets
 
 from django.contrib.auth.hashers import make_password
-from ninja import Router
 from ninja.security import django_auth
 
 from core.api import CSRFRouter
