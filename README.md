@@ -14,7 +14,7 @@ A self-hosted calendar application with a Django backend and a Vue 3 frontend.
 
 ## Tech stack
 
-- **Backend**: Python 3.12, Django 5.1, Django Ninja, django-allauth headless, Radicale.
+- **Backend**: Python 3.12, Django 5.1, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI (daphne in development, uvicorn in production).
 - **Frontend**: Vue 3, Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS.
 - **Databases**: SQLite for development, PostgreSQL for deployment.
 - **Package managers**: `uv` (backend), `pnpm` (frontend).
@@ -81,6 +81,11 @@ Backend settings are read from environment variables:
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to disable new registrations. |
 | `ADMIN_EMAIL` | - | First registered user matching this email is promoted to admin. |
 | `CALDAV_PATH` | `/caldav` | URL prefix for the embedded CalDAV server. |
+| `REDIS_URL` | - | e.g. `redis://redis:6379/0`. Required with more than one server process, so that live updates reach every process's WebSockets. Without it they stay within one process (fine for development). |
+| `BEHIND_PROXY` | `false` | Trust the reverse proxy's `X-Forwarded-Proto`/`-Host`. Only when the backend is reachable through the proxy alone. |
+| `SECURE_COOKIES` | `true` outside development | Session and CSRF cookies over HTTPS only. |
+| `CSRF_TRUSTED_ORIGINS` | Vite dev servers | The public origin(s), e.g. `https://calendar.example.com`. |
+| `WEBSOCKET_PATH` | `/ws/` | Path of the live update WebSocket. |
 
 ## Authentication
 
@@ -104,10 +109,90 @@ DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py send_reminders
 
 Each calendar has a feed at `/ics/{feed_token}.ics`. The token can be rotated from the calendar settings. The feed carries the calendar's name and color, categories and resources, but no participants or reminders, since anyone with the link can read it.
 
+## Live updates
+
+Open calendars, the list of calendars and the notification count update by themselves when something changes: another
+user's edit, a change from another tab, or a phone syncing via CalDAV. The browser keeps a
+WebSocket to `/ws/`; the server only announces *that* a calendar's events or a user's
+notifications changed, and the app loads them again through the API (so each user only ever sees
+what their permissions allow).
+
+The connection is kept alive with a heartbeat, reconnects with growing delays after interruptions
+(server restart, network change, sleep), and loads what it shows again after reconnecting, so
+nothing missed meanwhile is lost. Pages of other sites can't open it (the `Origin` is checked).
+
+In development nothing extra is needed: `manage.py runserver` serves WebSockets, and the Vite dev
+server passes `/ws` on.
+
 ## Deployment with Docker
 
 ```bash
 docker compose up --build
 ```
 
-This starts PostgreSQL and the backend on port 8000. Make sure `SECRET_KEY` is set in your environment.
+This starts PostgreSQL, Redis and the backend on port 8000 (uvicorn with `WEB_WORKERS` processes,
+default 4). Set `SECRET_KEY`, and `PUBLIC_URL` to the address users open (e.g.
+`https://calendar.example.com`; it becomes the trusted origin).
+
+The backend expects a reverse proxy in front that terminates HTTPS, serves the built frontend
+(`frontend/dist`) and passes `/api`, `/ics`, `/caldav`, `/.well-known/caldav` and the WebSocket
+`/ws/` on. The proxy must forward WebSocket upgrades and the original host and scheme.
+
+nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name calendar.example.com;
+    # ssl_certificate ...; ssl_certificate_key ...;
+
+    root /srv/calendar/frontend/dist;
+    location / { try_files $uri /index.html; }
+
+    location ~ ^/(api|ics|caldav|\.well-known/caldav)(/|$) {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        client_max_body_size 10m;
+    }
+
+    location /ws/ {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Longer than the app's heartbeat (25 s), so idle connections stay open.
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
+```
+
+Caddy (obtains the certificate itself and passes WebSockets on as they are):
+
+```caddy
+calendar.example.com {
+    @backend path /api/* /ics/* /caldav /caldav/* /.well-known/caldav /ws/*
+    handle @backend {
+        reverse_proxy backend:8000
+    }
+    # Everything else is the app; unknown paths are its routes.
+    handle {
+        root * /srv/calendar/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+```
+
+Only the proxy should reach port 8000 (drop the `ports:` mapping of the backend when the proxy runs
+in the same Compose project); the backend trusts its forwarded headers.
+
+To deliver reminders while nobody has the app open, run `python manage.py send_reminders` every
+minute, e.g. from cron on the host via `docker compose exec backend`.

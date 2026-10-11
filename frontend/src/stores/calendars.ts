@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
 import * as api from '@/api'
+import { realtime } from '@/services/realtime'
 
 /** Selection of the calendar view: a calendar id, a folder id, or 'all'. It follows the URL. */
 export const ALL_CALENDARS = 'all'
@@ -12,6 +13,7 @@ export const useCalendarStore = defineStore('calendars', () => {
   /** Whether calendars and folders have been loaded at least once. */
   const loaded = ref(false)
   let loadVersion = 0
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined
 
   const allSelected = computed(() => selectedId.value === ALL_CALENDARS)
 
@@ -92,8 +94,26 @@ export const useCalendarStore = defineStore('calendars', () => {
     loaded.value = true
   }
 
+  /** Loads again in the background, once for a burst of changes (e.g. removing a user from many calendars). */
+  function refresh() {
+    clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
+      // Nothing to update before the first load or after signing out.
+      if (loaded.value) load().catch(() => {})
+    }, 300)
+  }
+
+  // Live updates: calendars shared with or taken from the user, renamed, recolored, moved into
+  // folders or reordered elsewhere (another tab or device) show up without reloading the page.
+  const stopListening = [realtime.on('calendars.changed', refresh), realtime.on('reconnected', refresh)]
+  onScopeDispose(() => {
+    stopListening.forEach((stop) => stop())
+    clearTimeout(refreshTimer)
+  })
+
   function reset() {
     loadVersion++
+    clearTimeout(refreshTimer)
     items.value = []
     folders.value = []
     loaded.value = false

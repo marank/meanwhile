@@ -12,6 +12,7 @@ from django.db.models import Q
 
 from core.models import EventParticipant, Notification
 from core.models.base import EventStatus
+from core.realtime import broadcast
 from core.schemas import NotificationOut
 from core.services.reminders import deliver_due_reminders
 
@@ -98,6 +99,8 @@ def unread_count(request):
 def mark_all_read(request):
     now = datetime.now(timezone.utc)
     Notification.objects.filter(user=request.user, read_at__isnull=True).update(read_at=now)
+    # The bulk update sends no signal; the user's other tabs update their count.
+    broadcast.notifications_changed(request.user.id)
     return {"ok": True}
 
 

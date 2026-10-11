@@ -23,6 +23,7 @@ from core.services.bookings import booked_resources, can_modify_event, find_book
 from core.services.calendars import create_calendar
 from core.services.ical import event_ical_text
 from core.services.permissions import accessible_calendars, get_membership, has_at_least_role
+from core.realtime import broadcast
 from core.services.activity import record_activity
 from core.services.notifications import notify
 from core.services.recurrence import format_exdate, is_series, make_aware, parse_exdates
@@ -662,6 +663,8 @@ class Storage(storage.BaseStorage):
             if moving or old_href != to_href:
                 # Clients syncing the old place learn that the event is gone from there.
                 DeletedEvent.objects.create(calendar_id=old_calendar_id, href=old_href)
+            # Saving tells the new calendar's viewers; the old one's must hear it, too.
+            broadcast.calendar_changed(old_calendar_id)
 
     def verify(self) -> bool:
         return True

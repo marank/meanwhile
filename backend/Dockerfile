@@ -18,4 +18,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+# ASGI: the app, the API, CalDAV and the WebSocket for live updates. Behind a reverse proxy that
+# terminates HTTPS; --proxy-headers takes the client's scheme and address from it.
+# Several workers need REDIS_URL, so that live updates reach every worker's WebSockets.
+CMD ["sh", "-c", "exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers ${WEB_WORKERS:-4} --lifespan off --proxy-headers --forwarded-allow-ips \"${FORWARDED_ALLOW_IPS:-*}\" --ws-ping-interval 20 --ws-ping-timeout 20 --ws-max-size 65536"]

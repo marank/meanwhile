@@ -34,7 +34,7 @@ function openContextMenu(event: MouseEvent) {
     @contextmenu.stop.prevent="openContextMenu"
   >
     <span
-      class="h-3 w-3 rounded-full border border-white shadow-sm"
+      class="mx-0.5 h-3 w-3 shrink-0 rounded-full border border-white shadow-sm"
       :style="{ backgroundColor: theme.isDark ? item.calendar.dark_event_color : item.calendar.event_color }"
     ></span>
     <span class="flex-1 truncate text-sm text-gray-700">{{ item.calendar.name }}</span>

@@ -46,6 +46,8 @@ ALLOWED_HOSTS = _list_env("ALLOWED_HOSTS", ["*"])
 # ---------------------------------------------------------------------------
 
 INSTALLED_APPS = [
+    # First, so that `runserver` serves the ASGI application, WebSockets included.
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -57,6 +59,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.headless",
     "corsheaders",
+    "channels",
     "core",
 ]
 
@@ -93,6 +96,8 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+# HTTP (the app, the API and the mounted CalDAV server) and WebSockets.
+ASGI_APPLICATION = "config.asgi.application"
 
 
 # ---------------------------------------------------------------------------
@@ -201,3 +206,34 @@ ALLOW_REGISTRATION = _bool_env("ALLOW_REGISTRATION", True)
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 BASE_URL = os.environ.get("BASE_URL", "")
 CALDAV_PATH = os.environ.get("CALDAV_PATH", "/caldav")
+
+
+# ---------------------------------------------------------------------------
+# Live updates (WebSockets) and reverse proxy
+# ---------------------------------------------------------------------------
+
+# Path of the WebSocket endpoint; the reverse proxy must pass WebSocket upgrades for it.
+WEBSOCKET_PATH = os.environ.get("WEBSOCKET_PATH", "/ws/")
+
+# Every server process must reach the others' WebSocket connections: with more than one process
+# (e.g. several uvicorn workers), set REDIS_URL. Without it, messages stay within one process,
+# which is enough for development.
+REDIS_URL = os.environ.get("REDIS_URL", "")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+# Behind a reverse proxy that terminates HTTPS: trust its X-Forwarded-Proto and -Host headers.
+# Only enable this when the app is reachable through the proxy alone, as clients could set them.
+BEHIND_PROXY = _bool_env("BEHIND_PROXY", False)
+if BEHIND_PROXY:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
+# Cookies only over HTTPS once the app is served that way.
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = _bool_env("SECURE_COOKIES", ENVIRONMENT != "development")

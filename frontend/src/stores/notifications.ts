@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api'
+import { realtime } from '@/services/realtime'
 import { dueReminderText } from '@/services/reminders'
 import { toast } from '@/services/toast'
 
@@ -13,6 +14,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const openCounts = ref({ approvals: 0, invitations: 0 })
   let loadVersion = 0
   let timer: number | undefined
+  /** Whether a list is shown (the notifications page); live updates then reload it, too. */
+  let listLoaded = false
 
   /** Reminders that just came due also pop up, wherever one is in the app. */
   function showReminders(reminders: api.DueReminder[] | undefined) {
@@ -21,6 +24,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   /** Loads the current tab; when loads overlap (fast tab switches), only the latest one is applied. */
   async function load() {
+    listLoaded = true
     const version = ++loadVersion
     const [list, counts, unread] = await Promise.all([
       api.listNotifications(group.value ?? undefined),
@@ -93,8 +97,18 @@ export const useNotificationsStore = defineStore('notifications', () => {
     timer = undefined
   }
 
+  // Live updates: new notifications and ones read in another tab show at once, not at the next poll.
+  // The poll stays, as it also delivers due reminders.
+  function onLiveUpdate() {
+    if (listLoaded) void load().catch(() => {})
+    else void refreshCount()
+  }
+  realtime.on('notifications.changed', onLiveUpdate)
+  realtime.on('reconnected', onLiveUpdate)
+
   function reset() {
     stopPolling()
+    listLoaded = false
     loadVersion++
     items.value = []
     unreadCount.value = 0

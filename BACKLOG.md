@@ -43,7 +43,7 @@ Features and improvements proposed for future releases.
 23. **Data export and backup** — user/calendar export, admin backup and restore workflow.
 24. **Admin dashboard** — users, active calendars, pending approvals, resource usage, recent activity.
 25. **Soft deletion and trash** — recover deleted events and calendars for a configurable period.
-26. **Failed CalDAV logins must not block the app** — Radicale waits about a second after every failed login, and with gunicorn's 4 sync workers ([Dockerfile](backend/Dockerfile)) four wrong logins per second leave no worker for the web app and API. Run gunicorn with threads (`--worker-class gthread --threads 8`) and rate-limit `/caldav` in the reverse proxy (e.g. nginx `limit_req` or fail2ban on 401 answers).
+26. **Rate-limit failed CalDAV logins** — Radicale waits about a second after every failed login. Since the move to ASGI, CalDAV requests run in their own thread pool (20 threads per process), so they no longer hold up the app and API, but a flood of wrong logins can still occupy that pool. Rate-limit `/caldav` in the reverse proxy (e.g. nginx `limit_req`, or fail2ban on 401 answers).
 
 ## Known v1 limitations
 

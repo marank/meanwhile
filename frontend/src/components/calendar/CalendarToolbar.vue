@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-vue-next'
 import { monthName } from '@/services/datetime'
 import AppSelect from '@/components/AppSelect.vue'
 import YearPicker from './YearPicker.vue'
@@ -40,6 +40,14 @@ const views = computed(() => [
 function goto(targetYear: number, targetMonth: number) {
   emit('goto', new Date(targetYear, targetMonth - 1, 1))
 }
+
+/** The same month and day (the same week in the week view) in another year; 29 February becomes the 28th. */
+function shiftYear(by: number) {
+  const target = new Date(props.date.getFullYear() + by, props.date.getMonth(), 1)
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()
+  target.setDate(Math.min(props.date.getDate(), lastDay))
+  emit('goto', target)
+}
 </script>
 
 <template>
@@ -54,11 +62,21 @@ function goto(targetYear: number, targetMonth: number) {
           <button
             type="button"
             class="toolbar-button toolbar-icon"
+            :aria-label="$t('app.previousYear')"
+            @click="shiftYear(-1)"
+          >
+            <ChevronsLeft :size="18" />
+          </button>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="toolbar-button toolbar-icon"
             :aria-label="$t('app.previousPeriod')"
             @click="emit('prev')"
           >
             <ChevronLeft :size="18" />
           </button>
+          <span class="toolbar-divider" aria-hidden="true"></span>
           <button
             type="button"
             class="toolbar-button toolbar-icon"
@@ -66,6 +84,15 @@ function goto(targetYear: number, targetMonth: number) {
             @click="emit('next')"
           >
             <ChevronRight :size="18" />
+          </button>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="toolbar-button toolbar-icon"
+            :aria-label="$t('app.nextYear')"
+            @click="shiftYear(1)"
+          >
+            <ChevronsRight :size="18" />
           </button>
         </div>
         <button type="button" class="toolbar-button toolbar-solo" :disabled="todayInRange" @click="emit('today')">
@@ -137,6 +164,8 @@ function goto(targetYear: number, targetMonth: number) {
   border-radius: 0.5rem;
   padding: 0.3rem 0.8rem;
   font-size: 0.875rem;
+  /* The same line height as the selects, so all controls of the toolbar are equally tall. */
+  line-height: 1.25rem;
   font-weight: 500;
   color: var(--app-text);
   transition:
@@ -155,7 +184,18 @@ function goto(targetYear: number, targetMonth: number) {
 
 .toolbar-icon {
   display: inline-flex;
-  padding: 0.3rem 0.45rem;
+  align-items: center;
+  /* As tall as the text buttons next to it (their line plus their padding). */
+  height: calc(1.25rem + 0.6rem);
+  padding: 0 0.45rem;
+}
+
+/* A thin line between the arrows, not quite as tall as the buttons. */
+.toolbar-divider {
+  align-self: stretch;
+  width: 1px;
+  margin-block: 0.4rem;
+  background-color: var(--calendar-control-border);
 }
 
 .toolbar-solo {

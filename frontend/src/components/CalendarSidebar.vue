@@ -13,6 +13,7 @@ import { useLoader } from '@/composables/useLoader'
 import { confirm, prompt } from '@/services/dialog'
 import { readStorage, writeStorage } from '@/services/storage'
 import { useSidebarSortable } from '@/composables/useSidebarSortable'
+import { collapsedFolders } from '@/services/sidebarState'
 import type { CalendarListItem, Folder, SidebarReorderItem } from '@/api'
 
 const SIDEBAR_WIDTH_KEY = 'calendar_sidebar_width'
@@ -57,7 +58,39 @@ function positionsIn(list: HTMLElement, parentId: string | null): SidebarReorder
   )
 }
 
-async function handleSortEnd(event: Sortable.SortableEvent) {
+/** Puts a dragged item back where Sortable took it from; the lists are rendered from the store. */
+function restorePosition(event: Sortable.SortableEvent) {
+  const { item, from, oldIndex } = event
+  item.remove()
+  from.insertBefore(item, from.children[oldIndex ?? 0] ?? null)
+}
+
+/** The item was dropped onto a folder: it becomes the last entry of that folder. */
+async function moveIntoFolder(event: Sortable.SortableEvent, folderId: string) {
+  restorePosition(event)
+  const { type, id } = event.item.dataset
+  if ((type !== 'folder' && type !== 'calendar') || !id) return
+
+  // A folder can't move into itself or one of its own subfolders.
+  if (type === 'folder' && (folderId === id || store.descendantFolderIds(id).includes(folderId))) return
+
+  const currentParent =
+    type === 'folder'
+      ? (store.folders.find((f) => f.id === id)?.parent_id ?? null)
+      : (store.items.find((i) => i.calendar.id === id)?.membership.folder_id ?? null)
+  collapsedFolders.delete(folderId)
+  if (currentParent === folderId) return
+
+  const positions = [
+    ...store.calendarsIn(folderId).map((i) => i.membership.position),
+    ...store.childFolders(folderId).map((f) => f.position),
+  ]
+  const position = positions.length ? Math.max(...positions) + 1 : 0
+  await run(() => store.reorder([{ type, id, parent_id: folderId, position }]))
+}
+
+async function handleSortEnd(event: Sortable.SortableEvent, dropIntoFolderId: string | null) {
+  if (dropIntoFolderId) return moveIntoFolder(event, dropIntoFolderId)
   const to = event.to
   const from = event.from
   const toFolderId = targetFolderIdOf(to)
@@ -177,13 +210,10 @@ function startResize(event: MouseEvent) {
 
 <template>
   <aside class="relative flex flex-col border-r border-line bg-surface" :style="{ width: `${sidebarWidth}px` }">
-    <div
-      ref="rootList"
-      class="sidebar-list flex-1 space-y-1 overflow-y-auto p-2"
-      @contextmenu.prevent="openMenu($event, rootMenuItems())"
-    >
+    <div class="flex-1 space-y-1 overflow-y-auto p-2" @contextmenu.prevent="openMenu($event, rootMenuItems())">
+      <!-- Outside the sortable list: nothing can be dragged above it. -->
       <div
-        class="sidebar-item sidebar-no-drag flex h-8 cursor-pointer items-center gap-2 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        class="flex h-8 cursor-pointer items-center gap-2 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         :class="{ 'bg-blue-100 dark:bg-blue-900': store.allSelected }"
         role="button"
         tabindex="0"
@@ -191,29 +221,30 @@ function startResize(event: MouseEvent) {
         @click="select(ALL_CALENDARS)"
         @keydown.enter.space.prevent="select(ALL_CALENDARS)"
       >
-        <CalendarDays :size="16" class="text-gray-500" />
+        <CalendarDays :size="16" class="shrink-0 text-gray-500" />
         <span class="text-sm font-medium text-gray-700">{{ $t('app.allCalendars') }}</span>
       </div>
 
-      <FolderTreeItem
-        v-for="folder in store.childFolders(null)"
-        :key="folder.id"
-        :folder="folder"
-        :on-sort-end="handleSortEnd"
-        @select="select"
-        @folder-menu="(event, folder) => openMenu(event, folderMenuItems(folder))"
-        @calendar-menu="(event, item) => openMenu(event, calendarMenuItems(item))"
-      />
+      <div ref="rootList" class="sidebar-list min-h-8 space-y-1">
+        <FolderTreeItem
+          v-for="folder in store.childFolders(null)"
+          :key="folder.id"
+          :folder="folder"
+          :on-sort-end="handleSortEnd"
+          @select="select"
+          @folder-menu="(event, folder) => openMenu(event, folderMenuItems(folder))"
+          @calendar-menu="(event, item) => openMenu(event, calendarMenuItems(item))"
+        />
 
-      <SidebarCalendarItem
-        v-for="item in store.calendarsIn(null)"
-        :key="item.calendar.id"
-        :item="item"
-        :selected="store.selectedId === item.calendar.id"
-        class="ml-4"
-        @select="select"
-        @context-menu="(event, calendar) => openMenu(event, calendarMenuItems(calendar))"
-      />
+        <SidebarCalendarItem
+          v-for="item in store.calendarsIn(null)"
+          :key="item.calendar.id"
+          :item="item"
+          :selected="store.selectedId === item.calendar.id"
+          @select="select"
+          @context-menu="(event, calendar) => openMenu(event, calendarMenuItems(calendar))"
+        />
+      </div>
     </div>
 
     <ContextMenu

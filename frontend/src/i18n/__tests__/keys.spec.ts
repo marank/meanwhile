@@ -34,8 +34,9 @@ describe('translations', () => {
     const missing = sourceFiles(join(__dirname, '../..')).flatMap((file) =>
       [...readFileSync(file, 'utf8').matchAll(pattern)]
         .map((match) => match[1]!)
-        // Template expressions like "auth.isAdmin" share the quote style but aren't keys.
-        .filter((key) => !english.has(key) && !/^(auth|notifications)\.(is|items)/.test(key))
+        // Template expressions like "auth.isAdmin" share the quote style but aren't keys, nor are
+        // live update message types like "notifications.changed".
+        .filter((key) => !english.has(key) && !/^(auth|notifications)\.(is|items|changed$)/.test(key))
         .map((key) => `${key} (${file})`),
     )
     expect(missing).toEqual([])

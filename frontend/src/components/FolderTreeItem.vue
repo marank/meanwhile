@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type Sortable from 'sortablejs'
 import { ChevronDown, ChevronRight, Folder as FolderIcon } from 'lucide-vue-next'
 import type { CalendarListItem, Folder } from '@/api'
 import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import { useCalendarStore } from '@/stores/calendars'
-import { useSidebarSortable } from '@/composables/useSidebarSortable'
+import { useSidebarSortable, type SidebarSortEnd } from '@/composables/useSidebarSortable'
+import { collapsedFolders, dropTargetFolderId } from '@/services/sidebarState'
 
 const props = defineProps<{
   folder: Folder
-  onSortEnd: (event: Sortable.SortableEvent) => void
+  onSortEnd: SidebarSortEnd
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +19,13 @@ const emit = defineEmits<{
 }>()
 
 const store = useCalendarStore()
-const expanded = ref(true)
+const expanded = computed({
+  get: () => !collapsedFolders.has(props.folder.id),
+  set: (open: boolean) => {
+    if (open) collapsedFolders.delete(props.folder.id)
+    else collapsedFolders.add(props.folder.id)
+  },
+})
 const childList = ref<HTMLElement | null>(null)
 const childFolders = computed(() => store.childFolders(props.folder.id))
 const calendars = computed(() => store.calendarsIn(props.folder.id))
@@ -36,8 +42,11 @@ function openContextMenu(event: MouseEvent) {
 <template>
   <div class="sidebar-item" data-type="folder" :data-id="folder.id">
     <div
-      class="flex h-8 cursor-pointer items-center gap-1 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-      :class="{ 'bg-blue-100 dark:bg-blue-900': store.selectedId === folder.id }"
+      class="flex h-8 cursor-pointer items-center gap-2 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      :class="{
+        'bg-blue-100 dark:bg-blue-900': store.selectedId === folder.id,
+        'bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-950': dropTargetFolderId === folder.id,
+      }"
       role="button"
       tabindex="0"
       :aria-current="store.selectedId === folder.id || undefined"
@@ -47,19 +56,20 @@ function openContextMenu(event: MouseEvent) {
       @keydown.left.self.prevent="expanded = false"
       @contextmenu.stop.prevent="openContextMenu"
     >
+      <FolderIcon :size="16" class="shrink-0 text-yellow-500" fill="currentColor" />
+      <span class="flex-1 truncate text-sm text-gray-700">{{ folder.name }}</span>
+      <!-- At the end of the row, so that folders and calendars start in the same column. -->
       <button
         v-if="hasChildren"
         type="button"
         class="sidebar-no-drag text-gray-400 hover:text-gray-600 focus:outline-none"
         :aria-expanded="expanded"
+        :aria-label="expanded ? $t('app.collapse') : $t('app.expand')"
         @click.stop="expanded = !expanded"
       >
-        <ChevronDown v-if="expanded" :size="12" :stroke-width="3" />
-        <ChevronRight v-else :size="12" :stroke-width="3" />
+        <ChevronDown v-if="expanded" :size="14" :stroke-width="2.5" />
+        <ChevronRight v-else :size="14" :stroke-width="2.5" />
       </button>
-      <span v-else class="w-3"></span>
-      <FolderIcon :size="16" class="text-yellow-500" fill="currentColor" />
-      <span class="flex-1 truncate text-sm text-gray-700">{{ folder.name }}</span>
     </div>
 
     <!-- v-show keeps the list element, so it stays registered with Sortable while collapsed. -->
