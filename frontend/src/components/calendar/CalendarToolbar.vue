@@ -6,13 +6,13 @@ import { monthName } from '@/services/datetime'
 import AppSelect from '@/components/AppSelect.vue'
 import YearPicker from './YearPicker.vue'
 
-export type CalendarViewType = 'dayGridMonth' | 'timeGridWeek'
+export type CalendarViewType = 'dayGridMonth' | 'timeGridWeek' | 'list'
 
 const props = defineProps<{
   /** Title of the shown range, e.g. "5 – 11 Oct 2026" */
   title: string
   view: CalendarViewType
-  /** First day of the shown month or week */
+  /** First day of the shown month or week (the list shows a month) */
   date: Date
   todayInRange: boolean
 }>()
@@ -35,6 +35,7 @@ const year = computed(() => props.date.getFullYear())
 const views = computed(() => [
   { value: 'dayGridMonth' as const, label: t('app.month') },
   { value: 'timeGridWeek' as const, label: t('app.week') },
+  { value: 'list' as const, label: t('app.list') },
 ])
 
 function goto(targetYear: number, targetMonth: number) {

@@ -21,6 +21,7 @@ import '@fullcalendar/vue3/skeleton.css'
 import '@fullcalendar/vue3/themes/classic/theme.css'
 import '@fullcalendar/vue3/themes/classic/palette.css'
 import CalendarToolbar, { type CalendarViewType } from '@/components/calendar/CalendarToolbar.vue'
+import CalendarAgenda from '@/components/calendar/CalendarAgenda.vue'
 import EventModal from '@/components/event/EventModal.vue'
 import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
 import { useEventStore } from '@/stores/events'
@@ -151,6 +152,13 @@ function eventColor(occurrence: Occurrence): string {
   return themeStore.isDark ? source.dark_event_color : source.event_color
 }
 
+// The list names each event's calendar when it shows several.
+const calendarNameOf = computed(() =>
+  !calendarStore.selectedCalendar && calendarStore.selectedCalendarIds.length > 1
+    ? (occurrence: Occurrence) => calendarStore.calendarsById.get(occurrence.calendar_id)?.name ?? ''
+    : null,
+)
+
 const fcEvents = computed(() =>
   eventStore.occurrences.map((occ) => {
     const color = eventColor(occ)
@@ -174,6 +182,8 @@ const fcEvents = computed(() =>
   }),
 )
 
+type GridViewType = Exclude<CalendarViewType, 'list'>
+
 const toolbar = ref({
   title: '',
   view: 'dayGridMonth' as CalendarViewType,
@@ -183,8 +193,91 @@ const toolbar = ref({
 
 // The URL can name the month or week and the view to show: ?date=2026-10, ?month=10&year=2025, ?view=week.
 // It is only ever read, never written: a bookmark keeps the parameters it was made with.
-const VIEW_TYPES: Record<CalendarViewName, CalendarViewType> = { month: 'dayGridMonth', week: 'timeGridWeek' }
+const VIEW_TYPES: Record<CalendarViewName, CalendarViewType> = {
+  month: 'dayGridMonth',
+  week: 'timeGridWeek',
+  list: 'list',
+}
 const initialTarget = parseCalendarQuery(route.query)
+
+function firstOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+// The list is our own (CalendarAgenda) and shows a month; FullCalendar isn't mounted meanwhile, and
+// opens again on the month the list showed.
+const listMode = ref(initialTarget.view === 'list')
+const listMonth = ref(firstOfMonth(initialTarget.date ?? new Date()))
+const listEnd = computed(() => new Date(listMonth.value.getFullYear(), listMonth.value.getMonth() + 1, 1))
+const gridStart = ref<{ view: GridViewType; date?: Date }>({
+  view: initialTarget.view === 'week' ? 'timeGridWeek' : 'dayGridMonth',
+  date: initialTarget.date,
+})
+const agendaRef = ref<InstanceType<typeof CalendarAgenda> | null>(null)
+
+const listToolbar = computed(() => {
+  const now = new Date()
+  return {
+    title: new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(listMonth.value),
+    view: 'list' as CalendarViewType,
+    date: listMonth.value,
+    todayInRange: now >= listMonth.value && now < listEnd.value,
+  }
+})
+
+watch(
+  () => [listMode.value, listMonth.value.getTime()] as const,
+  ([list]) => {
+    if (list) eventStore.load(listMonth.value, listEnd.value)
+  },
+  { immediate: true },
+)
+
+function shiftListMonth(by: number) {
+  listMonth.value = new Date(listMonth.value.getFullYear(), listMonth.value.getMonth() + by, 1)
+}
+
+function goPrev() {
+  if (listMode.value) shiftListMonth(-1)
+  else calendarApi()?.prev()
+}
+
+function goNext() {
+  if (listMode.value) shiftListMonth(1)
+  else calendarApi()?.next()
+}
+
+function goToday() {
+  if (!listMode.value) {
+    calendarApi()?.today()
+    return
+  }
+  listMonth.value = firstOfMonth(new Date())
+  agendaRef.value?.scrollToToday()
+}
+
+function gotoDate(date: Date) {
+  if (listMode.value) listMonth.value = firstOfMonth(date)
+  else calendarApi()?.gotoDate(date)
+}
+
+/** The day to keep in view when switching views: today if it is shown, else the start of what is shown. */
+function anchorDate(): Date {
+  const shown = listMode.value ? listToolbar.value : toolbar.value
+  return shown.todayInRange ? new Date() : shown.date
+}
+
+function changeView(view: CalendarViewType, date?: Date) {
+  if (view === 'list') {
+    listMonth.value = firstOfMonth(date ?? anchorDate())
+    listMode.value = true
+  } else if (listMode.value) {
+    gridStart.value = { view, date: date ?? anchorDate() }
+    listMode.value = false
+  } else {
+    calendarApi()?.changeView(view, date)
+  }
+}
 
 function handleDatesSet(info: DatesSetInfo) {
   eventStore.load(info.start, info.end)
@@ -202,9 +295,18 @@ function handleDatesSet(info: DatesSetInfo) {
 watch(
   () => route.query,
   (query) => {
+    const target = parseCalendarQuery(query)
+    if (listMode.value) {
+      if (target.view && target.view !== 'list') changeView(VIEW_TYPES[target.view], target.date)
+      else if (target.date) listMonth.value = firstOfMonth(target.date)
+      return
+    }
+    if (target.view === 'list') {
+      changeView('list', target.date)
+      return
+    }
     const api = calendarApi()
     if (!api) return
-    const target = parseCalendarQuery(query)
     const { currentStart, currentEnd, type } = api.view
     const view: CalendarViewName = type === 'timeGridWeek' ? 'week' : 'month'
     if (showsTarget(target, view, currentStart, currentEnd)) return
@@ -219,6 +321,10 @@ function calendarApi() {
 }
 
 function reloadVisibleRange(force = false) {
+  if (listMode.value) {
+    eventStore.load(listMonth.value, listEnd.value, force)
+    return
+  }
   const view = calendarRef.value?.getApi().view
   if (view) eventStore.load(view.activeStart, view.activeEnd, force)
 }
@@ -366,8 +472,8 @@ function dayCellClass(info: { dow: number; isToday: boolean }) {
 
 const calendarOptions = computed(() => ({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, classicThemePlugin],
-  initialView: VIEW_TYPES[initialTarget.view ?? 'month'],
-  initialDate: initialTarget.date,
+  initialView: gridStart.value.view,
+  initialDate: gridStart.value.date,
   // The toolbar is our own (CalendarToolbar), so it can hold month and year fields.
   headerToolbar: false as const,
   height: '100%',
@@ -417,15 +523,27 @@ const calendarOptions = computed(() => ({
   <div class="calendar-root h-full flex flex-col" :style="calendarStyle">
     <div class="flex flex-1 flex-col overflow-hidden p-2">
       <CalendarToolbar
-        v-bind="toolbar"
-        @prev="calendarApi()?.prev()"
-        @next="calendarApi()?.next()"
-        @today="calendarApi()?.today()"
-        @goto="calendarApi()?.gotoDate($event)"
-        @change-view="calendarApi()?.changeView($event)"
+        v-bind="listMode ? listToolbar : toolbar"
+        @prev="goPrev"
+        @next="goNext"
+        @today="goToday"
+        @goto="gotoDate"
+        @change-view="changeView"
       />
       <div class="min-h-0 flex-1">
-        <FullCalendar ref="calendarRef" :options="calendarOptions" />
+        <CalendarAgenda
+          v-if="listMode"
+          ref="agendaRef"
+          :occurrences="eventStore.occurrences"
+          :range-start="listMonth"
+          :range-end="listEnd"
+          :color-of="eventColor"
+          :calendar-name-of="calendarNameOf"
+          :can-create="!!calendarStore.selectedCalendar"
+          @open="openEditModal"
+          @create="openCreateModal"
+        />
+        <FullCalendar v-else ref="calendarRef" :options="calendarOptions" />
       </div>
     </div>
 

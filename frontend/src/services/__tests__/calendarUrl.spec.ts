@@ -36,6 +36,7 @@ describe('parseCalendarQuery', () => {
   it('reads the view', () => {
     expect(parse({ view: 'week' }).view).toBe('week')
     expect(parse({ view: 'month' }).view).toBe('month')
+    expect(parse({ view: 'list' }).view).toBe('list')
     expect(parse({ view: 'week', month: '3' })).toEqual({ view: 'week', date: new Date(2026, 2, 1) })
     expect(parse({})).toEqual({})
   })

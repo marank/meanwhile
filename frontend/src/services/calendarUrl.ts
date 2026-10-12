@@ -1,7 +1,7 @@
 /**
  * What the calendar shows, as it appears in the URL (`/calendar/<id>?...`):
  *
- *  - `view=month` or `view=week`
+ *  - `view=month`, `view=week` or `view=list` (the events of a month as a list)
  *  - `date=2026-10-15`: the month (or week) of that day; `date=2026-10`: that month
  *  - `month=10`: that month of this year; `year=2025`: this month of that year; both: that month
  *  - `week=50`: that ISO week (Monday to Sunday) of this year, or of `year`; shown as a week unless `view=month`
@@ -10,7 +10,7 @@
  * still opens the calendar.
  */
 
-export type CalendarViewName = 'month' | 'week'
+export type CalendarViewName = 'month' | 'week' | 'list'
 
 export interface CalendarTarget {
   view?: CalendarViewName
@@ -53,7 +53,7 @@ export function isoWeekStart(year: number, week: number): Date | undefined {
 export function parseCalendarQuery(query: Record<string, QueryValue>, today = new Date()): CalendarTarget {
   const target: CalendarTarget = {}
   const view = single(query.view)
-  if (view === 'month' || view === 'week') target.view = view
+  if (view === 'month' || view === 'week' || view === 'list') target.view = view
 
   const date = parseDate(single(query.date))
   if (date) {
