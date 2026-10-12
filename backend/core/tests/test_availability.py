@@ -21,12 +21,14 @@ def create(world, user="owner", start=BASE, hours=1, **fields):
 
 
 def availability(world, user="owner", users=(), resources=(), exclude=None, start=BASE - HOUR, end=BASE + 24 * HOUR):
-    params = [f"start={iso(start)}", f"end={iso(end)}"]
-    params += [f"user_ids={world['users'][u].id}" for u in users]
-    params += [f"resource_ids={r}" for r in resources]
-    if exclude:
-        params.append(f"exclude_event_id={exclude}")
-    res = world["api"][user].get("/availability?" + "&".join(params).replace("+", "%2B"))
+    data = {
+        "start": iso(start),
+        "end": iso(end),
+        "user_ids": [world["users"][u].id for u in users],
+        "resource_ids": list(resources),
+        "exclude_event_id": exclude,
+    }
+    res = world["api"][user].post("/availability", data)
     assert res.status_code == 200, res.content
     return res.json()
 
@@ -76,5 +78,5 @@ def test_resources_for_members_of_their_calendar(world):
 
 
 def test_ranges_are_limited(world):
-    res = world["api"]["owner"].get(f"/availability?start={iso(BASE)}&end={iso(BASE + timedelta(days=90))}".replace("+", "%2B"))
+    res = world["api"]["owner"].post("/availability", {"start": iso(BASE), "end": iso(BASE + timedelta(days=90))})
     assert res.status_code == 422

@@ -17,6 +17,7 @@ function calendarItem(id: string, folder_id: string | null = null, url_path: str
   return {
     calendar: { id, name: id, url_path } as api.Calendar,
     membership: { folder_id, position: 0, role: 'owner' } as api.CalendarMember,
+    access: 'member',
   }
 }
 

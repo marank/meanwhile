@@ -1,3 +1,13 @@
+<script lang="ts">
+/** A person or group picked to be given access: a user's label is their name, the subtitle their email. */
+export interface AccessGrantTarget {
+  kind: 'user' | 'group'
+  id: string
+  label: string
+  subtitle: string | null
+}
+</script>
+
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Search, User, Users } from 'lucide-vue-next'
@@ -14,15 +24,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  pick: [target: { kind: 'user' | 'group'; id: string }]
+  pick: [target: AccessGrantTarget]
 }>()
 
-interface Option {
-  kind: 'user' | 'group'
-  id: string
-  label: string
-  subtitle: string | null
-}
+type Option = AccessGrantTarget
 
 const root = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -85,7 +90,7 @@ function onInput(event: Event) {
 }
 
 function choose(option: Option) {
-  emit('pick', { kind: option.kind, id: option.id })
+  emit('pick', option)
   query.value = ''
   close()
   inputRef.value?.blur()

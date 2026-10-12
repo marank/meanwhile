@@ -86,6 +86,11 @@ const freeTextValue = computed(() => {
 
 const optionCount = computed(() => options.value.length + (freeTextValue.value ? 1 : 0))
 
+// Loaded results change the list's height, and with it whether it fits below the field.
+watch([optionCount, loading], () => {
+  if (isOpen.value) nextTick(updatePosition)
+})
+
 function canSearch(q: string) {
   return q.length >= props.minSearchLength
 }
@@ -119,15 +124,25 @@ async function fetchResults(q: string) {
   }
 }
 
-function updatePosition() {
+const LIST_GAP = 4
+
+async function updatePosition() {
   const input = inputRef.value
   if (!input) return
-  const rect = input.getBoundingClientRect()
-  // The list is position: fixed, so viewport coordinates apply as they are.
+  // The list lives in <body> and is position: fixed, so viewport coordinates apply as they are.
+  const field = input.getBoundingClientRect()
   dropdownStyle.value = {
-    top: `${rect.bottom}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
+    top: `${field.bottom + LIST_GAP}px`,
+    left: `${field.left}px`,
+    width: `${field.width}px`,
+  }
+  await nextTick()
+  const list = listRef.value?.getBoundingClientRect()
+  if (!list) return
+  const below = window.innerHeight - field.bottom - LIST_GAP
+  // Open upwards where the list doesn't fit below the field but does better above it.
+  if (list.height > below && field.top > below) {
+    dropdownStyle.value = { ...dropdownStyle.value, top: `${Math.max(LIST_GAP, field.top - LIST_GAP - list.height)}px` }
   }
 }
 
@@ -244,7 +259,8 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 function onDocumentClick(event: MouseEvent) {
-  if (root.value && !root.value.contains(event.target as Node)) close()
+  const target = event.target as Node
+  if (root.value && !root.value.contains(target) && !listRef.value?.contains(target)) close()
 }
 
 function onWindowResize() {
@@ -337,61 +353,63 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
     </button>
     <ChevronDown :size="16" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
 
-    <ul
-      v-if="isOpen"
-      :id="listboxId"
-      ref="listRef"
-      role="listbox"
-      class="fixed z-[100] mt-1 max-h-60 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg"
-      :style="dropdownStyle"
-      @mousedown.prevent
-      @mouseleave="activeIndex = -1"
-    >
-      <li v-if="loading && !optionCount" class="px-3 py-2 text-sm text-gray-500">
-        {{ $t('app.loading') }}
-      </li>
-      <li v-else-if="!loading && !optionCount" class="px-3 py-2 text-sm text-gray-500">
-        {{ $t('app.noResults') }}
-      </li>
-      <template v-else>
-        <li
-          v-for="(option, index) in options"
-          :key="option.id"
-          role="option"
-          :aria-selected="option.id === modelValue"
-          class="px-3 py-2 cursor-pointer text-sm"
-          :class="[
-            index === activeIndex ? 'bg-surface-muted' : '',
-            option.id === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800',
-          ]"
-          @mouseenter="activeIndex = index"
-          @mouseup="choose(option)"
-        >
-          <div class="flex items-center gap-2">
-            <OptionMark :option="option" />
-            <div class="min-w-0 flex-1">
-              <div class="truncate">{{ option.label }}</div>
-              <div v-if="option.subtitle" class="truncate text-xs text-gray-500">
-                {{ option.subtitle }}
+    <Teleport to="body">
+      <ul
+        v-if="isOpen"
+        :id="listboxId"
+        ref="listRef"
+        role="listbox"
+        class="fixed z-[100] max-h-60 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg"
+        :style="dropdownStyle"
+        @mousedown.prevent
+        @mouseleave="activeIndex = -1"
+      >
+        <li v-if="loading && !optionCount" class="px-3 py-2 text-sm text-gray-500">
+          {{ $t('app.loading') }}
+        </li>
+        <li v-else-if="!loading && !optionCount" class="px-3 py-2 text-sm text-gray-500">
+          {{ $t('app.noResults') }}
+        </li>
+        <template v-else>
+          <li
+            v-for="(option, index) in options"
+            :key="option.id"
+            role="option"
+            :aria-selected="option.id === modelValue"
+            class="px-3 py-2 cursor-pointer text-sm"
+            :class="[
+              index === activeIndex ? 'bg-surface-muted' : '',
+              option.id === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800',
+            ]"
+            @mouseenter="activeIndex = index"
+            @mouseup="choose(option)"
+          >
+            <div class="flex items-center gap-2">
+              <OptionMark :option="option" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate">{{ option.label }}</div>
+                <div v-if="option.subtitle" class="truncate text-xs text-gray-500">
+                  {{ option.subtitle }}
+                </div>
               </div>
             </div>
-          </div>
-        </li>
-        <li
-          v-if="freeTextValue !== null"
-          role="option"
-          :aria-selected="freeTextValue === modelValue"
-          class="px-3 py-2 cursor-pointer text-sm"
-          :class="[
-            activeIndex === options.length ? 'bg-surface-muted' : '',
-            freeTextValue === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800',
-          ]"
-          @mouseenter="activeIndex = options.length"
-          @mouseup="chooseFreeText"
-        >
-          {{ $t('app.useValue', { value: freeTextValue }) }}
-        </li>
-      </template>
-    </ul>
+          </li>
+          <li
+            v-if="freeTextValue !== null"
+            role="option"
+            :aria-selected="freeTextValue === modelValue"
+            class="px-3 py-2 cursor-pointer text-sm"
+            :class="[
+              activeIndex === options.length ? 'bg-surface-muted' : '',
+              freeTextValue === modelValue ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-gray-800',
+            ]"
+            @mouseenter="activeIndex = options.length"
+            @mouseup="chooseFreeText"
+          >
+            {{ $t('app.useValue', { value: freeTextValue }) }}
+          </li>
+        </template>
+      </ul>
+    </Teleport>
   </div>
 </template>

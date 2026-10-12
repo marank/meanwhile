@@ -22,7 +22,7 @@ from core.models.base import EventStatus, Role
 from core.services.bookings import booked_resources, can_modify_event, find_booking_conflicts
 from core.services.calendars import create_calendar
 from core.services.ical import event_ical_text
-from core.services.permissions import accessible_calendars, get_membership, has_at_least_role
+from core.services.permissions import accessible_calendars, get_membership, has_at_least_role, sidebar_calendars
 from core.realtime import broadcast
 from core.services.activity import record_activity
 from core.services.notifications import notify
@@ -177,9 +177,9 @@ class Collection(storage.BaseCollection):
         if self._calendar is None:
             return
         _, role = self._actor()
-        if role != Role.OWNER:
-            # Same rule as the API: only the owner changes calendar details.
-            raise _forbidden("Only the owner can change calendar details")
+        if role not in {Role.OWNER, Role.MANAGE}:
+            # Same rule as the API: only who manages the calendar changes its details.
+            raise _forbidden("Only who manages the calendar can change its details")
         name = props.get("D:displayname")
         if name:
             self._calendar.name = name
@@ -567,7 +567,8 @@ class Storage(storage.BaseStorage):
                 if coll is not None:
                     yield coll
                 if depth != "0" and coll is not None and coll.is_principal:
-                    for calendar in accessible_calendars(coll._user).order_by("name"):
+                    # The calendars of the sidebar; another public one is still found by its address.
+                    for calendar in sidebar_calendars(coll._user).order_by("name"):
                         yield Collection(
                             self.configuration,
                             f"/{coll._user.email}/{_dav_name(calendar)}",

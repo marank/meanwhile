@@ -15,14 +15,17 @@ def default_weekend_days() -> list[int]:
 
 class Role:
     OWNER = "owner"
+    # Everything the owner may, except deleting the calendar and changing its owner.
+    MANAGE = "manage"
     FULL = "full"
     OWN = "own"
     READ = "read"
 
     CHOICES = [
         (OWNER, "Owner"),
-        (FULL, "Full access"),
-        (OWN, "Own"),
+        (MANAGE, "Manage"),
+        (FULL, "All events"),
+        (OWN, "Own events"),
         (READ, "Read only"),
     ]
 

@@ -117,62 +117,66 @@ const maxWeeks = MAX_MINUTES_BEFORE / (7 * 24 * 60)
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="space-y-6">
     <p class="text-sm text-gray-600">{{ $t('reminders.hint') }}</p>
 
-    <ul v-if="rows.length" class="space-y-3">
-      <li v-for="(row, index) in rows" :key="row.key" class="space-y-1">
-        <div class="flex flex-wrap items-center gap-2 text-sm">
-          <template v-if="allDay">
-            <input
-              v-model.number="row.days"
-              type="number"
-              min="0"
-              :max="maxWeeks * 7"
-              :aria-label="$t('reminders.daysLabel')"
-              :aria-invalid="!rowStates[index]?.ok"
-              class="w-20 rounded-lg border px-2 py-1"
-            />
-            <span class="text-gray-700">{{ $t('reminders.daysBeforeAtInput') }}</span>
-            <input
-              v-model="row.time"
-              type="time"
-              :aria-label="$t('event.time')"
-              :aria-invalid="!rowStates[index]?.ok"
-              class="rounded-lg border px-2 py-1"
-            />
-          </template>
-          <template v-else>
-            <input
-              v-model.number="row.amount"
-              type="number"
-              min="0"
-              :aria-label="$t('reminders.amountLabel')"
-              :aria-invalid="!rowStates[index]?.ok"
-              class="w-20 rounded-lg border px-2 py-1"
-            />
-            <AppSelect
-              v-model="row.unit"
-              :options="unitOptions(row.amount)"
-              :label="$t('reminders.unitLabel')"
-              size="sm"
-            />
-            <span class="text-gray-700">{{ $t('reminders.before') }}</span>
-          </template>
-          <IconButton :label="$t('reminders.remove')" tone="danger" class="ml-auto" @click="remove(index)">
-            <Trash2 :size="16" />
-          </IconButton>
-        </div>
-        <p v-if="!rowStates[index]?.ok" class="text-xs text-red-600" role="alert">
-          {{ $t(allDay ? 'reminders.invalidAllDay' : 'reminders.invalid', { weeks: maxWeeks }) }}
-        </p>
-        <p v-else-if="rowStates[index]?.duplicate" class="text-xs text-amber-600">{{ $t('reminders.duplicate') }}</p>
-        <p v-else-if="allDay" class="text-xs text-gray-500">{{ reminderLabel(rowStates[index]!.value, true) }}</p>
-      </li>
-    </ul>
-    <p v-else class="text-sm text-gray-500">{{ $t('reminders.none') }}</p>
+    <!-- The add button belongs to the list; the quick choices below are a block of their own. -->
+    <div class="space-y-3">
+      <ul v-if="rows.length" class="divide-y divide-line rounded-lg border border-line">
+        <li v-for="(row, index) in rows" :key="row.key" class="space-y-1 px-3 py-2">
+          <!-- One line on phones too: where it gets narrow, only the text wraps. -->
+          <div class="flex items-center gap-2 text-sm">
+            <template v-if="allDay">
+              <input
+                v-model.number="row.days"
+                type="number"
+                min="0"
+                :max="maxWeeks * 7"
+                :aria-label="$t('reminders.daysLabel')"
+                :aria-invalid="!rowStates[index]?.ok"
+                class="w-16 rounded-lg border px-2 py-1.5"
+              />
+              <span class="min-w-0 text-gray-700">{{ $t('reminders.daysBeforeAtInput') }}</span>
+              <input
+                v-model="row.time"
+                type="time"
+                :aria-label="$t('event.time')"
+                :aria-invalid="!rowStates[index]?.ok"
+                class="rounded-lg border px-2 py-1.5"
+              />
+            </template>
+            <template v-else>
+              <input
+                v-model.number="row.amount"
+                type="number"
+                min="0"
+                :aria-label="$t('reminders.amountLabel')"
+                :aria-invalid="!rowStates[index]?.ok"
+                class="w-16 rounded-lg border px-2 py-1.5"
+              />
+              <!-- A fixed width keeps "before" in one column, whichever unit each row has. -->
+              <AppSelect
+                v-model="row.unit"
+                :options="unitOptions(row.amount)"
+                :label="$t('reminders.unitLabel')"
+                size="sm"
+                class="w-32"
+              />
+              <span class="text-gray-700">{{ $t('reminders.before') }}</span>
+            </template>
+            <IconButton :label="$t('reminders.remove')" tone="danger" class="ml-auto shrink-0" @click="remove(index)">
+              <Trash2 :size="16" />
+            </IconButton>
+          </div>
+          <p v-if="!rowStates[index]?.ok" class="text-xs text-red-600" role="alert">
+            {{ $t(allDay ? 'reminders.invalidAllDay' : 'reminders.invalid', { weeks: maxWeeks }) }}
+          </p>
+          <p v-else-if="rowStates[index]?.duplicate" class="text-xs text-amber-600">{{ $t('reminders.duplicate') }}</p>
+          <p v-else-if="allDay" class="text-xs text-gray-500">{{ reminderLabel(rowStates[index]!.value, true) }}</p>
+        </li>
+      </ul>
+      <p v-else class="text-sm text-gray-500">{{ $t('reminders.none') }}</p>
 
-    <div class="space-y-2">
       <button
         type="button"
         class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hover"
@@ -181,13 +185,16 @@ const maxWeeks = MAX_MINUTES_BEFORE / (7 * 24 * 60)
         <Plus :size="16" />
         {{ $t('reminders.add') }}
       </button>
-      <div v-if="quickChoices.length" class="flex flex-wrap items-center gap-1.5">
-        <span class="text-xs text-gray-500">{{ $t('reminders.quick') }}</span>
+    </div>
+
+    <div v-if="quickChoices.length">
+      <p class="mb-2 text-xs text-gray-500">{{ $t('reminders.quick') }}</p>
+      <div class="flex flex-wrap gap-2">
         <button
           v-for="choice in quickChoices"
           :key="choice"
           type="button"
-          class="rounded-full border border-line px-2.5 py-0.5 text-xs hover:bg-hover"
+          class="rounded-full border border-line px-3 py-1 text-xs hover:bg-hover"
           @click="add(choice)"
         >
           {{ reminderLabel(choice, allDay) }}

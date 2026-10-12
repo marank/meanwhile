@@ -13,7 +13,7 @@ from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from core.api import CSRFRouter
-from core.models import CalendarMember, Folder
+from core.models import CalendarGroup, CalendarMember, CalendarSubscription, Folder
 from core.realtime import broadcast
 from core.schemas import (
     FolderCreate,
@@ -101,10 +101,16 @@ def update_layout_items(request, payload: LayoutItemsUpdate):
         if item.type == "folder":
             Folder.objects.filter(id=item.id, user=user).update(position=item.position, parent_id=item.parent_id)
         else:
-            # Calendars are identified by their own id, as everywhere in the app.
-            CalendarMember.objects.filter(calendar_id=item.id, user=user).update(
-                position=item.position, folder_id=item.parent_id
-            )
+            # Calendars are identified by their own id, as everywhere in the app. A membership holds where
+            # its calendar sits; without one (a public calendar added, one shared through a group) the
+            # user's CalendarSubscription does, made on the first move for a group's calendar.
+            place = {"position": item.position, "folder_id": item.parent_id}
+            if CalendarMember.objects.filter(calendar_id=item.id, user=user).update(**place):
+                continue
+            if CalendarSubscription.objects.filter(calendar_id=item.id, user=user).update(**place):
+                continue
+            if CalendarGroup.objects.filter(calendar_id=item.id, group__in=user.groups.all()).exists():
+                CalendarSubscription.objects.create(calendar_id=item.id, user=user, **place)
     # The bulk updates send no signals; the user's other tabs show the new order.
     broadcast.calendars_changed([user.id])
     return {"ok": True}

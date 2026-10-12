@@ -38,6 +38,7 @@ import type {
   ParticipantStatus,
   ProfileUpdate,
   Resource,
+  PublicCalendar,
   ResourceInput,
   SearchEntity,
   SearchResult,
@@ -126,6 +127,13 @@ export const updateCalendar = (id: string, data: CalendarUpdate) =>
   api<Calendar>(`/api/calendars/${id}`, { method: 'PATCH', body: data })
 
 export const deleteCalendar = (id: string) => api<void>(`/api/calendars/${id}`, { method: 'DELETE' })
+
+/** Public calendars one isn't a member of; they show up in the sidebar once added. */
+export const listPublicCalendars = () => api<PublicCalendar[]>('/api/calendars/public')
+
+export const addPublicCalendar = (id: string) => api<void>(`/api/calendars/${id}/subscription`, { method: 'PUT' })
+
+export const removePublicCalendar = (id: string) => api<void>(`/api/calendars/${id}/subscription`, { method: 'DELETE' })
 
 // Members
 export const listMembers = (calendarId: string) => api<CalendarMember[]>(`/api/calendars/${calendarId}/members`)
@@ -245,20 +253,21 @@ export const updateOccurrence = (
   data: Partial<EventInput>,
 ) => api<Event>(occurrencePath(seriesId, recurrenceId, scope), { method: 'PATCH', body: data })
 
-/** When the users and resources are taken in [start, end); `excludeEventId` doesn't count. */
+/**
+ * When the users and resources are taken in [start, end); `excludeEventId` doesn't count.
+ * A POST, though it changes nothing: the lists of ids go in the body instead of a long URL.
+ */
 export const getAvailability = (
   start: string,
   end: string,
   userIds: string[],
   resourceIds: string[],
   excludeEventId?: string | null,
-) => {
-  const params = new URLSearchParams({ start, end })
-  for (const id of userIds) params.append('user_ids', id)
-  for (const id of resourceIds) params.append('resource_ids', id)
-  if (excludeEventId) params.set('exclude_event_id', excludeEventId)
-  return api<Availability>(`/api/availability?${params}`)
-}
+) =>
+  api<Availability>('/api/availability', {
+    method: 'POST',
+    body: { start, end, user_ids: userIds, resource_ids: resourceIds, exclude_event_id: excludeEventId ?? null },
+  })
 
 /** The current user's own reminders, in minutes before each occurrence. */
 export const getReminders = (eventId: string) => api<{ minutes: number[] }>(`/api/events/${eventId}/reminders`)

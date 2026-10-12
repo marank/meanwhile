@@ -160,3 +160,29 @@ input[aria-invalid='true']:focus {
   border-color: var(--color-red-600);
   box-shadow: 0 0 0 1px var(--color-red-600);
 }
+
+/* A dialog shown as a page on phones leaves the navbar usable, its menus included. */
+@media (width < 40rem) {
+  body:has(.app-modal-fullscreen) .app-navbar {
+    position: relative;
+    z-index: 55;
+  }
+}
+
+/*
+ * Phones: fields a little denser and all equally tall (38px), small selects (AppSelect) included. Their
+ * text stays at least 16px, since iOS zooms into fields with smaller text when they get focus.
+ * Unlayered, so this wins over the utilities.
+ */
+@media (width < 40rem) {
+  input:not([type='checkbox']):not([type='radio']):not([type='color']),
+  select,
+  textarea {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+
+  :is(input, select, textarea).py-2 {
+    padding-block: 0.375rem;
+  }
+}

@@ -5,7 +5,7 @@ Where calendars and folders sit in the user's sidebar.
 import pytest
 from django.test import Client
 
-from core.models import CalendarMember, Folder, User
+from core.models import CalendarGroup, CalendarMember, CalendarSubscription, Folder, User, UserGroup
 from core.services.calendars import create_calendar
 
 pytestmark = pytest.mark.django_db
@@ -37,6 +37,39 @@ def test_calendars_are_moved_into_folders_by_their_id(user_client):
     reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 0})
     membership.refresh_from_db()
     assert membership.folder_id is None
+
+
+def listed(client):
+    return {item["calendar"]["id"]: item["membership"] for item in client.get("/api/calendars").json()}
+
+
+def test_calendars_shared_through_a_group_are_moved_too(user_client):
+    user, client = user_client
+    owner = User.objects.create_user(email="owner@example.test", password="x", display_name="Owner")
+    calendar = create_calendar(owner, "Team")
+    group = UserGroup.objects.create(name="Team")
+    user.groups.add(group)
+    CalendarGroup.objects.create(calendar=calendar, group=group, role="read")
+    folder = Folder.objects.create(user=user, name="Shared")
+
+    reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": folder.id, "position": 2})
+    placed = listed(client)[calendar.id]
+    assert (placed["folder_id"], placed["position"]) == (folder.id, 2)
+
+    reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 0})
+    assert listed(client)[calendar.id]["folder_id"] is None
+    assert CalendarSubscription.objects.filter(calendar=calendar, user=user).count() == 1
+
+
+def test_calendars_without_access_get_no_place(user_client):
+    user, client = user_client
+    owner = User.objects.create_user(email="owner@example.test", password="x", display_name="Owner")
+    calendar = create_calendar(owner, "Public")
+    calendar.is_public = True
+    calendar.save()
+    reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 0})
+    # A public calendar shows up in the sidebar by being added, not by being moved there.
+    assert calendar.id not in listed(client)
 
 
 def test_folders_move_into_folders(user_client):

@@ -89,8 +89,8 @@ async function respondToInvitation(notification: AppNotification, status: api.Pa
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto p-6">
-    <div class="flex items-center justify-between mb-6">
+  <div class="max-w-3xl mx-auto p-3 sm:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
       <h1 class="text-2xl font-semibold text-gray-800">{{ $t('notifications.title') }}</h1>
       <button
         v-if="notifications.items.length"

@@ -95,6 +95,42 @@ class CalendarMember(models.Model):
         ]
 
 
+class CalendarSubscription(models.Model):
+    """
+    A calendar in someone's sidebar without a membership of theirs, and where it sits there: a public calendar
+    they added (public calendars only show up once added), or one shared with them through a group that they
+    moved in the sidebar.
+    """
+
+    id = models.CharField(
+        primary_key=True, max_length=36, default=new_uuid7, editable=False
+    )
+    calendar = models.ForeignKey(
+        Calendar, on_delete=models.CASCADE, related_name="subscriptions"
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="calendar_subscriptions"
+    )
+    # Where it sits in the sidebar, as for memberships.
+    folder = models.ForeignKey(
+        "Folder",
+        on_delete=models.SET_NULL,
+        related_name="subscriptions",
+        blank=True,
+        null=True,
+    )
+    position = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "calendar_subscriptions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["calendar", "user"], name="uq_calendar_subscription"
+            )
+        ]
+
+
 class CalendarGroup(models.Model):
     id = models.CharField(
         primary_key=True, max_length=36, default=new_uuid7, editable=False

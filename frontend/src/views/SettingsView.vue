@@ -15,6 +15,7 @@ import { useQueryTab } from '@/composables/useQueryTab'
 import { provideCalendarSettingsSync } from '@/composables/useCalendarSettingsSync'
 import { toast } from '@/services/toast'
 import { useCalendarStore } from '@/stores/calendars'
+import { hasRole } from '@/services/roles'
 
 const validTabs = ['general', 'access', 'categories', 'resources', 'share'] as const
 
@@ -28,7 +29,7 @@ const { tab, selectTab } = useQueryTab(validTabs)
 
 const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`) })))
 const calendar = ref<api.Calendar | null>(null)
-const canManage = computed(() => calendar.value?.my_membership?.role === 'owner')
+const canManage = computed(() => hasRole(calendar.value?.my_membership?.role, 'manage'))
 
 watch(
   () => props.calendarId,

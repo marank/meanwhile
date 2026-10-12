@@ -139,4 +139,4 @@ def find_conflicting_approved_bookings(resource: Resource, event: Event):
 
 
 def can_modify_event(event: Event, user_id: str, role: str) -> bool:
-    return role in {Role.OWNER, Role.FULL} or str(event.creator_id) == str(user_id)
+    return role in {Role.OWNER, Role.MANAGE, Role.FULL} or str(event.creator_id) == str(user_id)

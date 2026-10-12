@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import { CalendarDays } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
+import { CalendarDays, EllipsisVertical } from 'lucide-vue-next'
 import FolderTreeItem from './FolderTreeItem.vue'
 import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'
+import IconButton from './IconButton.vue'
+import PublicCalendarsDialog from './PublicCalendarsDialog.vue'
 import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useEscapeToClose } from '@/composables/useEscapeToClose'
 import { confirm, prompt } from '@/services/dialog'
 import { readStorage, writeStorage } from '@/services/storage'
 import { useSidebarDrag, type SidebarDrop } from '@/composables/useSidebarDrag'
 import { planMove, type SidebarTree } from '@/services/sidebarDrag'
-import { collapsedFolders, dropIndicator } from '@/services/sidebarState'
+import { collapsedFolders, dropIndicator, sidebarDrawerOpen } from '@/services/sidebarState'
+import { hasRole } from '@/services/roles'
+import * as api from '@/api'
 import type { CalendarListItem, Folder } from '@/api'
 
 const SIDEBAR_WIDTH_KEY = 'calendar_sidebar_width'
@@ -23,6 +28,7 @@ const DEFAULT_WIDTH = 256
 
 const store = useCalendarStore()
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const { run } = useAction()
 
@@ -32,6 +38,28 @@ const scroller = ref<HTMLElement | null>(null)
 
 useLoader(store.load)
 useSidebarDrag(scroller, handleDrop)
+useEscapeToClose(
+  () => sidebarDrawerOpen.value,
+  () => (sidebarDrawerOpen.value = false),
+)
+
+// The drawer slides only while it is opened or closed, not when the window crosses the desktop breakpoint
+// (a tablet turned upright), where the sidebar would otherwise visibly slide out.
+const sliding = ref(false)
+let slideTimer: ReturnType<typeof setTimeout> | undefined
+watch(sidebarDrawerOpen, () => {
+  sliding.value = true
+  clearTimeout(slideTimer)
+  slideTimer = setTimeout(() => (sliding.value = false), 250)
+})
+
+// The drawer closes once something in it was opened; not for the context menu, which selects its item.
+watch(
+  () => route.fullPath,
+  () => {
+    if (!contextMenu.value) sidebarDrawerOpen.value = false
+  },
+)
 
 function clampWidth(width: number): number {
   return Number.isNaN(width) ? DEFAULT_WIDTH : Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width))
@@ -62,7 +90,8 @@ async function handleDrop({ type, id, parentId, anchor }: SidebarDrop) {
 
 // Context menu
 
-const contextMenu = ref<{ x: number; y: number; items: MenuItem[] } | null>(null)
+const contextMenu = ref<{ x: number; y: number; items: MenuItem[]; above?: boolean } | null>(null)
+const showPublicCalendars = ref(false)
 
 function openMenu(event: MouseEvent, items: MenuItem[]) {
   if (!items.length) return
@@ -76,7 +105,16 @@ function openMenu(event: MouseEvent, items: MenuItem[]) {
 }
 
 function rootMenuItems(): MenuItem[] {
-  return [{ label: t('app.createFolder'), action: () => createFolder(null) }]
+  return [
+    { label: t('app.createFolder'), action: () => createFolder(null) },
+    { label: t('app.publicCalendars'), action: () => (showPublicCalendars.value = true) },
+  ]
+}
+
+/** The menu of the button next to "New calendar", opening upwards from it. */
+function openMoreMenu(event: MouseEvent) {
+  const rect = (event.currentTarget as Element).getBoundingClientRect()
+  contextMenu.value = { x: rect.left, y: rect.top - 4, items: rootMenuItems(), above: true }
 }
 
 function folderMenuItems(folder: Folder): MenuItem[] {
@@ -88,15 +126,28 @@ function folderMenuItems(folder: Folder): MenuItem[] {
 }
 
 function calendarMenuItems(item: CalendarListItem): MenuItem[] {
-  if (item.membership.role !== 'owner') return []
+  const role = item.membership.role
+  // A public calendar the user added (they never manage it through that) leaves the sidebar again.
+  if (item.access === 'public') {
+    return [{ label: t('app.removeFromSidebar'), action: () => removePublicCalendar(item) }]
+  }
+  if (!hasRole(role, 'manage')) return []
+  // Who manages a calendar changes it; only its owner deletes it.
   return [
     { label: t('app.rename'), action: () => renameCalendar(item) },
-    { label: t('app.delete'), action: () => deleteCalendar(item) },
+    ...(role === 'owner' ? [{ label: t('app.delete'), action: () => deleteCalendar(item) }] : []),
     { label: t('app.settings'), action: () => router.push(`/settings/${item.calendar.id}`) },
   ]
 }
 
 // Actions
+
+async function removePublicCalendar(item: CalendarListItem) {
+  await run(async () => {
+    await api.removePublicCalendar(item.calendar.id)
+    await store.load()
+  })
+}
 
 async function createCalendar() {
   const name = await prompt(t('app.calendarNamePrompt'), '', t('app.newCalendar'))
@@ -157,7 +208,22 @@ function startResize(event: MouseEvent) {
 </script>
 
 <template>
-  <aside class="relative flex flex-col border-r border-line bg-surface" :style="{ width: `${sidebarWidth}px` }">
+  <!-- Below the desktop breakpoint the sidebar is a drawer, opened from the navbar. -->
+  <div
+    v-if="sidebarDrawerOpen"
+    class="absolute inset-0 z-40 bg-black/40 lg:hidden"
+    aria-hidden="true"
+    @click="sidebarDrawerOpen = false"
+  ></div>
+  <aside
+    id="calendar-sidebar"
+    class="absolute inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-xl lg:relative lg:z-auto lg:w-[var(--sidebar-width)] lg:max-w-none lg:translate-none lg:shadow-none lg:transition-none"
+    :class="[
+      sidebarDrawerOpen ? 'translate-none' : 'max-lg:invisible -translate-x-full',
+      { 'transition-[translate,visibility] duration-200': sliding },
+    ]"
+    :style="{ '--sidebar-width': `${sidebarWidth}px` }"
+  >
     <div
       ref="scroller"
       class="relative flex-1 select-none space-y-1 overflow-y-auto p-2"
@@ -210,21 +276,34 @@ function startResize(event: MouseEvent) {
       :x="contextMenu.x"
       :y="contextMenu.y"
       :items="contextMenu.items"
+      :above="contextMenu.above"
       @close="contextMenu = null"
     />
 
-    <div class="border-t border-line p-3">
+    <PublicCalendarsDialog v-if="showPublicCalendars" @close="showPublicCalendars = false" />
+
+    <div class="flex items-center gap-2 border-t border-line p-3">
       <button
         type="button"
-        class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700"
+        class="min-w-0 flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700"
         @click="createCalendar"
       >
         {{ $t('app.newCalendar') }}
       </button>
+      <!-- Square, as tall as the "New calendar" button next to it. -->
+      <IconButton
+        bordered
+        class="h-9 w-9 shrink-0"
+        :label="$t('app.moreActions')"
+        aria-haspopup="menu"
+        @click="openMoreMenu"
+      >
+        <EllipsisVertical :size="18" :stroke-width="2.25" />
+      </IconButton>
     </div>
 
     <div
-      class="absolute bottom-0 right-0 top-0 w-2 cursor-col-resize transition-colors hover:bg-blue-200/50 active:bg-blue-300/50"
+      class="absolute bottom-0 right-0 top-0 hidden w-2 cursor-col-resize lg:block transition-colors hover:bg-blue-200/50 active:bg-blue-300/50"
       :class="{ 'bg-blue-200/50': isResizing }"
       aria-hidden="true"
       @mousedown="startResize"

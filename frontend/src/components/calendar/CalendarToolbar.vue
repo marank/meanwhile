@@ -55,10 +55,13 @@ function shiftYear(by: number) {
   <!--
     Equal outer columns keep the title exactly centered above the calendar. Where the calendar is
     too narrow for that, the title gets a row of its own above the controls (container query).
+    On phones the controls take two rows: the arrows and the views, then today, month and year.
   -->
   <div class="calendar-toolbar @container pb-2">
-    <div class="grid grid-cols-[auto_auto] items-center gap-3 @min-[60rem]:grid-cols-[1fr_auto_1fr]">
-      <div class="flex items-center gap-3">
+    <div
+      class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 @min-[44rem]:gap-3 @min-[60rem]:grid @min-[60rem]:grid-cols-[1fr_auto_1fr]"
+    >
+      <div class="contents items-center gap-3 @min-[44rem]:flex">
         <div class="toolbar-group">
           <button
             type="button"
@@ -96,27 +99,39 @@ function shiftYear(by: number) {
             <ChevronsRight :size="18" />
           </button>
         </div>
-        <button type="button" class="toolbar-button toolbar-solo" :disabled="todayInRange" @click="emit('today')">
+        <button
+          type="button"
+          class="toolbar-button toolbar-solo order-2 @min-[44rem]:order-none"
+          :disabled="todayInRange"
+          @click="emit('today')"
+        >
           {{ $t('app.today') }}
         </button>
       </div>
 
       <h2
-        class="order-first col-span-2 truncate text-center text-lg font-semibold text-[var(--app-text)] @min-[60rem]:order-none @min-[60rem]:col-span-1"
+        class="toolbar-title order-first mb-2 w-full truncate text-center text-lg font-semibold text-[var(--app-text)] @min-[44rem]:mb-0 @min-[60rem]:order-none @min-[60rem]:w-auto"
       >
         {{ title }}
       </h2>
 
-      <div class="flex items-center justify-end gap-2">
-        <AppSelect
-          :model-value="month"
-          :options="months"
-          :label="$t('app.month')"
-          @update:model-value="goto(year, $event)"
-        />
-        <YearPicker :model-value="year" :label="$t('app.year')" @update:model-value="goto($event, month)" />
+      <div class="contents items-center justify-end gap-2 @min-[44rem]:ml-auto @min-[44rem]:flex">
+        <div class="order-2 flex min-w-0 flex-1 justify-end gap-2 @min-[44rem]:order-none @min-[44rem]:flex-none">
+          <AppSelect
+            class="min-w-0"
+            :model-value="month"
+            :options="months"
+            :label="$t('app.month')"
+            @update:model-value="goto(year, $event)"
+          />
+          <YearPicker :model-value="year" :label="$t('app.year')" @update:model-value="goto($event, month)" />
+        </div>
 
-        <div class="toolbar-group ml-1" role="radiogroup" :aria-label="$t('app.view')">
+        <div
+          class="toolbar-group order-1 @min-[44rem]:order-none @min-[44rem]:ml-1"
+          role="radiogroup"
+          :aria-label="$t('app.view')"
+        >
           <button
             v-for="option in views"
             :key="option.value"
@@ -131,6 +146,12 @@ function shiftYear(by: number) {
           </button>
         </div>
       </div>
+
+      <!--
+        Phones: today, month and year always start a row of their own. This empty row gets the row
+        gap on both sides, so the small row gap adds up to the same spacing as between the others.
+      -->
+      <div class="order-1 w-full @min-[44rem]:hidden" aria-hidden="true"></div>
     </div>
   </div>
 </template>
@@ -205,6 +226,31 @@ function shiftYear(by: number) {
   background-color: var(--calendar-control-bg);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
   padding: calc(0.3rem + 3px) 0.9rem;
+}
+
+/*
+ * Between phones and the single row: where there is room, the title goes between the arrows and the views
+ * instead of taking a row of its own; today, month and year stay on the row below.
+ */
+@container (34rem <= width < 44rem) {
+  .toolbar-title {
+    flex: 1 1 0;
+    order: 0;
+    width: auto;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+}
+
+/* Phones: a little less padding, so the arrows and the views fit next to each other. */
+@container (width < 44rem) {
+  .toolbar-button:not(.toolbar-icon) {
+    padding-inline: 0.5rem;
+  }
+
+  .toolbar-icon {
+    padding-inline: 0.3rem;
+  }
 }
 
 .toolbar-solo:disabled {

@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Plus } from 'lucide-vue-next'
+import { computed, nextTick, ref } from 'vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import * as api from '@/api'
-import { useAction } from '@/composables/useAction'
 import { participantStatusLabel, participantStatuses } from '@/services/labels'
 
-/** A participant of an event that hasn't been saved yet; sent along when the event is created. */
+/** A participant added in the dialog but not saved yet; sent along when the event is saved. */
 export interface PendingParticipant {
   tempId: string
   user_id?: string
@@ -29,21 +27,25 @@ const props = defineProps<{
 }>()
 
 const pending = defineModel<PendingParticipant[]>('pending', { required: true })
+/** Saved participants removed in the dialog; they are removed when the event is saved. */
+const removed = defineModel<string[]>('removed', { required: true })
 /** The saved participants of an existing event, loaded by the dialog; null while loading. */
 const participants = defineModel<api.EventParticipant[] | null>('participants', { default: null })
 
-const { busy, run } = useAction()
 const inputValue = ref<string | null>(null)
-const selectedUser = ref<api.SearchResult | null>(null)
 
 const items = computed<ParticipantItem[]>(() => [
-  ...(participants.value ?? []).map((participant) => ({
-    key: participant.id,
-    email: participant.email,
-    display_name: participant.display_name,
-    status: participant.status,
-    remove: () => removeParticipant(participant.id),
-  })),
+  ...(participants.value ?? [])
+    .filter((participant) => !removed.value.includes(participant.id))
+    .map((participant) => ({
+      key: participant.id,
+      email: participant.email,
+      display_name: participant.display_name,
+      status: participant.status,
+      remove: () => {
+        removed.value = [...removed.value, participant.id]
+      },
+    })),
   ...pending.value.map((participant) => ({
     key: participant.tempId,
     email: participant.email,
@@ -66,66 +68,48 @@ const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 // New events have no saved participants to wait for.
 const loading = computed(() => !!props.eventId && participants.value === null)
 
-async function load() {
-  if (props.eventId) participants.value = await api.listEventParticipants(props.eventId)
-}
-
-function onSelect(_value: string | null, option: api.SearchResult | null) {
-  selectedUser.value = option
-}
-
-function resetInput() {
-  inputValue.value = null
-  selectedUser.value = null
-}
-
-async function addParticipant() {
-  const value = inputValue.value?.trim()
-  if (!value) return
+/** Picking a user or entering an email address adds them to the list right away; saving sends them. */
+function add(value: string | null, user: api.SearchResult | null) {
+  // Emptied after the field took the pick, so it sees the change and clears its text.
+  nextTick(() => (inputValue.value = null))
+  const picked = value?.trim()
+  if (!picked) return
   // A picked user's value is their id; free text is an email address.
-  const user = selectedUser.value
-  const email = user?.subtitle || value
-  if (items.value.some((item) => item.email.toLowerCase() === email.toLowerCase())) {
-    resetInput()
+  const email = user?.subtitle || picked
+  if (items.value.some((item) => item.email.toLowerCase() === email.toLowerCase())) return
+  // Removed and added again: the saved participant simply stays.
+  const saved = participants.value?.find((p) => p.email.toLowerCase() === email.toLowerCase())
+  if (saved) {
+    removed.value = removed.value.filter((id) => id !== saved.id)
     return
   }
-
-  if (!props.eventId) {
-    pending.value = [
-      ...pending.value,
-      {
-        tempId: crypto.randomUUID(),
-        user_id: user ? value : undefined,
-        email,
-        display_name: user?.label || email,
-        status: 'needs_action',
-      },
-    ]
-    resetInput()
-    return
-  }
-
-  const eventId = props.eventId
-  const data: api.EventParticipantCreate = user ? { user_id: value } : { email: value }
-  const added = await run(async () => {
-    await api.addEventParticipant(eventId, { ...data, status: 'needs_action' })
-    await load()
-  })
-  if (added) resetInput()
-}
-
-async function removeParticipant(participantId: string) {
-  const eventId = props.eventId
-  if (!eventId) return
-  await run(async () => {
-    await api.removeEventParticipant(eventId, participantId)
-    await load()
-  })
+  pending.value = [
+    ...pending.value,
+    {
+      tempId: crypto.randomUUID(),
+      user_id: user ? picked : undefined,
+      email,
+      display_name: user?.label || email,
+      status: 'needs_action',
+    },
+  ]
 }
 </script>
 
 <template>
   <div class="space-y-4 pb-4">
+    <label v-if="canManage" class="block text-xs font-medium text-gray-700">
+      {{ $t('event.addParticipant') }}
+      <SearchableSelect
+        v-model="inputValue"
+        entity="users"
+        :min-search-length="2"
+        allow-free-text
+        :free-text-validator="isEmail"
+        class="mt-1"
+        @select="add"
+      />
+    </label>
     <p v-if="loading" class="text-sm text-gray-500">{{ $t('app.loading') }}</p>
     <p v-else-if="!items.length" class="text-sm text-gray-500">{{ $t('event.noParticipants') }}</p>
     <div v-else class="space-y-3">
@@ -141,41 +125,12 @@ async function removeParticipant(participantId: string) {
                 {{ item.email }}
               </p>
             </div>
-            <button
-              v-if="canManage"
-              type="button"
-              :disabled="busy"
-              class="text-xs text-red-600 hover:underline disabled:opacity-50"
-              @click="item.remove()"
-            >
+            <button v-if="canManage" type="button" class="text-xs text-red-600 hover:underline" @click="item.remove()">
               {{ $t('app.delete') }}
             </button>
           </li>
         </ul>
       </div>
     </div>
-
-    <form v-if="canManage" class="flex items-end gap-2 border-t border-line pt-4" @submit.prevent="addParticipant">
-      <label class="min-w-0 flex-1 text-xs font-medium text-gray-700">
-        {{ $t('event.participantEmail') }}
-        <SearchableSelect
-          v-model="inputValue"
-          entity="users"
-          :min-search-length="2"
-          allow-free-text
-          :free-text-validator="isEmail"
-          class="mt-1"
-          @select="onSelect"
-        />
-      </label>
-      <button
-        type="submit"
-        :disabled="busy || !inputValue?.trim()"
-        :aria-label="$t('event.addParticipant')"
-        class="rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-      >
-        <Plus :size="18" />
-      </button>
-    </form>
   </div>
 </template>

@@ -11,6 +11,8 @@ const props = defineProps<{
   x: number
   y: number
   items: MenuItem[]
+  /** Open upwards from `y`, e.g. from a button at the bottom of the screen. */
+  above?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -30,9 +32,10 @@ function menuItems(): HTMLElement[] {
 onMounted(() => {
   // Keep the whole menu on screen when it opens near the right or bottom edge.
   const rect = menu.value!.getBoundingClientRect()
+  const top = props.above ? props.y - rect.height : props.y
   position.value = {
     left: Math.max(VIEWPORT_MARGIN, Math.min(props.x, window.innerWidth - rect.width - VIEWPORT_MARGIN)),
-    top: Math.max(VIEWPORT_MARGIN, Math.min(props.y, window.innerHeight - rect.height - VIEWPORT_MARGIN)),
+    top: Math.max(VIEWPORT_MARGIN, Math.min(top, window.innerHeight - rect.height - VIEWPORT_MARGIN)),
   }
   menuItems()[0]?.focus()
 })

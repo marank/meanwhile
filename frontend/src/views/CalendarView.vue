@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import FullCalendar from '@fullcalendar/vue3'
@@ -22,6 +22,7 @@ import '@fullcalendar/vue3/themes/classic/theme.css'
 import '@fullcalendar/vue3/themes/classic/palette.css'
 import CalendarToolbar, { type CalendarViewType } from '@/components/calendar/CalendarToolbar.vue'
 import CalendarAgenda from '@/components/calendar/CalendarAgenda.vue'
+import CalendarWeekStack from '@/components/calendar/CalendarWeekStack.vue'
 import EventModal from '@/components/event/EventModal.vue'
 import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
 import { useEventStore } from '@/stores/events'
@@ -32,11 +33,12 @@ import { overviewPalette, paletteColors, themeColors } from '@/services/calendar
 import { contrastColor } from '@/services/color'
 import { alert } from '@/services/dialog'
 import { chooseScope, type OccurrenceRef } from '@/services/occurrences'
-import { browserTimeZone, hour12, toDateInputValue } from '@/services/datetime'
+import { browserTimeZone, formatTime, hour12, toDateInputValue } from '@/services/datetime'
 import { resourceIconSvg } from '@/services/resourceIcons'
 import { bookingErrorMessage } from '@/services/errors'
 import { parseCalendarQuery, showsTarget, type CalendarViewName } from '@/services/calendarUrl'
 import { useLoader } from '@/composables/useLoader'
+import { useMediaQuery } from '@/composables/useMediaQuery'
 import * as api from '@/api'
 import type { Occurrence } from '@/api'
 
@@ -107,6 +109,9 @@ function renderEventContent(info: EventDisplayInfo) {
   const content = document.createElement('span')
   const duration = info.event.start && info.event.end ? info.event.end.getTime() - info.event.start.getTime() : 0
   const classes = [duration > DAY_MS ? 'fc-event-label fc-event-label-multiday' : 'fc-event-label']
+  // In the week's narrow columns the time goes above the title, which wraps; short events stay on one line.
+  const stacked = info.view.type === 'timeGridWeek' && !info.event.allDay && !info.isShort
+  if (stacked) classes.push('fc-event-label-stacked')
   const status = info.event.extendedProps.status as string | undefined
   if (status === 'rejected' || status === 'cancelled') {
     classes.push('fc-event-declined')
@@ -115,18 +120,29 @@ function renderEventContent(info: EventDisplayInfo) {
   if (info.timeText) {
     const time = document.createElement('span')
     time.className = 'fc-event-time-label'
-    time.textContent = info.timeText
-    content.append(time)
+    if (stacked && info.event.start && info.event.end) {
+      // Stacked, the start and the end each get a line of their own.
+      time.textContent = formatTime(info.event.start)
+      const end = document.createElement('span')
+      end.className = 'fc-event-time-label fc-event-end-label'
+      end.textContent = formatTime(info.event.end)
+      content.append(time, end)
+    } else {
+      time.textContent = info.timeText
+      content.append(time)
+    }
   }
+  const parts = info.event.extendedProps.parts as LabelPart[]
+  const text = document.createElement('span')
   const categoryColor = info.event.extendedProps.categoryColor as string | null
   if (categoryColor) {
     const marker = document.createElement('span')
     marker.className = 'fc-event-category-marker'
     marker.style.backgroundColor = categoryColor
-    content.append(marker)
+    // Stacked, it starts the title's first line rather than taking a line of its own.
+    if (stacked) text.append(marker)
+    else content.append(marker)
   }
-  const parts = info.event.extendedProps.parts as LabelPart[]
-  const text = document.createElement('span')
   content.append(text)
   parts.forEach((part, index) => {
     if (index > 0) text.append(' · ')
@@ -239,15 +255,21 @@ function shiftListMonth(by: number) {
 
 function goPrev() {
   if (listMode.value) shiftListMonth(-1)
+  else if (stackMode.value) stackDate.value = addDays(stackStart.value, -7)
   else calendarApi()?.prev()
 }
 
 function goNext() {
   if (listMode.value) shiftListMonth(1)
+  else if (stackMode.value) stackDate.value = addDays(stackStart.value, 7)
   else calendarApi()?.next()
 }
 
 function goToday() {
+  if (stackMode.value) {
+    stackDate.value = new Date()
+    return
+  }
   if (!listMode.value) {
     calendarApi()?.today()
     return
@@ -258,22 +280,34 @@ function goToday() {
 
 function gotoDate(date: Date) {
   if (listMode.value) listMonth.value = firstOfMonth(date)
+  else if (stackMode.value) stackDate.value = date
   else calendarApi()?.gotoDate(date)
 }
 
+/** What the toolbar shows: the list's month, the stacked week, or FullCalendar's view. */
+const shownToolbar = computed(() =>
+  listMode.value ? listToolbar.value : stackMode.value ? stackToolbar.value : toolbar.value,
+)
+
 /** The day to keep in view when switching views: today if it is shown, else the start of what is shown. */
 function anchorDate(): Date {
-  const shown = listMode.value ? listToolbar.value : toolbar.value
+  const shown = shownToolbar.value
   return shown.todayInRange ? new Date() : shown.date
 }
 
 function changeView(view: CalendarViewType, date?: Date) {
   if (view === 'list') {
     listMonth.value = firstOfMonth(date ?? anchorDate())
+    stackMode.value = false
     listMode.value = true
-  } else if (listMode.value) {
+  } else if (view === 'timeGridWeek' && isPhone.value) {
+    stackDate.value = date ?? anchorDate()
+    listMode.value = false
+    stackMode.value = true
+  } else if (listMode.value || stackMode.value) {
     gridStart.value = { view, date: date ?? anchorDate() }
     listMode.value = false
+    stackMode.value = false
   } else {
     calendarApi()?.changeView(view, date)
   }
@@ -283,11 +317,17 @@ function handleDatesSet(info: DatesSetInfo) {
   eventStore.load(info.start, info.end)
   const { view } = info
   const now = new Date()
+  const todayInRange = now >= view.currentStart && now < view.currentEnd
   toolbar.value = {
     title: view.title,
     view: view.type as CalendarViewType,
     date: view.currentStart,
-    todayInRange: now >= view.currentStart && now < view.currentEnd,
+    todayInRange,
+  }
+  // The week with today opens at the current time, an hour before it at the top; others at the usual 6:00.
+  if (view.type === 'timeGridWeek' && todayInRange) {
+    const hour = String(Math.max(0, now.getHours() - 1)).padStart(2, '0')
+    nextTick(() => calendarApi()?.scrollToTime(`${hour}:00`))
   }
 }
 
@@ -296,6 +336,15 @@ watch(
   () => route.query,
   (query) => {
     const target = parseCalendarQuery(query)
+    if (stackMode.value) {
+      if (target.view && target.view !== 'week') changeView(VIEW_TYPES[target.view], target.date)
+      else if (target.date) stackDate.value = target.date
+      return
+    }
+    if (target.view === 'week' && isPhone.value) {
+      changeView('timeGridWeek', target.date)
+      return
+    }
     if (listMode.value) {
       if (target.view && target.view !== 'list') changeView(VIEW_TYPES[target.view], target.date)
       else if (target.date) listMonth.value = firstOfMonth(target.date)
@@ -325,6 +374,10 @@ function reloadVisibleRange(force = false) {
     eventStore.load(listMonth.value, listEnd.value, force)
     return
   }
+  if (stackMode.value) {
+    eventStore.load(stackStart.value, stackEnd.value, force)
+    return
+  }
   const view = calendarRef.value?.getApi().view
   if (view) eventStore.load(view.activeStart, view.activeEnd, force)
 }
@@ -337,8 +390,8 @@ const modalEndDate = ref<Date | undefined>(undefined)
 const modalAllDay = ref<boolean | undefined>(undefined)
 
 function openCreateModal(start: Date, end?: Date, allDay?: boolean) {
-  // New events need one target calendar; "all" and folder selections are ambiguous.
-  if (!calendarStore.selectedCalendar) return
+  // New events need one target calendar ("all" and folder selections are ambiguous) where one may add them.
+  if (!calendarStore.canCreateInSelected) return
   modalEventId.value = null
   modalDate.value = start
   modalEndDate.value = end
@@ -372,9 +425,9 @@ function saved() {
 }
 
 watch(
-  () => calendarStore.selectedCalendar,
-  (selected) => {
-    if (!selected && showModal.value && !modalEventId.value) closeModal()
+  () => calendarStore.canCreateInSelected,
+  (canCreate) => {
+    if (!canCreate && showModal.value && !modalEventId.value) closeModal()
   },
 )
 
@@ -401,7 +454,74 @@ const displaySettings = computed(() => {
   }
 })
 
+// On phones the week shows its days stacked (CalendarWeekStack) instead of seven narrow columns of hours;
+// like the list, FullCalendar isn't mounted meanwhile. The week is the one with `stackDate` in it.
+const isPhone = useMediaQuery('(max-width: 40rem)')
+const stackMode = ref(initialTarget.view === 'week' && isPhone.value)
+const stackDate = ref(initialTarget.date ?? new Date())
+const stackStart = computed(() => {
+  const date = stackDate.value
+  const back = (date.getDay() - displaySettings.value.first_weekday + 7) % 7
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - back)
+})
+const stackEnd = computed(() => addDays(stackStart.value, 7))
+const hiddenDays = computed(() => (displaySettings.value.show_weekends ? [] : displaySettings.value.weekend_days))
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+const stackToolbar = computed(() => {
+  const now = new Date()
+  const format = new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short', year: 'numeric' })
+  return {
+    title: format.formatRange(stackStart.value, addDays(stackStart.value, 6)),
+    view: 'timeGridWeek' as CalendarViewType,
+    date: stackStart.value,
+    todayInRange: now >= stackStart.value && now < stackEnd.value,
+  }
+})
+
+watch(
+  () => [stackMode.value, stackStart.value.getTime()] as const,
+  ([stack]) => {
+    if (stack) eventStore.load(stackStart.value, stackEnd.value)
+  },
+  { immediate: true },
+)
+
+// Turning the phone or resizing the window across the breakpoint keeps the week, in the other form.
+watch(isPhone, (phone) => {
+  if (phone && !listMode.value && !stackMode.value && toolbar.value.view === 'timeGridWeek') {
+    changeView('timeGridWeek')
+  } else if (!phone && stackMode.value) {
+    gridStart.value = { view: 'timeGridWeek', date: anchorDate() }
+    stackMode.value = false
+  }
+})
+
 const SLOT_HEIGHT = 48
+
+// The week view marks the current time with a line across all its days. FullCalendar draws it in today's
+// column only; the line is moved left by today's column and widened to all of them (they are equally wide).
+const now = ref(new Date())
+const clock = setInterval(() => (now.value = new Date()), 60 * 1000)
+onBeforeUnmount(() => clearInterval(clock))
+
+const nowColumns = computed(() => {
+  if (listMode.value || toolbar.value.view !== 'timeGridWeek') return null
+  const hidden = displaySettings.value.show_weekends ? [] : displaySettings.value.weekend_days
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const start = toolbar.value.date
+    return new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+  }).filter((day) => !hidden.includes(day.getDay()))
+  const today = days.findIndex((day) => day.toDateString() === now.value.toDateString())
+  return today < 0 ? null : { today, count: days.length }
+})
+
+function nowLabel(date: Date): string {
+  return new Intl.DateTimeFormat(locale.value, { hour: 'numeric', minute: '2-digit', hour12: hour12() }).format(date)
+}
 
 // Only text colors are computed; everything else is stored per calendar.
 const calendarStyle = computed(() => {
@@ -423,6 +543,8 @@ const calendarStyle = computed(() => {
     '--calendar-today-text-color': contrastColor(colors.today),
     '--calendar-weekend-color': colors.weekend,
     '--calendar-weekend-text-color': contrastColor(colors.weekend),
+    '--calendar-now-column': nowColumns.value?.today ?? 0,
+    '--calendar-now-columns': nowColumns.value?.count ?? 1,
   }
 })
 
@@ -494,7 +616,7 @@ const calendarOptions = computed(() => ({
     timeGridWeek: { titleFormat: { day: 'numeric', month: 'short', year: 'numeric' } as const },
   },
   weekends: true,
-  hiddenDays: displaySettings.value.show_weekends ? [] : displaySettings.value.weekend_days,
+  hiddenDays: hiddenDays.value,
   weekNumbers: displaySettings.value.show_week_numbers,
   weekNumberCalculation: displaySettings.value.first_weekday === 1 ? ('ISO' as const) : ('local' as const),
   editable: true,
@@ -506,8 +628,8 @@ const calendarOptions = computed(() => ({
   dayLaneClass: (info: { dow: number; isToday: boolean }) => `${dayCellClass(info)} calendar-day-lane`,
   datesSet: handleDatesSet,
   dateClick: (info: DateClickInfo) => openCreateModal(info.date),
-  selectable: !!calendarStore.selectedCalendar,
-  selectMirror: !!calendarStore.selectedCalendar,
+  selectable: calendarStore.canCreateInSelected,
+  selectMirror: calendarStore.canCreateInSelected,
   select: (info: DateSelectInfo) => {
     const end = info.allDay ? new Date(info.end.getTime() - DAY_MS) : info.end
     openCreateModal(info.start, end, info.allDay)
@@ -516,6 +638,11 @@ const calendarOptions = computed(() => ({
   eventContent: renderEventContent,
   events: fcEvents.value,
   dayMaxEvents: true,
+  nowIndicator: true,
+  nowIndicatorLineClass: 'calendar-now-line',
+  nowIndicatorDotClass: 'calendar-now-dot',
+  nowIndicatorHeaderClass: 'calendar-now-label',
+  nowIndicatorHeaderContent: (info: { date: Date }) => nowLabel(info.date),
 }))
 </script>
 
@@ -523,7 +650,7 @@ const calendarOptions = computed(() => ({
   <div class="calendar-root h-full flex flex-col" :style="calendarStyle">
     <div class="flex flex-1 flex-col overflow-hidden p-2">
       <CalendarToolbar
-        v-bind="listMode ? listToolbar : toolbar"
+        v-bind="shownToolbar"
         @prev="goPrev"
         @next="goNext"
         @today="goToday"
@@ -539,7 +666,18 @@ const calendarOptions = computed(() => ({
           :range-end="listEnd"
           :color-of="eventColor"
           :calendar-name-of="calendarNameOf"
-          :can-create="!!calendarStore.selectedCalendar"
+          :can-create="calendarStore.canCreateInSelected"
+          @open="openEditModal"
+          @create="openCreateModal"
+        />
+        <CalendarWeekStack
+          v-else-if="stackMode"
+          :occurrences="eventStore.occurrences"
+          :week-start="stackStart"
+          :hidden-days="hiddenDays"
+          :weekend-days="displaySettings.weekend_days"
+          :color-of="eventColor"
+          :can-create="calendarStore.canCreateInSelected"
           @open="openEditModal"
           @create="openCreateModal"
         />
@@ -607,6 +745,81 @@ html.dark .calendar-root {
   border-radius: 0.375rem;
 }
 
+/* Phones: seven narrow day columns; smaller event text shows more of each title. */
+@media (max-width: 40rem) {
+  .calendar-root .calendar-event {
+    font-size: 0.75rem;
+    padding: 0.05rem 0.2rem;
+    border-radius: 0.25rem;
+  }
+
+  .calendar-root .fc-event-label {
+    gap: 0.15rem;
+  }
+
+  .calendar-root .fc-event-category-marker {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+}
+
+/* The current time in the week view: a line across all days (see nowColumns), its time on the axis. */
+.calendar-root .calendar-now-line {
+  left: calc(var(--calendar-now-column) * -100%);
+  right: auto;
+  width: calc(var(--calendar-now-columns) * 100%);
+  z-index: 5;
+  border: none;
+  /* The accent, with a thin light edge that sets it off from events of the same color. */
+  border-top: 2px solid var(--calendar-accent-color);
+  box-shadow: 0 0 0 1px var(--app-surface);
+  pointer-events: none;
+}
+
+/* On dark backgrounds a dark edge hardly shows on events: there the core is light, edged in the accent. */
+html.dark .calendar-root .calendar-now-line {
+  border-top-color: var(--calendar-accent-text-color);
+  box-shadow: 0 0 0 1px var(--calendar-accent-color);
+}
+
+/* Day columns are layers of their own, later ones above earlier ones; today's lifts its line above all. */
+.calendar-root .calendar-day-lane:has(.calendar-now-line) {
+  z-index: 2;
+}
+
+/* Where the line crosses today. */
+.calendar-root .calendar-now-dot {
+  z-index: 6;
+  width: 10px;
+  height: 10px;
+  margin: -4px 0 0 -5px;
+  border: none;
+  border-radius: 9999px;
+  background-color: var(--calendar-accent-color);
+  box-shadow: 0 0 0 2px var(--app-surface);
+}
+
+html.dark .calendar-root .calendar-now-dot {
+  box-shadow: 0 0 0 2px var(--calendar-accent-text-color);
+}
+
+.calendar-root .calendar-now-label {
+  z-index: 6;
+  left: 2px;
+  right: auto;
+  width: auto;
+  height: auto;
+  border: none;
+  transform: translateY(-50%);
+  padding: 0 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.1rem;
+  background-color: var(--calendar-accent-color);
+  color: var(--calendar-accent-text-color);
+}
+
 /* Bookings awaiting approval: striped and with a dashed outline. */
 .calendar-root .calendar-event-pending {
   border-style: dashed !important;
@@ -620,6 +833,57 @@ html.dark .calendar-root {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.fc-event-label-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  /* Stays in view while a long event is scrolled past its start (sticky within the event). */
+  position: sticky;
+  top: 0;
+  max-height: 100%;
+  white-space: normal;
+  /* Words break only where one doesn't fit a line by itself, then hyphenated. */
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* As wide as the event, so a word too long for it breaks instead of running out of it. */
+.fc-event-label-stacked > * {
+  align-self: stretch;
+  min-width: 0;
+}
+
+/* Where it gets tight, the end gives way first, then the title down to its first line; the start stays. */
+.fc-event-label-stacked .fc-event-end-label {
+  flex: 0 1000 auto;
+  min-height: 0;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* The title gets what is left of the event's height. */
+.fc-event-label-stacked > :last-child {
+  flex: 1 1 auto;
+  min-height: min(1.2rem, 100%);
+  overflow: hidden;
+}
+
+.fc-event-label-stacked .fc-event-time-label {
+  flex: none;
+  line-height: 1rem;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-event-label-stacked .fc-event-category-marker {
+  display: inline-block;
+  margin-right: 0.25rem;
+  vertical-align: 0.05rem;
 }
 
 .fc-event-label-multiday {
@@ -661,7 +925,9 @@ html.dark .calendar-root {
 }
 
 .calendar-root .calendar-day-row {
-  min-height: 6rem;
+  /* The weeks share the height of the view, so the month never scrolls; what doesn't fit into a day
+     shows as "+ n more". */
+  min-height: 0;
 }
 
 .calendar-default {

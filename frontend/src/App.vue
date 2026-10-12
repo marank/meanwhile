@@ -32,9 +32,9 @@ watchEffect(() => {
 <template>
   <div class="flex h-full flex-col">
     <AppNavbar v-if="auth.isLoggedIn" />
-    <div class="flex flex-1 overflow-hidden">
+    <div class="relative flex flex-1 overflow-hidden">
       <CalendarSidebar v-if="auth.isLoggedIn" />
-      <main class="flex-1 overflow-auto bg-surface-muted p-4">
+      <main class="min-w-0 flex-1 overflow-auto bg-surface-muted p-1 sm:p-4">
         <router-view />
       </main>
     </div>

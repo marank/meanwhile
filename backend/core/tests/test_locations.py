@@ -97,6 +97,6 @@ def test_typing_another_location_gives_the_place_up(world, places):
 
 def test_availability_includes_bookings_of_places(world, places):
     create(world, location_resource_id=places["hall"]["id"])
-    url = f"/availability?start={iso(BASE - timedelta(hours=1))}&end={iso(BASE + timedelta(hours=5))}&resource_ids={places['hall']['id']}"
-    body = world["api"]["owner"].get(url.replace("+", "%2B")).json()
+    data = {"start": iso(BASE - timedelta(hours=1)), "end": iso(BASE + timedelta(hours=5)), "resource_ids": [places["hall"]["id"]]}
+    body = world["api"]["owner"].post("/availability", data).json()
     assert [(p["start"][11:16], p["tentative"]) for p in body["resources"][0]["busy"]] == [("09:00", False)]

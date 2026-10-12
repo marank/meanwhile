@@ -2,15 +2,14 @@
 Availability endpoint: when people and resources are taken, for planning an event.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from ninja import Query
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from core.api import CSRFRouter
 from core.models import Resource, User
-from core.schemas import AvailabilityOut
+from core.schemas import AvailabilityIn, AvailabilityOut
 from core.services.availability import resource_periods, user_periods
 from core.services.permissions import get_membership
 from core.services.recurrence import make_aware
@@ -20,18 +19,13 @@ router = CSRFRouter()
 MAX_RANGE = timedelta(days=62)
 
 
-@router.get("/availability", response=AvailabilityOut, auth=django_auth)
-def availability(
-    request,
-    start: datetime,
-    end: datetime,
-    user_ids: list[str] = Query([]),
-    resource_ids: list[str] = Query([]),
-    exclude_event_id: str | None = None,
-):
+@router.post("/availability", response=AvailabilityOut, auth=django_auth)
+def availability(request, data: AvailabilityIn):
     """Busy periods only, no titles or details. Users can be looked up by anyone signed in, as in
-    the user search; resources only by members of their calendar."""
-    start, end = make_aware(start), make_aware(end)
+    the user search; resources only by members of their calendar. A POST, though it changes nothing:
+    see AvailabilityIn."""
+    start, end = make_aware(data.start), make_aware(data.end)
+    user_ids, resource_ids, exclude_event_id = data.user_ids, data.resource_ids, data.exclude_event_id
     if not start < end <= start + MAX_RANGE:
         raise HttpError(422, "end must be after start and at most 62 days later")
     users = User.objects.filter(id__in=user_ids, is_active=True).order_by("display_name")

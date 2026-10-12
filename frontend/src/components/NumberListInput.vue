@@ -50,7 +50,7 @@ function onBlur() {
     :placeholder="placeholder"
     :aria-label="label"
     :aria-invalid="invalid"
-    class="w-32 rounded-lg border px-3 py-1.5 leading-normal"
+    class="w-32 rounded-lg border px-3 py-1.5 align-middle leading-5"
     @input="onInput"
     @blur="onBlur"
   />

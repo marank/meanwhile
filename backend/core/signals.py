@@ -11,6 +11,7 @@ from core.models import (
     Calendar,
     CalendarGroup,
     CalendarMember,
+    CalendarSubscription,
     DeletedEvent,
     Event,
     EventParticipant,
@@ -77,8 +78,10 @@ def announce_notification_change(sender, instance: Notification, **kwargs) -> No
 
 
 def _calendar_audience(calendar_id) -> set:
-    """Everyone whose list of calendars shows the calendar: members, and members of linked groups."""
+    """Everyone whose list of calendars shows the calendar: members, members of linked groups, and those
+    who added it (a public one) to their sidebar."""
     users = set(CalendarMember.objects.filter(calendar_id=calendar_id).values_list("user_id", flat=True))
+    users |= set(CalendarSubscription.objects.filter(calendar_id=calendar_id).values_list("user_id", flat=True))
     users |= set(
         User.objects.filter(groups__calendar_groups__calendar_id=calendar_id).values_list("pk", flat=True)
     )
@@ -97,6 +100,12 @@ def announce_calendar_change(sender, instance: Calendar, **kwargs) -> None:
 @receiver(post_save, sender=CalendarMember)
 @receiver(post_delete, sender=CalendarMember)
 def announce_membership_change(sender, instance: CalendarMember, **kwargs) -> None:
+    broadcast.calendars_changed([instance.user_id])
+
+
+@receiver(post_save, sender=CalendarSubscription)
+@receiver(post_delete, sender=CalendarSubscription)
+def announce_subscription_change(sender, instance: CalendarSubscription, **kwargs) -> None:
     broadcast.calendars_changed([instance.user_id])
 
 

@@ -3,6 +3,7 @@ import { computed, onScopeDispose, ref } from 'vue'
 import * as api from '@/api'
 import { realtime } from '@/services/realtime'
 import { compareSiblings } from '@/services/sidebarDrag'
+import { hasRole } from '@/services/roles'
 
 /** Selection of the calendar view: a calendar id, a folder id, or 'all'. It follows the URL. */
 export const ALL_CALENDARS = 'all'
@@ -23,6 +24,11 @@ export const useCalendarStore = defineStore('calendars', () => {
   const selectedCalendar = computed<api.Calendar | null>(
     () => items.value.find((i) => i.calendar.id === selectedId.value)?.calendar ?? null,
   )
+
+  /** New events need one target calendar and at least the role to add one's own events there. */
+  const canCreateInSelected = computed(() => {
+    return hasRole(items.value.find((i) => i.calendar.id === selectedId.value)?.membership.role, 'own')
+  })
 
   const selectedFolder = computed<api.Folder | null>(() => folders.value.find((f) => f.id === selectedId.value) ?? null)
 
@@ -220,6 +226,7 @@ export const useCalendarStore = defineStore('calendars', () => {
     loaded,
     allSelected,
     selectedCalendar,
+    canCreateInSelected,
     selectedFolder,
     selectedCalendarIds,
     calendarsById,

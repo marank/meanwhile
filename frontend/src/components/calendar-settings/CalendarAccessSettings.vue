@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronRight, Trash2, Users } from 'lucide-vue-next'
 import * as api from '@/api'
-import AccessGrantSearch from '@/components/AccessGrantSearch.vue'
+import AccessGrantSearch, { type AccessGrantTarget } from '@/components/AccessGrantSearch.vue'
 import IconButton from '@/components/IconButton.vue'
 import RoleSelect from '@/components/RoleSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
@@ -11,7 +11,7 @@ import SettingsToggle from '@/components/SettingsToggle.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
 import { useCalendarSettingsSync } from '@/composables/useCalendarSettingsSync'
-import { confirm } from '@/services/dialog'
+import { ROLE_ORDER } from '@/services/roles'
 import { useCalendarStore } from '@/stores/calendars'
 
 const props = defineProps<{
@@ -28,15 +28,20 @@ const calendarStore = useCalendarStore()
 const { busy, run } = useAction()
 const sync = useCalendarSettingsSync()
 
+// Everything here is edited locally and sent with Save; until then nothing changes for anyone.
 const isPublic = ref(props.calendar.is_public)
-const publicRole = ref<api.GrantableRole>(props.calendar.public_role)
+const publicRole = ref<api.PublicRole>(props.calendar.public_role)
 const members = ref<api.CalendarMember[]>([])
 const groupLinks = ref<api.CalendarGroupLink[]>([])
+// As saved, to send only what changed.
+let savedMembers: api.CalendarMember[] = []
+let savedGroupLinks: api.CalendarGroupLink[] = []
 
 // Picking someone adds them with the least privileged role; the role is changed in the new row.
 const NEW_ROLE: api.GrantableRole = 'read'
+// Rows added here and not saved yet have ids of their own.
+const NEW_ID = 'new:'
 const expandedGroups = ref(new Set<string>())
-const ROLE_ORDER: api.CalendarRole[] = ['read', 'own', 'full', 'owner']
 // The best role a person gets through groups; the highest of all their groups applies.
 const bestGroupRole = computed(() => {
   const best = new Map<string, number>()
@@ -45,6 +50,9 @@ const bestGroupRole = computed(() => {
   }
   return best
 })
+// What each role allows, shown once above the access list instead of under every role field.
+const ROLE_LEGEND = ROLE_ORDER
+
 const memberIds = computed(() => new Set(members.value.map((m) => m.user_id)))
 const groupIds = computed(() => new Set(groupLinks.value.map((l) => l.group.id)))
 
@@ -52,64 +60,110 @@ const groupIds = computed(() => new Set(groupLinks.value.map((l) => l.group.id))
 const { loading } = useLoader(() => Promise.all(props.canManage ? [loadMembers(), loadGroupLinks()] : [loadMembers()]))
 
 async function loadMembers() {
-  members.value = await api.listMembers(props.calendar.id)
+  savedMembers = await api.listMembers(props.calendar.id)
+  members.value = savedMembers.map((m) => ({ ...m }))
 }
 
 async function loadGroupLinks() {
-  groupLinks.value = await api.listCalendarGroups(props.calendar.id)
+  savedGroupLinks = await api.listCalendarGroups(props.calendar.id)
+  groupLinks.value = savedGroupLinks.map((l) => ({ ...l }))
 }
 
-function savePublicAccess() {
-  const data: Partial<api.Calendar> = { is_public: isPublic.value }
-  if (isPublic.value) data.public_role = publicRole.value
+async function addAccess(target: AccessGrantTarget) {
+  if (target.kind === 'user') {
+    // Removed and picked again: the saved row comes back with its role.
+    const saved = savedMembers.find((m) => m.user_id === target.id)
+    members.value.push(
+      saved
+        ? { ...saved }
+        : {
+            id: NEW_ID + target.id,
+            calendar_id: props.calendar.id,
+            user_id: target.id,
+            email: target.subtitle ?? '',
+            display_name: target.label,
+            role: NEW_ROLE,
+            folder_id: null,
+            position: 0,
+          },
+    )
+    return
+  }
+  const saved = savedGroupLinks.find((l) => l.group.id === target.id)
+  if (saved) {
+    groupLinks.value.push({ ...saved })
+    return
+  }
+  // Its members show who gets access through it (and whose role it overrides).
+  const group = await api.getUserGroup(target.id).catch(() => null)
+  groupLinks.value.push({
+    id: NEW_ID + target.id,
+    group: { id: target.id, name: target.label },
+    role: NEW_ROLE,
+    members: group?.members ?? [],
+  })
+}
+
+function removeMember(userId: string) {
+  members.value = members.value.filter((m) => m.user_id !== userId)
+}
+
+function removeGroupLink(linkId: string) {
+  groupLinks.value = groupLinks.value.filter((l) => l.id !== linkId)
+}
+
+function save() {
+  let membersChanged = false
   return run(
     async () => {
-      emit('updated', await calendarStore.updateCalendar(props.calendar.id, data))
+      try {
+        await send()
+      } finally {
+        // Also after a failure part way: what was sent counts as saved from now on.
+        await Promise.all([loadMembers(), loadGroupLinks()])
+        // The other tabs list members, too (the approvers), and a removed one is no approver any more.
+        if (membersChanged) sync.membersChanged()
+      }
     },
     { success: t('app.accessSettingsSaved'), failure: t('app.saveFailed') },
   )
-}
 
-async function addMember(userId: string) {
-  await run(
-    async () => {
-      await api.addMember(props.calendar.id, userId, NEW_ROLE)
-      await loadMembers()
-      sync.membersChanged()
-    },
-    { success: t('app.memberAdded') },
-  )
-}
+  async function send() {
+    const id = props.calendar.id
+    if (
+      isPublic.value !== props.calendar.is_public ||
+      (isPublic.value && publicRole.value !== props.calendar.public_role)
+    ) {
+      const data: Partial<api.Calendar> = { is_public: isPublic.value }
+      if (isPublic.value) data.public_role = publicRole.value
+      emit('updated', await calendarStore.updateCalendar(id, data))
+    }
 
-function updateMember(userId: string, role: api.GrantableRole) {
-  return run(async () => {
-    await api.updateMember(props.calendar.id, userId, role)
-    await loadMembers()
-  })
-}
+    for (const saved of savedMembers) {
+      if (saved.role === 'owner' || memberIds.value.has(saved.user_id)) continue
+      await api.removeMember(id, saved.user_id)
+      membersChanged = true
+    }
+    for (const member of members.value) {
+      if (member.role === 'owner') continue
+      const saved = savedMembers.find((m) => m.user_id === member.user_id)
+      if (!saved) {
+        await api.addMember(id, member.user_id, member.role as api.GrantableRole)
+        membersChanged = true
+      } else if (saved.role !== member.role) {
+        await api.updateMember(id, member.user_id, member.role as api.GrantableRole)
+      }
+    }
 
-async function removeMember(userId: string) {
-  if (!(await confirm(t('app.removeMemberText'), t('app.removeMemberTitle')))) return
-  await run(
-    async () => {
-      await api.removeMember(props.calendar.id, userId)
-      await loadMembers()
-      // The other tabs list members, too (the approvers), and a removed one is no approver any more.
-      sync.membersChanged()
-    },
-    { success: t('app.memberRemoved') },
-  )
-}
-
-async function addGroupLink(groupId: string) {
-  await run(async () => {
-    await api.addCalendarGroup(props.calendar.id, { group_id: groupId, role: NEW_ROLE })
-    await loadGroupLinks()
-  })
-}
-
-function addAccess(target: { kind: 'user' | 'group'; id: string }) {
-  return target.kind === 'user' ? addMember(target.id) : addGroupLink(target.id)
+    for (const saved of savedGroupLinks) {
+      if (!groupLinks.value.some((l) => l.id === saved.id)) await api.removeCalendarGroup(id, saved.id)
+    }
+    for (const link of groupLinks.value) {
+      const saved = savedGroupLinks.find((l) => l.id === link.id)
+      if (!saved) await api.addCalendarGroup(id, { group_id: link.group.id, role: link.role })
+      else if (saved.role !== link.role) await api.updateCalendarGroup(id, link.id, { role: link.role })
+    }
+  }
 }
 
 /** A direct role replaces every group role, and a group role is replaced by a higher one from another group. */
@@ -124,35 +178,20 @@ function toggleGroup(id: string) {
 function initial(name: string) {
   return (name || '?').charAt(0).toUpperCase()
 }
-
-function updateGroupLink(linkId: string, role: api.GrantableRole) {
-  return run(async () => {
-    await api.updateCalendarGroup(props.calendar.id, linkId, { role })
-    await loadGroupLinks()
-  })
-}
-
-async function removeGroupLink(linkId: string) {
-  if (!(await confirm(t('app.removeGroupAccessText'), t('app.removeGroupAccessTitle')))) return
-  await run(
-    async () => {
-      await api.removeCalendarGroup(props.calendar.id, linkId)
-      await loadGroupLinks()
-    },
-    { success: t('app.groupAccessRemoved') },
-  )
-}
 </script>
 
 <template>
-  <div class="space-y-6">
-    <SettingsPanel
-      v-if="canManage"
-      :title="$t('app.publicCalendar')"
-      :description="$t('app.publicCalendarHelp')"
-      :loading="loading"
-    >
-      <div class="grid items-start gap-4 sm:grid-cols-2">
+  <SettingsPanel :title="$t('app.access')" :description="$t('app.accessDescription')" :loading="loading">
+    <div class="space-y-6">
+      <dl class="grid gap-x-6 gap-y-1.5 rounded-lg bg-surface-muted px-4 py-3 text-xs sm:grid-cols-2">
+        <div v-for="role in ROLE_LEGEND" :key="role">
+          <dt class="inline font-semibold text-gray-700">{{ $t(`roles.${role}`) }}:</dt>
+          {{ ' ' }}
+          <dd class="inline text-gray-500">{{ $t(`roles.${role}Description`) }}</dd>
+        </div>
+      </dl>
+
+      <div v-if="canManage" class="grid items-start gap-4 sm:grid-cols-2">
         <SettingsToggle
           v-model="isPublic"
           :title="$t('app.publicCalendar')"
@@ -160,23 +199,11 @@ async function removeGroupLink(linkId: string) {
         />
         <label v-if="isPublic" class="block">
           <span class="mb-1 block text-sm font-medium text-gray-800">{{ $t('app.publicRole') }}</span>
-          <RoleSelect v-model="publicRole" />
+          <RoleSelect v-model="publicRole" public-access />
         </label>
       </div>
-      <template #footer>
-        <button
-          type="button"
-          :disabled="busy"
-          class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-          @click="savePublicAccess"
-        >
-          {{ $t('app.save') }}
-        </button>
-      </template>
-    </SettingsPanel>
 
-    <SettingsPanel :title="$t('app.access')" :description="$t('app.accessDescription')" :loading="loading">
-      <div class="space-y-4">
+      <div class="space-y-4" :class="{ 'border-t border-line pt-6': canManage }">
         <AccessGrantSearch
           v-if="canManage"
           :placeholder="$t('app.addAccessPlaceholder')"
@@ -191,7 +218,7 @@ async function removeGroupLink(linkId: string) {
           <li
             v-for="member in members"
             :key="member.id"
-            class="group flex items-center gap-3 px-4 py-2.5 hover:bg-hover"
+            class="group flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2.5 hover:bg-hover sm:flex-nowrap sm:gap-3 sm:px-4"
           >
             <span
               class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200"
@@ -206,13 +233,12 @@ async function removeGroupLink(linkId: string) {
             <RoleSelect
               v-if="canManage && member.role !== 'owner'"
               compact
-              hide-description
-              class="w-44 shrink-0"
+              class="role-field"
               :model-value="member.role as api.GrantableRole"
               :disabled="busy"
-              @update:model-value="updateMember(member.user_id, $event)"
+              @update:model-value="member.role = $event"
             />
-            <span v-else class="w-44 shrink-0 px-3 text-sm text-gray-500">{{ $t(`roles.${member.role}`) }}</span>
+            <span v-else class="role-field text-sm text-gray-500 sm:px-3">{{ $t(`roles.${member.role}`) }}</span>
             <div class="row-actions flex w-8 shrink-0 justify-end">
               <IconButton
                 v-if="canManage && member.role !== 'owner'"
@@ -227,10 +253,12 @@ async function removeGroupLink(linkId: string) {
           </li>
 
           <li v-for="link in groupLinks" :key="link.id" class="group">
-            <div class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+            <div
+              class="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2.5 hover:bg-hover sm:flex-nowrap sm:gap-3 sm:px-4"
+            >
               <button
                 type="button"
-                class="flex min-w-0 flex-1 items-center gap-3 text-left"
+                class="flex min-w-0 flex-1 items-center gap-2 text-left sm:gap-3"
                 :aria-expanded="expandedGroups.has(link.id)"
                 @click="toggleGroup(link.id)"
               >
@@ -254,11 +282,10 @@ async function removeGroupLink(linkId: string) {
               </button>
               <RoleSelect
                 compact
-                hide-description
-                class="w-44 shrink-0"
+                class="role-field"
                 :model-value="link.role"
                 :disabled="busy"
-                @update:model-value="updateGroupLink(link.id, $event)"
+                @update:model-value="link.role = $event"
               />
               <div class="row-actions flex w-8 shrink-0 justify-end">
                 <IconButton :label="$t('app.delete')" tone="danger" :disabled="busy" @click="removeGroupLink(link.id)">
@@ -296,6 +323,38 @@ async function removeGroupLink(linkId: string) {
           </li>
         </ul>
       </div>
-    </SettingsPanel>
-  </div>
+    </div>
+
+    <template v-if="canManage" #footer>
+      <button
+        type="button"
+        :disabled="busy"
+        class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+        @click="save"
+      >
+        {{ $t('app.save') }}
+      </button>
+    </template>
+  </SettingsPanel>
 </template>
+
+<style scoped>
+/*
+ * The role field of a row: next to the name where there is room, else on a line of its own below the
+ * name (phones), so neither the name nor the role gets cut off.
+ */
+.role-field {
+  order: 1;
+  flex-shrink: 0;
+  width: calc(100% - 2.5rem);
+  margin-left: 2.5rem;
+}
+
+@media (width >= 40rem) {
+  .role-field {
+    order: 0;
+    width: 11rem;
+    margin-left: 0;
+  }
+}
+</style>

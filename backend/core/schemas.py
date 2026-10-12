@@ -357,6 +357,7 @@ class CalendarUpdate(Schema):
     dark_border_color: Optional[Color] = None
     dark_outer_border_color: Optional[Color] = None
     is_public: Optional[bool] = None
+    # Never "manage": managing the calendar is only for people it was granted to.
     public_role: Optional[Literal["read", "own", "full"]] = None
 
 
@@ -395,6 +396,18 @@ class CalendarOut(Schema):
 class CalendarListOut(Schema):
     calendar: CalendarOut
     membership: CalendarMemberOut
+    # Where the access comes from: a membership, a group, or a public calendar added to the sidebar.
+    access: Literal["member", "group", "public"]
+
+
+class PublicCalendarOut(Schema):
+    """A public calendar to add to the sidebar."""
+
+    id: str
+    name: str
+    description: Optional[str] = None
+    owner_name: str
+    added: bool
 
 
 # ---------------------------------------------------------------------------
@@ -425,11 +438,11 @@ class CalendarGroupLinkOut(Schema):
 
 class CalendarGroupLinkCreate(Schema):
     group_id: str
-    role: Literal["read", "own", "full"] = "read"
+    role: Literal["read", "own", "full", "manage"] = "read"
 
 
 class CalendarGroupLinkUpdate(Schema):
-    role: Optional[Literal["read", "own", "full"]] = None
+    role: Optional[Literal["read", "own", "full", "manage"]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -792,6 +805,17 @@ class LayoutOut(Schema):
 class BookingConflict(Schema):
     message: str = "Resource booking conflict"
     conflicts: List[dict]
+
+
+class AvailabilityIn(Schema):
+    """A query, sent as a body: the lists of ids would make for long URLs (and land in access logs)."""
+
+    start: datetime
+    end: datetime
+    user_ids: List[str] = []
+    resource_ids: List[str] = []
+    # An event being edited doesn't count as taking its own time.
+    exclude_event_id: Optional[str] = None
 
 
 class BusyPeriod(Schema):

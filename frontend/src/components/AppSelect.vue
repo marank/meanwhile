@@ -413,10 +413,25 @@ onBeforeUnmount(close)
   user-select: none;
 }
 
+/* Phones: as tall as the other fields there (see main.css). */
+@media (width < 40rem) {
+  .app-select-trigger {
+    padding-block: var(--select-padding-y, 0.375rem);
+  }
+}
+
 .app-select-sm .app-select-trigger {
   --select-padding-y: 0.375rem;
   --select-font-size: 0.875rem;
   --select-line-height: 1.25rem;
+}
+
+/* Phones: the small size is as tall as all other fields there (see main.css). */
+@media (width < 40rem) {
+  .app-select-sm .app-select-trigger {
+    --select-font-size: 1rem;
+    --select-line-height: 1.5rem;
+  }
 }
 
 .app-select-trigger:focus-visible {

@@ -17,6 +17,7 @@ import { createAvailabilityCache, loadAvailability, startOfDay } from '@/service
 import { browserTimeZone, formatDateTime, toDateInputValue, toTimeInputValue } from '@/services/datetime'
 import { bookingErrorMessage, errorMessage } from '@/services/errors'
 import { buildRrule, parseRrule, recurrenceDefaults, type RecurrenceRule } from '@/services/rrule'
+import { hasRole } from '@/services/roles'
 import { useAuthStore } from '@/stores/auth'
 
 type Tab = 'details' | 'recurrence' | 'reminders' | 'participants' | 'availability' | 'activity'
@@ -88,7 +89,10 @@ const recurrence = ref<RecurrenceRule | null>(null)
 const foreignRrule = ref<string | null>(null)
 // The loaded rule as the editor would write it: if nothing changed, the original is sent back as it was.
 let loadedRrule: string | null = null
+/** Participants added in the dialog; sent when the event is saved. */
 const pendingParticipants = ref<PendingParticipant[]>([])
+/** Saved participants removed in the dialog; removed when the event is saved. */
+const removedParticipantIds = ref<string[]>([])
 /** The event's time as entered, for the availability view. */
 const slot = computed(() => {
   if (form.allDay) {
@@ -103,13 +107,14 @@ const slot = computed(() => {
   }
 })
 
-/** The saved participants, loaded once with the event and kept current by the participants tab. */
+/** The saved participants, loaded once with the event. */
 const participants = ref<api.EventParticipant[] | null>(null)
 
 /** Whose availability is shown: oneself and the participants who have an account. */
 const availabilityPeople = computed(() => {
   const me = auth.user ? [{ id: auth.user.id, name: t('availability.me') }] : []
-  const others = (props.eventId ? (participants.value ?? []) : pendingParticipants.value)
+  const saved = (participants.value ?? []).filter((p) => !removedParticipantIds.value.includes(p.id))
+  const others = [...saved, ...pendingParticipants.value]
     .filter((p) => p.user_id && p.user_id !== auth.user?.id)
     .map((p) => ({ id: p.user_id!, name: p.display_name || p.email }))
   return [...me, ...others]
@@ -133,12 +138,23 @@ watch(activeTab, (tab) => {
 })
 
 // Tabs differ in height; the dialog keeps the tallest one's height, so it doesn't jump while switching.
+// At most as tall as fits without scrolling, though (phones), so short tabs don't scroll into emptiness.
 const panel = ref<HTMLElement | null>(null)
 const panelMinHeight = ref(0)
 watch(
   activeTab,
   () => {
-    panelMinHeight.value = Math.max(panelMinHeight.value, panel.value?.offsetHeight ?? 0)
+    const el = panel.value
+    if (!el) return
+    const scroller = el.closest<HTMLElement>('.overflow-y-auto')
+    let fits = Infinity
+    if (scroller) {
+      // What the scrolling body shows besides the panel: the tabs above it, the note and padding below it.
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+      const below = scroller.scrollHeight - top - el.offsetHeight
+      fits = scroller.clientHeight - top - below
+    }
+    panelMinHeight.value = Math.min(Math.max(panelMinHeight.value, el.offsetHeight), fits)
   },
   { flush: 'pre' },
 )
@@ -171,7 +187,7 @@ const tabs = computed(() =>
 )
 
 const myRole = computed(() => calendar.value?.my_membership?.role ?? null)
-const isCalendarEditor = computed(() => myRole.value === 'owner' || myRole.value === 'full')
+const isCalendarEditor = computed(() => hasRole(myRole.value, 'full'))
 const canModify = computed(() => !event.value || isCalendarEditor.value || event.value.creator_id === auth.user?.id)
 const forceAllDay = computed(() => !!calendar.value?.force_all_day)
 // Only bookings (events with a resource) go through approval, so only they show a status.
@@ -317,6 +333,14 @@ async function submit(action: () => Promise<unknown>, done: () => void) {
   }
 }
 
+/** Sends the participants added and removed in the dialog (of a series: for all occurrences). */
+async function saveParticipants(eventId: string) {
+  for (const id of removedParticipantIds.value) await api.removeEventParticipant(eventId, id)
+  for (const { user_id, email, status } of pendingParticipants.value) {
+    await api.addEventParticipant(eventId, user_id ? { user_id, status } : { email, status })
+  }
+}
+
 /** Saves the user's reminders for the event (of a series: for all occurrences) if they changed. */
 async function saveReminders(eventId: string) {
   if (remindersChanged.value) await api.setReminders(eventId, reminders.value)
@@ -343,6 +367,7 @@ async function save() {
     await submit(
       async () => {
         await api.updateOccurrence(existing.id, occurrence.recurrenceId, scope, input)
+        await saveParticipants(existing.id)
         await saveReminders(existing.id)
       },
       () => emit('saved'),
@@ -353,6 +378,7 @@ async function save() {
     async () => {
       if (existing) {
         await api.updateEvent(existing.id, eventInput())
+        await saveParticipants(existing.id)
         await saveReminders(existing.id)
       } else {
         const created = await api.createEvent(target.id, {
@@ -402,6 +428,7 @@ async function decide(action: 'approve' | 'reject') {
   <AppModal
     open
     size="2xl"
+    fullscreen-on-phone
     :dismissible="false"
     :title="eventId ? $t('app.edit') : $t('app.add')"
     @close="emit('cancel')"
@@ -412,7 +439,12 @@ async function decide(action: 'approve' | 'reject') {
         {{ $t(statusLabels[bookingStatus]!) }}
       </span>
     </template>
-    <TabBar :tabs="tabs" :active="activeTab" class="mb-5" @select="activeTab = $event" />
+    <TabBar
+      :tabs="tabs"
+      :active="activeTab"
+      class="mb-3 max-sm:-mx-4 max-sm:px-1 sm:mb-5"
+      @select="activeTab = $event"
+    />
 
     <div v-if="bookingStatus" class="mb-4 text-sm text-gray-600">
       <p v-if="bookingStatus === 'pending' && event?.awaiting_approval.length" class="text-xs">
@@ -492,7 +524,7 @@ async function decide(action: 'approve' | 'reject') {
       />
 
       <fieldset v-else class="contents" :disabled="!canModify">
-        <div v-if="activeTab === 'details'" class="space-y-6">
+        <div v-if="activeTab === 'details'" class="space-y-4 sm:space-y-6">
           <section class="space-y-3">
             <label class="block">
               <span class="block text-sm font-medium text-gray-700">{{ $t('event.title') }}</span>
@@ -529,7 +561,7 @@ async function decide(action: 'approve' | 'reject') {
             </label>
           </section>
 
-          <section class="space-y-3 border-t border-line pt-5">
+          <section class="space-y-3 border-t border-line pt-4 sm:pt-5">
             <AppSwitch v-model="form.allDay" :label="$t('event.allDay')" :disabled="forceAllDay" />
             <p v-if="forceAllDay" class="text-xs text-gray-500">{{ $t('event.allDayRequired') }}</p>
 
@@ -581,7 +613,7 @@ async function decide(action: 'approve' | 'reject') {
             <p v-if="endBeforeStart" class="text-xs text-red-600" role="alert">{{ $t('event.endBeforeStart') }}</p>
           </section>
 
-          <section class="space-y-3 border-t border-line pt-5">
+          <section class="space-y-3 border-t border-line pt-4 sm:pt-5">
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
                 <label :for="`${fieldId}-category`" class="block text-sm font-medium text-gray-700">{{
@@ -635,6 +667,7 @@ async function decide(action: 'approve' | 'reject') {
         <EventParticipantsTab
           v-else-if="activeTab === 'participants'"
           v-model:pending="pendingParticipants"
+          v-model:removed="removedParticipantIds"
           v-model:participants="participants"
           :event-id="eventId"
           :can-manage="canModify"
@@ -643,7 +676,7 @@ async function decide(action: 'approve' | 'reject') {
     </div>
     <p v-else-if="!error" class="text-sm text-gray-500">{{ $t('app.loading') }}</p>
 
-    <p v-if="event" class="mt-6 text-xs text-gray-500">
+    <p v-if="event" class="mt-4 text-xs text-gray-500 sm:mt-6">
       {{
         $t('event.createdBy', {
           name: event.creator_name || event.creator_email || '',

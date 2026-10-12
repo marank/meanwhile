@@ -1,6 +1,8 @@
-export type CalendarRole = 'owner' | 'full' | 'own' | 'read'
+export type CalendarRole = 'owner' | 'manage' | 'full' | 'own' | 'read'
 /** Roles that can be granted to members, groups and the public; ownership isn't transferable here. */
 export type GrantableRole = Exclude<CalendarRole, 'owner'>
+/** What everyone gets in a public calendar: never managing it. */
+export type PublicRole = Exclude<GrantableRole, 'manage'>
 export type EventStatus = 'confirmed' | 'pending' | 'approved' | 'rejected' | 'cancelled'
 
 /** Which occurrences of a series a change applies to. */
@@ -171,7 +173,7 @@ export interface Calendar {
   dark_outer_border_color: string
   owner_id: string
   is_public: boolean
-  public_role: GrantableRole
+  public_role: PublicRole
   created_at: string
   updated_at: string
   my_membership: CalendarMember | null
@@ -248,6 +250,17 @@ export type CalendarUpdate = Partial<
 export interface CalendarListItem {
   calendar: Calendar
   membership: CalendarMember
+  /** Where the access comes from: a membership, a group, or a public calendar added to the sidebar. */
+  access: 'member' | 'group' | 'public'
+}
+
+/** A public calendar that can be added to the sidebar. */
+export interface PublicCalendar {
+  id: string
+  name: string
+  description: string | null
+  owner_name: string
+  added: boolean
 }
 
 export interface Folder {

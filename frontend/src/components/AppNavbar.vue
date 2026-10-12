@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, EllipsisVertical, Moon, Sun } from 'lucide-vue-next'
+import { Bell, EllipsisVertical, Menu, Moon, Sun } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import IconButton from '@/components/IconButton.vue'
 import type { AppNotification } from '@/api'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
 import { formatDateTime } from '@/services/datetime'
 import { notificationText } from '@/services/labels'
+import { sidebarDrawerOpen } from '@/services/sidebarState'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useSettingsStore } from '@/stores/settings'
@@ -23,6 +24,12 @@ const menuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
 const notificationsOpen = ref(false)
 const notificationsRef = ref<HTMLElement | null>(null)
+const header = ref<HTMLElement | null>(null)
+
+// Dialogs shown as a page on phones start below the navbar (AppModal's fullscreenOnPhone).
+const headerResize = new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty('--navbar-height', `${entry!.borderBoxSize[0]!.blockSize}px`)
+})
 
 function closeOnOutsideClick(event: PointerEvent) {
   const target = event.target as Node
@@ -40,11 +47,14 @@ useEscapeToClose(
 )
 
 onMounted(() => {
+  headerResize.observe(header.value!)
   document.addEventListener('pointerdown', closeOnOutsideClick)
   notifications.startPolling()
 })
 
 onBeforeUnmount(() => {
+  headerResize.disconnect()
+  document.documentElement.style.removeProperty('--navbar-height')
   document.removeEventListener('pointerdown', closeOnOutsideClick)
   notifications.stopPolling()
 })
@@ -83,13 +93,25 @@ async function logout() {
 </script>
 
 <template>
-  <header class="flex items-center justify-between border-b border-line bg-surface px-6 py-3 shadow-sm">
-    <div class="flex items-center gap-3">
+  <header
+    ref="header"
+    class="app-navbar flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2 shadow-sm sm:px-6 sm:py-3"
+  >
+    <div class="flex min-w-0 items-center gap-2 sm:gap-3">
+      <IconButton
+        class="lg:hidden"
+        :label="$t('app.toggleSidebar')"
+        :aria-expanded="sidebarDrawerOpen"
+        aria-controls="calendar-sidebar"
+        @click="sidebarDrawerOpen = !sidebarDrawerOpen"
+      >
+        <Menu :size="22" :stroke-width="2.25" />
+      </IconButton>
       <AppLogo />
-      <span class="text-lg font-semibold text-gray-800">{{ settings.appName }}</span>
+      <span class="truncate text-lg font-semibold text-gray-800">{{ settings.appName }}</span>
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex shrink-0 items-center gap-1.5 sm:gap-3">
       <div ref="notificationsRef" class="relative">
         <IconButton
           :label="$t('notifications.title')"
@@ -107,7 +129,7 @@ async function logout() {
         </span>
         <div
           v-if="notificationsOpen"
-          class="absolute right-0 top-10 z-50 w-80 rounded-lg border border-line bg-surface shadow-lg"
+          class="fixed inset-x-2 top-14 z-50 rounded-lg border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-10 sm:w-80"
         >
           <div class="flex items-center justify-between border-b border-line px-4 py-2">
             <span class="text-sm font-semibold text-gray-800">{{ $t('notifications.title') }}</span>
@@ -123,7 +145,7 @@ async function logout() {
           <div v-if="!notifications.items.length" class="px-4 py-6 text-center text-sm text-gray-500">
             {{ $t('notifications.empty') }}
           </div>
-          <ul v-else class="max-h-96 divide-y divide-line overflow-y-auto">
+          <ul v-else class="max-h-[min(24rem,70vh)] divide-y divide-line overflow-y-auto">
             <li v-for="notification in notifications.items" :key="notification.id">
               <button
                 type="button"
@@ -154,7 +176,7 @@ async function logout() {
         <div class="text-xs text-gray-500">{{ auth.user?.email }}</div>
       </div>
       <div
-        class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-semibold text-white"
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs sm:h-10 sm:w-10 sm:text-sm bg-gradient-to-br from-blue-500 to-indigo-600 font-semibold text-white"
       >
         {{ initials }}
       </div>

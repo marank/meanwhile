@@ -16,7 +16,9 @@ withDefaults(
 
 <template>
   <section class="overflow-hidden rounded-xl border border-line bg-surface">
-    <header class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+    <header
+      class="flex flex-col items-start gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6"
+    >
       <div class="min-w-0">
         <h2 class="font-semibold text-gray-800">{{ title }}</h2>
         <p v-if="description" class="mt-1 text-sm text-gray-500">{{ description }}</p>

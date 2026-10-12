@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     pass
 
 
-ROLE_ORDER = [Role.READ, Role.OWN, Role.FULL, Role.OWNER]
+ROLE_ORDER = [Role.READ, Role.OWN, Role.FULL, Role.MANAGE, Role.OWNER]
 
 
 def role_weight(role: str) -> int:
@@ -95,6 +95,11 @@ def is_owner(member) -> bool:
     return member.role == Role.OWNER
 
 
+def can_manage(member) -> bool:
+    """Calendar settings, access, feed and approvers; only deleting the calendar stays with its owner."""
+    return has_at_least_role(member, Role.MANAGE)
+
+
 def get_visible_event(event_id: str, user: User) -> tuple[Event, MembershipInfo]:
     try:
         event = Event.objects.select_related("creator").get(id=event_id)
@@ -137,4 +142,15 @@ def accessible_calendars(user: User):
         | Q(members__user=user)
         | Q(calendar_groups__group__in=user.groups.all())
         | Q(is_public=True)
+    ).distinct()
+
+
+def sidebar_calendars(user: User):
+    """The calendars in the user's sidebar (and CalDAV clients): own, shared directly or via a group, and
+    the public ones they added. Other public calendars can be read, but have to be added first."""
+    return Calendar.objects.filter(
+        Q(owner=user)
+        | Q(members__user=user)
+        | Q(calendar_groups__group__in=user.groups.all())
+        | Q(is_public=True, subscriptions__user=user)
     ).distinct()
