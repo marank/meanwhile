@@ -237,3 +237,41 @@ if BEHIND_PROXY:
     USE_X_FORWARDED_HOST = True
 # Cookies only over HTTPS once the app is served that way.
 SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = _bool_env("SECURE_COOKIES", ENVIRONMENT != "development")
+
+
+# ---------------------------------------------------------------------------
+# Email (notifications and invitations)
+# ---------------------------------------------------------------------------
+
+# Without EMAIL_HOST, emails are printed to the console in development and not sent otherwise.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587") or "587")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _bool_env("EMAIL_USE_TLS", False)
+EMAIL_USE_SSL = _bool_env("EMAIL_USE_SSL", False)
+if EMAIL_USE_TLS and EMAIL_USE_SSL:
+    raise RuntimeError("Set only one of EMAIL_USE_TLS (STARTTLS, port 587) and EMAIL_USE_SSL (port 465)")
+EMAIL_TIMEOUT = 15
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+elif ENVIRONMENT == "development":
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "calendar@localhost")
+# Emails go out after the request in a background thread, so a slow mail server doesn't hold it up.
+EMAIL_SEND_IN_BACKGROUND = _bool_env("EMAIL_SEND_IN_BACKGROUND", True)
+
+# Address of the app for links in emails; BASE_URL, or in development the Vite dev server.
+APP_URL = (BASE_URL or ("http://localhost:5173" if ENVIRONMENT == "development" else "")).rstrip("/")
+
+# iMIP: invitations name this mailbox as organizer, so participants' mail programs send their
+# answers (iTIP REPLY) there; `fetch_imip` reads them. Empty: the organizer's own address.
+IMIP_ADDRESS = os.environ.get("IMIP_ADDRESS", "")
+IMIP_IMAP_HOST = os.environ.get("IMIP_IMAP_HOST", "")
+IMIP_IMAP_PORT = int(os.environ.get("IMIP_IMAP_PORT", "993") or "993")
+IMIP_IMAP_USER = os.environ.get("IMIP_IMAP_USER", "")
+IMIP_IMAP_PASSWORD = os.environ.get("IMIP_IMAP_PASSWORD", "")
+IMIP_IMAP_SSL = _bool_env("IMIP_IMAP_SSL", True)
+IMIP_IMAP_FOLDER = os.environ.get("IMIP_IMAP_FOLDER", "INBOX")

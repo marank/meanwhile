@@ -1,0 +1,183 @@
+import { h, render, type Component } from 'vue'
+import {
+  DoorOpen,
+  Building2,
+  Warehouse,
+  Home,
+  Store,
+  Tent,
+  TreePine,
+  MapPin,
+  Users,
+  Armchair,
+  Sofa,
+  Table,
+  Lamp,
+  Presentation,
+  Projector,
+  Monitor,
+  Tv,
+  Laptop,
+  Tablet,
+  Smartphone,
+  Phone,
+  Video,
+  Camera,
+  Mic,
+  Speaker,
+  Headphones,
+  Radio,
+  Music,
+  Printer,
+  Wifi,
+  Server,
+  Cpu,
+  Plug,
+  Cable,
+  Lightbulb,
+  Fan,
+  Coffee,
+  Utensils,
+  CookingPot,
+  Wine,
+  Car,
+  Truck,
+  Bus,
+  Bike,
+  Plane,
+  Train,
+  Ship,
+  Fuel,
+  ParkingCircle,
+  Package,
+  Box,
+  Key,
+  Wrench,
+  Hammer,
+  HardHat,
+  Briefcase,
+  Clipboard,
+  Book,
+  GraduationCap,
+  Microscope,
+  FlaskConical,
+  Stethoscope,
+  Dumbbell,
+  Gamepad2,
+  Palette,
+  Shirt,
+  Scissors,
+  ShowerHead,
+  Bed,
+  Umbrella,
+  Gift,
+  Flag,
+  Globe,
+  Rocket,
+} from 'lucide-vue-next'
+
+/** The icons a resource can have, by the name stored with it (the lucide name in kebab case). */
+export const RESOURCE_ICONS: Record<string, Component> = {
+  'door-open': DoorOpen,
+  'building-2': Building2,
+  warehouse: Warehouse,
+  home: Home,
+  store: Store,
+  tent: Tent,
+  'tree-pine': TreePine,
+  'map-pin': MapPin,
+  users: Users,
+  armchair: Armchair,
+  sofa: Sofa,
+  table: Table,
+  lamp: Lamp,
+  presentation: Presentation,
+  projector: Projector,
+  monitor: Monitor,
+  tv: Tv,
+  laptop: Laptop,
+  tablet: Tablet,
+  smartphone: Smartphone,
+  phone: Phone,
+  video: Video,
+  camera: Camera,
+  mic: Mic,
+  speaker: Speaker,
+  headphones: Headphones,
+  radio: Radio,
+  music: Music,
+  printer: Printer,
+  wifi: Wifi,
+  server: Server,
+  cpu: Cpu,
+  plug: Plug,
+  cable: Cable,
+  lightbulb: Lightbulb,
+  fan: Fan,
+  coffee: Coffee,
+  utensils: Utensils,
+  'cooking-pot': CookingPot,
+  wine: Wine,
+  car: Car,
+  truck: Truck,
+  bus: Bus,
+  bike: Bike,
+  plane: Plane,
+  train: Train,
+  ship: Ship,
+  fuel: Fuel,
+  'parking-circle': ParkingCircle,
+  package: Package,
+  box: Box,
+  key: Key,
+  wrench: Wrench,
+  hammer: Hammer,
+  'hard-hat': HardHat,
+  briefcase: Briefcase,
+  clipboard: Clipboard,
+  book: Book,
+  'graduation-cap': GraduationCap,
+  microscope: Microscope,
+  'flask-conical': FlaskConical,
+  stethoscope: Stethoscope,
+  dumbbell: Dumbbell,
+  'gamepad-2': Gamepad2,
+  palette: Palette,
+  shirt: Shirt,
+  scissors: Scissors,
+  'shower-head': ShowerHead,
+  bed: Bed,
+  umbrella: Umbrella,
+  gift: Gift,
+  flag: Flag,
+  globe: Globe,
+  rocket: Rocket,
+}
+
+export const RESOURCE_ICON_NAMES = Object.keys(RESOURCE_ICONS)
+
+/** The component for an icon name; undefined for no icon, and for a name this client doesn't know. */
+export function resourceIcon(name: string | null | undefined): Component | undefined {
+  return name ? RESOURCE_ICONS[name] : undefined
+}
+
+const markup = new Map<string, string>()
+
+/**
+ * The icon as SVG markup, for places that build DOM by hand (the calendar's events). Rendered
+ * once per name and size. Empty for no icon.
+ */
+export function resourceIconSvg(name: string | null | undefined, size = 12): string {
+  const icon = resourceIcon(name)
+  if (!icon) return ''
+  const key = `${name}:${size}`
+  let svg = markup.get(key)
+  if (svg === undefined) {
+    const container = document.createElement('div')
+    render(h(icon, { size, 'aria-hidden': 'true' }), container)
+    svg = container.innerHTML
+    render(null, container)
+    markup.set(key, svg)
+  }
+  return svg
+}

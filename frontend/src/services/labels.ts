@@ -26,6 +26,14 @@ const notificationKeys: Record<NotificationType, string> = {
   member_role_changed: 'notifications.memberRoleChanged',
   comment_added: 'notifications.commentAdded',
   event_reminder: 'reminders.due',
+  participant_replied: 'notifications.participantReplied',
+}
+
+const replyKeys: Record<ParticipantStatus, string> = {
+  accepted: 'notifications.participantAccepted',
+  tentative: 'notifications.participantTentative',
+  declined: 'notifications.participantDeclined',
+  needs_action: 'notifications.participantReplied',
 }
 
 export function notificationText(notification: AppNotification): string {
@@ -36,5 +44,11 @@ export function notificationText(notification: AppNotification): string {
   if (notification.type === 'event_reminder' && notification.data?.start) {
     return reminderText(notification.title, notification.data.start, !!notification.data.all_day)
   }
-  return t(key, { actor: notification.actor_name || t('app.someone'), title: notification.title })
+  // Participants without an account answer by email or link; they are named by their address.
+  const actor = notification.actor_name || notification.data?.name || notification.data?.email || t('app.someone')
+  if (notification.type === 'participant_replied') {
+    const status = notification.data?.status as ParticipantStatus | undefined
+    return t(status ? replyKeys[status] : key, { actor, title: notification.title })
+  }
+  return t(key, { actor, title: notification.title })
 }

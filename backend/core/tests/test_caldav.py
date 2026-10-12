@@ -130,7 +130,7 @@ def test_caldav_rights_follow_calendar_membership(world):
     assert rights.authorization(u["outsider"].email, path) == ""
 
     world["api"]["owner"].post(
-        f"/calendars/{world['cal']['id']}/members", {"user_id": str(u["outsider"].id), "role": "viewer"}
+        f"/calendars/{world['cal']['id']}/members", {"user_id": str(u["outsider"].id), "role": "read"}
     )
     assert rights.authorization(u["outsider"].email, path) == "Rr"
 
@@ -139,7 +139,7 @@ def test_caldav_rights_include_group_access(world):
     u = world["users"]
     group = UserGroup.objects.create(name="Crew")
     u["outsider"].groups.add(group)
-    CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="contributor")
+    CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="own")
     path = f"/{u['owner'].email}/{world['cal']['id']}/"
     assert Rights(None).authorization(u["outsider"].email, path) == "RWrw"
 

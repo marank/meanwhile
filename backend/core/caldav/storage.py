@@ -294,11 +294,11 @@ class Collection(storage.BaseCollection):
             yield href, self._item(event) if event is not None else None
 
     def _actor(self) -> tuple[User, str]:
-        """The user writing to this calendar and their role; writes need at least contributor."""
+        """The user writing to this calendar and their role; writes need at least the role "own"."""
         login = _acting_login.get()
         user = User.objects.filter(email__iexact=login, is_active=True).first() if login else None
         membership = get_membership(self._calendar, user) if user else None
-        if membership is None or not has_at_least_role(membership, Role.CONTRIBUTOR):
+        if membership is None or not has_at_least_role(membership, Role.OWN):
             raise _forbidden("No write access to this calendar")
         return user, membership.role
 
@@ -326,8 +326,8 @@ class Collection(storage.BaseCollection):
             # Pending, rejected and cancelled bookings are hidden from CalDAV and can't be changed here.
             raise _forbidden(f"Event {uid} cannot be changed via CalDAV")
         if existing is not None and not can_modify_event(existing, str(actor.id), role):
-            # Same rule as the API: contributors only change their own events.
-            raise _forbidden(f"Event {uid} may only be changed by its creator or an editor")
+            # Same rule as the API: users with the role "own" only change their own events.
+            raise _forbidden(f"Event {uid} may only be changed by its creator or a user with full access")
 
         old_item = None
         created = existing is None
@@ -509,7 +509,7 @@ class Collection(storage.BaseCollection):
             return
         actor, role = self._actor()
         if not can_modify_event(event, str(actor.id), role):
-            raise _forbidden(f"Event {href} may only be deleted by its creator or an editor")
+            raise _forbidden(f"Event {href} may only be deleted by its creator or a user with full access")
         event.delete()
 
 
@@ -632,7 +632,7 @@ class Storage(storage.BaseStorage):
             raise ValueError(f"Cannot move {item.href}")
         actor, role = source._actor()
         if not can_modify_event(event, str(actor.id), role):
-            raise _forbidden(f"Event {item.href} may only be moved by its creator or an editor")
+            raise _forbidden(f"Event {item.href} may only be moved by its creator or a user with full access")
         _, target_role = to_collection._actor()
 
         moving = target.id != event.calendar_id
@@ -651,7 +651,7 @@ class Storage(storage.BaseStorage):
             if replaced is not None and replaced.pk != event.pk:
                 # Radicale only gets here with "Overwrite: T".
                 if not can_modify_event(replaced, str(actor.id), target_role):
-                    raise _forbidden(f"Event {to_href} may only be replaced by its creator or an editor")
+                    raise _forbidden(f"Event {to_href} may only be replaced by its creator or a user with full access")
                 replaced.delete()
             if moving:
                 event.calendar = target
@@ -663,7 +663,7 @@ class Storage(storage.BaseStorage):
             if moving or old_href != to_href:
                 # Clients syncing the old place learn that the event is gone from there.
                 DeletedEvent.objects.create(calendar_id=old_calendar_id, href=old_href)
-            # Saving tells the new calendar's viewers; the old one's must hear it, too.
+            # Saving tells the new calendar's readers; the old one's must hear it, too.
             broadcast.calendar_changed(old_calendar_id)
 
     def verify(self) -> bool:

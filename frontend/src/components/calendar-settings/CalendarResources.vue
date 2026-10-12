@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Pencil, Trash2 } from 'lucide-vue-next'
 import * as api from '@/api'
@@ -7,9 +7,12 @@ import IconButton from '@/components/IconButton.vue'
 import PersonChip from '@/components/PersonChip.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import ResourceIcon from '@/components/ResourceIcon.vue'
+import ResourceIconPicker from '@/components/ResourceIconPicker.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useCalendarSettingsSync } from '@/composables/useCalendarSettingsSync'
 import { confirm } from '@/services/dialog'
 
 interface ResourceForm {
@@ -17,6 +20,7 @@ interface ResourceForm {
   name: string
   description: string
   color: string
+  icon: string
   requires_approval: boolean
   is_location: boolean
   is_active: boolean
@@ -55,6 +59,49 @@ async function loadDefaultApprovers() {
   defaultApprovers.value = await api.listCalendarApprovers(props.calendarId)
 }
 
+// This tab stays alive while the access tab is open. When members are added or removed there, it
+// loads again (at once if it is shown, else when it is next shown): a removed member is no approver
+// any more, and the suggestions for approvers are the members.
+const sync = useCalendarSettingsSync()
+/** Counts up to renew the member suggestions, which load once when they appear. */
+const suggestionsKey = ref(0)
+let shown = true
+let membersStale = false
+
+async function refreshAfterMembersChanged() {
+  const before = new Map(resources.value.map((r) => [r.id, r.approvers.map((a) => a.user_id)]))
+  try {
+    await Promise.all([loadResources(), loadDefaultApprovers()])
+  } catch {
+    // Keep what is shown; the next time this tab is shown, it tries again.
+    membersStale = true
+    return
+  }
+  suggestionsKey.value++
+  // A resource being edited loses the approvers who were removed; what else was changed stays.
+  const editing = form.value
+  if (editing?.id) {
+    const now = new Set(resources.value.find((r) => r.id === editing.id)?.approvers.map((a) => a.user_id))
+    const removed = (before.get(editing.id) ?? []).filter((id) => !now.has(id))
+    editing.approvers = editing.approvers.filter((a) => !removed.includes(a.user_id))
+  }
+}
+
+watch(sync.membersVersion, () => {
+  if (shown) void refreshAfterMembersChanged()
+  else membersStale = true
+})
+onActivated(() => {
+  shown = true
+  if (membersStale) {
+    membersStale = false
+    void refreshAfterMembersChanged()
+  }
+})
+onDeactivated(() => {
+  shown = false
+})
+
 function approvalLabel(resource: api.Resource) {
   if (!resource.requires_approval) return t('app.approvalNone')
   if (resource.approvers.length) return resource.approvers.map((a) => a.display_name).join(', ')
@@ -67,8 +114,10 @@ async function onDefaultApproverPicked(userId: string | null) {
   if (userId && !defaultApprovers.value.some((a) => a.user_id === userId)) {
     await run(
       async () => {
-        await api.addCalendarApprover(props.calendarId, userId)
-        await loadDefaultApprovers()
+        defaultApprovers.value = await api.setCalendarApprovers(props.calendarId, [
+          ...defaultApprovers.value.map((a) => a.user_id),
+          userId,
+        ])
       },
       { success: t('app.approverAdded') },
     )
@@ -80,8 +129,10 @@ async function removeDefaultApprover(userId: string) {
   if (!(await confirm(t('app.removeApproverText'), t('app.removeApproverTitle')))) return
   await run(
     async () => {
-      await api.removeCalendarApprover(props.calendarId, userId)
-      await loadDefaultApprovers()
+      defaultApprovers.value = await api.setCalendarApprovers(
+        props.calendarId,
+        defaultApprovers.value.map((a) => a.user_id).filter((id) => id !== userId),
+      )
     },
     { success: t('app.approverRemoved') },
   )
@@ -95,6 +146,7 @@ function startAdd() {
     name: '',
     description: '',
     color: '#f59e0b',
+    icon: '',
     requires_approval: false,
     is_location: false,
     is_active: true,
@@ -109,6 +161,7 @@ function startEdit(resource: api.Resource) {
     name: resource.name,
     description: resource.description || '',
     color: resource.color,
+    icon: resource.icon,
     requires_approval: resource.requires_approval,
     is_location: resource.is_location,
     is_active: resource.is_active,
@@ -139,16 +192,22 @@ async function save() {
     name: value.name,
     description: value.description || null,
     color: value.color,
+    icon: value.icon,
     requires_approval: value.requires_approval,
     is_location: value.is_location,
     is_active: value.is_active,
-    // Own approvers only apply while approval is required; otherwise the defaults take over.
-    approver_ids: ownApprovers ? value.approvers.map((a) => a.user_id) : [],
   }
+  // Own approvers only apply while approval is required; otherwise the defaults take over.
+  const approverIds = ownApprovers ? value.approvers.map((a) => a.user_id) : []
   const saved = await run(
     async () => {
-      if (value.id) await api.updateResource(props.calendarId, value.id, data)
-      else await api.createResource(props.calendarId, data)
+      const before = value.id ? resources.value.find((r) => r.id === value.id)?.approvers.map((a) => a.user_id) : []
+      const resource = value.id
+        ? await api.updateResource(props.calendarId, value.id, data)
+        : await api.createResource(props.calendarId, data)
+      if ([...approverIds].sort().join() !== [...(before ?? [])].sort().join()) {
+        await api.setResourceApprovers(props.calendarId, resource.id, approverIds)
+      }
       await loadResources()
     },
     { success: t('app.resourceSaved'), failure: t('app.saveFailed') },
@@ -200,6 +259,7 @@ async function remove(id: string) {
         <p v-else class="text-sm text-gray-500">{{ $t('app.noDefaultApprovers') }}</p>
         <div v-if="canManage" class="sm:w-1/2">
           <SearchableSelect
+            :key="`default-${suggestionsKey}`"
             v-model="pickedDefaultApproverId"
             entity="members"
             :calendar-id="calendarId"
@@ -233,12 +293,18 @@ async function remove(id: string) {
                 <span class="block h-5 w-5 rounded" :style="{ backgroundColor: resource.color }"></span>
               </td>
               <td class="px-4 py-2 font-medium text-gray-800">
-                {{ resource.name }}
-                <span
-                  v-if="resource.is_location"
-                  class="ml-1.5 rounded bg-surface-muted px-1.5 py-0.5 text-xs font-normal text-gray-600"
-                  >{{ $t('app.locationBadge') }}</span
-                >
+                <div class="flex items-center gap-2">
+                  <!-- The slot stays when there is no icon, so the names line up. -->
+                  <span class="flex h-4 w-4 shrink-0 items-center justify-center text-gray-500">
+                    <ResourceIcon :name="resource.icon" :size="16" />
+                  </span>
+                  <span>{{ resource.name }}</span>
+                  <span
+                    v-if="resource.is_location"
+                    class="rounded bg-surface-muted px-1.5 py-0.5 text-xs font-normal text-gray-600"
+                    >{{ $t('app.locationBadge') }}</span
+                  >
+                </div>
               </td>
               <td class="px-4 py-2 text-gray-500">{{ resource.description || '—' }}</td>
               <td class="px-4 py-2" :class="resource.requires_approval ? 'text-gray-800' : 'text-gray-500'">
@@ -285,6 +351,10 @@ async function remove(id: string) {
           <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.color') }}</span>
           <input v-model="form.color" type="color" class="h-10 w-16 rounded border border-line" />
         </label>
+        <div>
+          <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.icon') }}</span>
+          <ResourceIconPicker v-model="form.icon" />
+        </div>
         <div class="grid gap-3 sm:grid-cols-2">
           <SettingsToggle v-model="form.requires_approval" :title="$t('app.requiresApproval')" />
           <SettingsToggle v-model="form.is_active" :title="$t('app.active')" />
@@ -319,6 +389,7 @@ async function remove(id: string) {
             <p v-else class="text-sm text-gray-500">{{ $t('app.customApproversRequired') }}</p>
             <div class="sm:w-2/3">
               <SearchableSelect
+                :key="`resource-${suggestionsKey}`"
                 v-model="pickedResourceApproverId"
                 entity="members"
                 :calendar-id="calendarId"

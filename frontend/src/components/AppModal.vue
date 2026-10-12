@@ -44,8 +44,10 @@ useEscapeToClose(
         aria-modal="true"
       >
         <div v-if="title || $slots.header" class="flex items-center justify-between border-b border-line px-6 py-4">
-          <h3 v-if="title" class="text-lg font-semibold text-gray-800">{{ title }}</h3>
-          <slot name="header" />
+          <div class="flex min-w-0 items-baseline gap-2">
+            <h3 v-if="title" class="text-lg font-semibold text-gray-800">{{ title }}</h3>
+            <slot name="header" />
+          </div>
           <button
             type="button"
             class="text-gray-400 hover:text-gray-600"

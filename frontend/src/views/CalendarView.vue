@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import FullCalendar from '@fullcalendar/vue3'
 import dayGridPlugin from '@fullcalendar/vue3/daygrid'
 import timeGridPlugin from '@fullcalendar/vue3/timegrid'
@@ -32,7 +32,9 @@ import { contrastColor } from '@/services/color'
 import { alert } from '@/services/dialog'
 import { chooseScope, type OccurrenceRef } from '@/services/occurrences'
 import { browserTimeZone, hour12, toDateInputValue } from '@/services/datetime'
+import { resourceIconSvg } from '@/services/resourceIcons'
 import { bookingErrorMessage } from '@/services/errors'
+import { parseCalendarQuery, showsTarget, type CalendarViewName } from '@/services/calendarUrl'
 import { useLoader } from '@/composables/useLoader'
 import * as api from '@/api'
 import type { Occurrence } from '@/api'
@@ -46,6 +48,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const route = useRoute()
 const calendarStore = useCalendarStore()
 const eventStore = useEventStore()
 const settingsStore = useSettingsStore()
@@ -53,9 +56,13 @@ const overviewStore = useOverviewStore()
 const themeStore = useThemeStore()
 const { locale, t } = useI18n()
 
-// The URL decides what is shown: /calendar, /calendar/<id> or /calendar/folder/<id>.
+// The URL decides what is shown: /calendar, /calendar/<id-or-readable-path> or /calendar/folder/<id>.
 const selection = computed(() => props.folderId ?? props.calendarId ?? ALL_CALENDARS)
-watch(selection, (id) => calendarStore.select(id), { immediate: true })
+watch(
+  () => [selection.value, calendarStore.loaded] as const,
+  ([id]) => calendarStore.select(id),
+  { immediate: true },
+)
 
 // A deleted or no longer shared calendar or folder in the URL falls back to all calendars.
 watch(
@@ -68,14 +75,31 @@ watch(
 
 const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null)
 
-function eventLabel(occ: Occurrence): string {
+interface LabelPart {
+  text: string
+  /** Name of the icon of the place or resource this part names. */
+  icon?: string
+}
+
+// What an event says: its title, then where (the place) and with what (the resource), each with its icon.
+function eventParts(occ: Occurrence): LabelPart[] {
   let title = occ.recurrence_count === null ? occ.title : `${occ.title} (${occ.recurrence_count})`
   if (occ.status === 'rejected' || occ.status === 'cancelled') {
     title = `${title} (${t('event.declined')})`
   } else if (occ.status === 'pending') {
     title = `${title} (${t('event.pending')})`
   }
-  return [title, occ.location, occ.resource_name].filter(Boolean).join(' · ')
+  return [
+    { text: title },
+    { text: occ.location, icon: occ.location_resource_id ? occ.location_resource_icon : undefined },
+    { text: occ.resource_name ?? '', icon: occ.resource_icon },
+  ].filter((part) => part.text)
+}
+
+function eventLabel(occ: Occurrence): string {
+  return eventParts(occ)
+    .map((part) => part.text)
+    .join(' · ')
 }
 
 function renderEventContent(info: EventDisplayInfo) {
@@ -100,9 +124,20 @@ function renderEventContent(info: EventDisplayInfo) {
     marker.style.backgroundColor = categoryColor
     content.append(marker)
   }
-  const title = document.createElement('span')
-  title.textContent = info.event.title
-  content.append(title)
+  const parts = info.event.extendedProps.parts as LabelPart[]
+  const text = document.createElement('span')
+  content.append(text)
+  parts.forEach((part, index) => {
+    if (index > 0) text.append(' · ')
+    const svg = resourceIconSvg(part.icon, 12)
+    if (svg) {
+      const icon = document.createElement('span')
+      icon.className = 'fc-event-resource-icon'
+      icon.innerHTML = svg
+      text.append(icon)
+    }
+    text.append(part.text)
+  })
   return { domNodes: [content] }
 }
 
@@ -129,7 +164,12 @@ const fcEvents = computed(() =>
       durationEditable: occ.can_edit,
       color,
       contrastColor: contrastColor(color),
-      extendedProps: { occurrence: occ, categoryColor: occ.category_color, status: occ.status },
+      extendedProps: {
+        occurrence: occ,
+        categoryColor: occ.category_color,
+        parts: eventParts(occ),
+        status: occ.status,
+      },
     }
   }),
 )
@@ -140,6 +180,11 @@ const toolbar = ref({
   date: new Date(),
   todayInRange: true,
 })
+
+// The URL can name the month or week and the view to show: ?date=2026-10, ?month=10&year=2025, ?view=week.
+// It is only ever read, never written: a bookmark keeps the parameters it was made with.
+const VIEW_TYPES: Record<CalendarViewName, CalendarViewType> = { month: 'dayGridMonth', week: 'timeGridWeek' }
+const initialTarget = parseCalendarQuery(route.query)
 
 function handleDatesSet(info: DatesSetInfo) {
   eventStore.load(info.start, info.end)
@@ -152,6 +197,22 @@ function handleDatesSet(info: DatesSetInfo) {
     todayInRange: now >= view.currentStart && now < view.currentEnd,
   }
 }
+
+// A link followed while the calendar is open (another month, the week view) is applied.
+watch(
+  () => route.query,
+  (query) => {
+    const api = calendarApi()
+    if (!api) return
+    const target = parseCalendarQuery(query)
+    const { currentStart, currentEnd, type } = api.view
+    const view: CalendarViewName = type === 'timeGridWeek' ? 'week' : 'month'
+    if (showsTarget(target, view, currentStart, currentEnd)) return
+    // In one step: the view's own dates-set would otherwise write the URL before the date is reached.
+    if (target.view && target.view !== view) api.changeView(VIEW_TYPES[target.view], target.date)
+    else if (target.date) api.gotoDate(target.date)
+  },
+)
 
 function calendarApi() {
   return calendarRef.value?.getApi()
@@ -305,7 +366,8 @@ function dayCellClass(info: { dow: number; isToday: boolean }) {
 
 const calendarOptions = computed(() => ({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, classicThemePlugin],
-  initialView: 'dayGridMonth',
+  initialView: VIEW_TYPES[initialTarget.view ?? 'month'],
+  initialDate: initialTarget.date,
   // The toolbar is our own (CalendarToolbar), so it can hold month and year fields.
   headerToolbar: false as const,
   height: '100%',
@@ -448,6 +510,12 @@ html.dark .calendar-root {
 
 .fc-event-time-label {
   font-weight: 600;
+}
+
+.fc-event-resource-icon {
+  display: inline-block;
+  margin-right: 0.25rem;
+  vertical-align: -0.15rem;
 }
 
 .fc-event-category-marker {

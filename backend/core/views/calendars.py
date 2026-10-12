@@ -4,6 +4,7 @@ Calendar, membership, feed and group-link endpoints.
 
 import secrets
 
+from django.db import IntegrityError, transaction
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
@@ -13,14 +14,15 @@ from core.models import (
     CalendarApprover,
     CalendarGroup,
     CalendarMember,
-    Folder,
     User,
     UserGroup,
 )
+from core.models import ResourceApprover
 from core.models.base import Role
 from core.models.calendar_colors import COLOR_FIELDS
 from core.schemas import (
-    ApproverCreate,
+    ApproverOut,
+    ApproversIn,
     CalendarCreate,
     CalendarGroupLinkCreate,
     CalendarGroupLinkOut,
@@ -33,7 +35,6 @@ from core.schemas import (
     CalendarUpdate,
     FeedTokenRotateOut,
     FeedUrlOut,
-    MyMembershipOut,
 )
 from core.services.calendars import create_calendar as create_calendar_for
 from core.services.notifications import notify
@@ -43,6 +44,7 @@ from core.services.permissions import (
     is_owner,
     role_weight,
 )
+from core.views.common import approvers_of, replace_approvers
 
 router = CSRFRouter()
 
@@ -155,9 +157,23 @@ def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
     data = payload.dict(exclude_unset=True)
     if "weekend_days" in data:
         data["weekend_days"] = sorted(set(data["weekend_days"]))
+    if "url_path" in data and data["url_path"] is not None:
+        url_path = data["url_path"]
+        if url_path == "folder":
+            raise HttpError(422, "This calendar URL is reserved")
+        if Calendar.objects.exclude(id=calendar.id).filter(url_path=url_path).exists():
+            raise HttpError(409, "This calendar URL is already in use")
+        if Calendar.objects.exclude(id=calendar.id).filter(id=url_path).exists():
+            raise HttpError(409, "This calendar URL is already in use")
     for attr, value in data.items():
         setattr(calendar, attr, value)
-    calendar.save()
+    try:
+        with transaction.atomic():
+            calendar.save()
+    except IntegrityError as error:
+        if "url_path" in data:
+            raise HttpError(409, "This calendar URL is already in use") from error
+        raise
     out = CalendarOut.model_validate(calendar)
     out.my_membership = CalendarMemberOut.model_validate(_serialize_membership(membership))
     return out
@@ -221,30 +237,6 @@ def add_member(request, calendar_id: str, payload: CalendarMemberCreate):
     return _serialize_membership(new_member)
 
 
-@router.patch("/calendars/{calendar_id}/members/me", response=MyMembershipOut, auth=django_auth)
-def update_my_membership(request, calendar_id: str, payload: CalendarMemberUpdate):
-    calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
-    data = payload.dict(exclude_unset=True)
-    if "role" in data:
-        raise HttpError(400, "You cannot change your own role")
-    if "folder_id" in data:
-        folder_id = data["folder_id"]
-        if folder_id:
-            folder = Folder.objects.filter(id=folder_id, user=request.user).first()
-            if folder is None:
-                raise HttpError(404, "Folder not found")
-            membership.folder_id = folder.id
-        else:
-            membership.folder_id = None
-    if "position" in data:
-        membership.position = data["position"]
-    membership.save()
-    return membership
-
-
 @router.patch("/calendars/{calendar_id}/members/{user_id}", response=CalendarMemberOut, auth=django_auth)
 def update_member(request, calendar_id: str, user_id: str, payload: CalendarMemberUpdate):
     calendar = Calendar.objects.get(id=calendar_id)
@@ -294,7 +286,13 @@ def remove_member(request, calendar_id: str, user_id: str):
         raise HttpError(404, "Member not found")
     if target.role == Role.OWNER:
         raise HttpError(400, "Cannot remove the owner")
+    user = target.user
     target.delete()
+    # Someone with no access left (not through a group or a public calendar either) can't decide on
+    # bookings any more, so they stop being an approver, too.
+    if get_membership(calendar, user) is None:
+        CalendarApprover.objects.filter(calendar=calendar, user=user).delete()
+        ResourceApprover.objects.filter(resource__calendar=calendar, user=user).delete()
     return {"ok": True}
 
 
@@ -330,67 +328,29 @@ def rotate_feed_token(request, calendar_id: str):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/calendars/{calendar_id}/approvers", response=list[CalendarMemberOut], auth=django_auth)
-def list_calendar_approvers(request, calendar_id: str):
-    calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
+def _require_owner_of_approvers(user, calendar: Calendar) -> None:
+    membership = get_membership(calendar, user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
     if not is_owner(membership):
         raise HttpError(403, "Only the owner can manage approvers")
-    approvers = CalendarApprover.objects.filter(calendar=calendar).select_related("user")
-    return [
-        {
-            "id": a.id,
-            "calendar_id": str(calendar.id),
-            "user_id": a.user_id,
-            "email": a.user.email,
-            "display_name": a.user.display_name,
-            "role": "",
-            "folder_id": None,
-            "position": 0,
-        }
-        for a in approvers
-    ]
 
 
-@router.post("/calendars/{calendar_id}/approvers", response=CalendarMemberOut, auth=django_auth)
-def add_calendar_approver(request, calendar_id: str, payload: ApproverCreate):
+@router.get("/calendars/{calendar_id}/approvers", response=list[ApproverOut], auth=django_auth)
+def list_calendar_approvers(request, calendar_id: str):
     calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
-    if not is_owner(membership):
-        raise HttpError(403, "Only the owner can add approvers")
-    if get_direct_membership(calendar.id, payload.user_id) is None:
-        raise HttpError(400, "Approver must be a calendar member")
-    if CalendarApprover.objects.filter(calendar=calendar, user_id=payload.user_id).exists():
-        raise HttpError(400, "User is already a default approver")
-
-    user = User.objects.get(id=payload.user_id)
-    approver = CalendarApprover.objects.create(calendar=calendar, user=user)
-    return {
-        "id": approver.id,
-        "calendar_id": str(calendar.id),
-        "user_id": approver.user_id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "role": "",
-        "folder_id": None,
-        "position": 0,
-    }
+    _require_owner_of_approvers(request.user, calendar)
+    return approvers_of(CalendarApprover, calendar=calendar)
 
 
-@router.delete("/calendars/{calendar_id}/approvers/{user_id}", auth=django_auth)
-def remove_calendar_approver(request, calendar_id: str, user_id: str):
+@router.put("/calendars/{calendar_id}/approvers", response=list[ApproverOut], auth=django_auth)
+@transaction.atomic
+def set_calendar_approvers(request, calendar_id: str, payload: ApproversIn):
+    """Sets the default approvers, who decide on resources that have none of their own."""
     calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
-    if not is_owner(membership):
-        raise HttpError(403, "Only the owner can remove approvers")
-    CalendarApprover.objects.filter(calendar=calendar, user_id=user_id).delete()
-    return {"ok": True}
+    _require_owner_of_approvers(request.user, calendar)
+    replace_approvers(CalendarApprover, "calendar", calendar, calendar.id, payload.user_ids)
+    return approvers_of(CalendarApprover, calendar=calendar)
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +363,10 @@ def _serialize_group_link(link: CalendarGroup) -> dict:
         "id": link.id,
         "group": {"id": link.group.id, "name": link.group.name},
         "role": link.role,
+        "members": [
+            {"id": user.id, "email": user.email, "display_name": user.display_name}
+            for user in link.group.user_set.order_by("display_name")
+        ],
     }
 
 

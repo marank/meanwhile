@@ -6,8 +6,7 @@ import { useCalendarStore } from '../calendars'
 
 vi.mock('@/api', async (original) => ({
   ...(await original<typeof import('@/api')>()),
-  listCalendars: vi.fn(),
-  listFolders: vi.fn(),
+  getLayout: vi.fn(),
 }))
 
 /** Delivers a message to the listeners of the shared realtime client, as the socket would. */
@@ -16,14 +15,14 @@ function receive(type: string) {
   emit({ type })
 }
 
+const layout = (...calendars: api.CalendarListItem[]): api.Layout => ({ folders: [], calendars })
 const calendar = (id: string) => ({ calendar: { id }, membership: {} }) as unknown as api.CalendarListItem
 
 describe('calendar list live updates', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     setActivePinia(createPinia())
-    vi.mocked(api.listFolders).mockResolvedValue([])
-    vi.mocked(api.listCalendars).mockResolvedValue([calendar('a')])
+    vi.mocked(api.getLayout).mockResolvedValue(layout(calendar('a')))
   })
 
   afterEach(() => {
@@ -35,14 +34,14 @@ describe('calendar list live updates', () => {
   it('loads the list again, once for a burst of changes', async () => {
     const store = useCalendarStore()
     await store.load()
-    vi.mocked(api.listCalendars).mockResolvedValue([calendar('a'), calendar('b')])
+    vi.mocked(api.getLayout).mockResolvedValue(layout(calendar('a'), calendar('b')))
 
     receive('calendars.changed')
     receive('calendars.changed')
     receive('reconnected')
     await vi.advanceTimersByTimeAsync(300)
 
-    expect(api.listCalendars).toHaveBeenCalledTimes(2)
+    expect(api.getLayout).toHaveBeenCalledTimes(2)
     expect(store.items.map((i) => i.calendar.id)).toEqual(['a', 'b'])
   })
 
@@ -50,19 +49,19 @@ describe('calendar list live updates', () => {
     const store = useCalendarStore()
     receive('calendars.changed')
     await vi.advanceTimersByTimeAsync(300)
-    expect(api.listCalendars).not.toHaveBeenCalled()
+    expect(api.getLayout).not.toHaveBeenCalled()
 
     await store.load()
     receive('calendars.changed')
     store.reset()
     await vi.advanceTimersByTimeAsync(300)
-    expect(api.listCalendars).toHaveBeenCalledTimes(1)
+    expect(api.getLayout).toHaveBeenCalledTimes(1)
   })
 
   it('stays quiet when the background load fails', async () => {
     const store = useCalendarStore()
     await store.load()
-    vi.mocked(api.listCalendars).mockRejectedValue(new Error('offline'))
+    vi.mocked(api.getLayout).mockRejectedValue(new Error('offline'))
     receive('calendars.changed')
     await vi.advanceTimersByTimeAsync(300)
     expect(store.items).toHaveLength(1)

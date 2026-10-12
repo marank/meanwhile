@@ -2,6 +2,8 @@
 Event, comment, activity, and notification models.
 """
 
+import secrets
+
 from django.db import models
 
 from core.models.base import EventStatus, new_uuid7, ParticipantStatus
@@ -82,6 +84,9 @@ class Event(models.Model):
     )
     decided_at = models.DateTimeField(blank=True, null=True)
     decision_note = models.TextField(blank=True, null=True)
+    # iCalendar SEQUENCE: counts the changes participants were sent (iMIP), so their mail
+    # programs replace older invitations.
+    sequence = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -166,6 +171,10 @@ class ReminderDelivery(models.Model):
         ]
 
 
+def new_rsvp_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
 class EventParticipant(models.Model):
     id = models.CharField(
         primary_key=True, max_length=36, default=new_uuid7, editable=False
@@ -186,6 +195,8 @@ class EventParticipant(models.Model):
         choices=ParticipantStatus.CHOICES,
         default=ParticipantStatus.NEEDS_ACTION,
     )
+    # Lets the participant answer from the link in their invitation email, without an account.
+    rsvp_token = models.CharField(max_length=64, unique=True, default=new_rsvp_token, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

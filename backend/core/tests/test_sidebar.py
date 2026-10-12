@@ -20,8 +20,9 @@ def user_client():
 
 
 def reorder(client, *items):
-    response = client.post("/api/sidebar/reorder", {"items": list(items)}, content_type="application/json")
+    response = client.patch("/api/layout/items", {"items": list(items)}, content_type="application/json")
     assert response.status_code == 200, response.content
+    return response
 
 
 def test_calendars_are_moved_into_folders_by_their_id(user_client):
@@ -54,3 +55,101 @@ def test_other_users_sidebars_stay_as_they_are(user_client):
     folder = Folder.objects.create(user=user, name="Mine")
     reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": folder.id, "position": 1})
     assert CalendarMember.objects.get(calendar=calendar, user=other).folder_id is None
+
+
+def patch(client, url, data):
+    return client.patch(f"/api{url}", data, content_type="application/json")
+
+
+def post(client, url, data):
+    return client.post(f"/api{url}", data, content_type="application/json")
+
+
+def test_the_layout_comes_in_one_request(user_client):
+    user, client = user_client
+    calendar = create_calendar(user, "Work")
+    folder = Folder.objects.create(user=user, name="Projects", position=1)
+    Folder.objects.create(user=user, name="First", position=0)
+    reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": folder.id, "position": 2})
+
+    body = client.get("/api/layout").json()
+    assert [f["name"] for f in body["folders"]] == ["First", "Projects"]
+    assert [(c["calendar"]["name"], c["membership"]["folder_id"], c["membership"]["position"]) for c in body["calendars"]] == [
+        ("Work", folder.id, 2)
+    ]
+
+
+def test_the_layout_shows_only_the_users_own_folders(user_client):
+    user, client = user_client
+    other = User.objects.create_user(email="other@example.test", password="x", display_name="Other")
+    Folder.objects.create(user=other, name="Theirs")
+    assert client.get("/api/layout").json()["folders"] == []
+
+
+def test_folders_are_created_renamed_and_deleted(user_client):
+    user, client = user_client
+    outer = post(client, "/layout/folders", {"name": "Outer"}).json()
+    inner = post(client, "/layout/folders", {"name": "Inner", "parent_id": outer["id"], "position": 1}).json()
+    assert (inner["parent_id"], inner["position"]) == (outer["id"], 1)
+
+    assert patch(client, f"/layout/folders/{inner['id']}", {"name": "Renamed"}).json()["name"] == "Renamed"
+    # Moving to the top level is an explicit null.
+    assert patch(client, f"/layout/folders/{inner['id']}", {"parent_id": None}).json()["parent_id"] is None
+    assert patch(client, f"/layout/folders/{inner['id']}", {"name": "Again"}).status_code == 200
+
+    calendar = create_calendar(user, "Work")
+    reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": outer["id"], "position": 0})
+    assert client.delete(f"/api/layout/folders/{outer['id']}").status_code == 200
+    assert CalendarMember.objects.get(calendar=calendar, user=user).folder_id is None
+    assert [f["name"] for f in client.get("/api/layout").json()["folders"]] == ["Again"]
+
+
+def test_a_folder_cannot_go_into_itself_or_its_own_folders(user_client):
+    user, client = user_client
+    outer = Folder.objects.create(user=user, name="Outer")
+    inner = Folder.objects.create(user=user, name="Inner", parent=outer)
+
+    assert patch(client, f"/layout/folders/{outer.id}", {"parent_id": outer.id}).status_code == 400
+    assert patch(client, f"/layout/folders/{outer.id}", {"parent_id": inner.id}).status_code == 400
+    response = client.patch(
+        "/api/layout/items",
+        {"items": [{"type": "folder", "id": outer.id, "parent_id": inner.id, "position": 0}]},
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    outer.refresh_from_db()
+    assert outer.parent_id is None
+
+
+def test_folders_of_other_users_are_not_usable(user_client):
+    user, client = user_client
+    other = User.objects.create_user(email="other@example.test", password="x", display_name="Other")
+    theirs = Folder.objects.create(user=other, name="Theirs")
+    mine = Folder.objects.create(user=user, name="Mine")
+    calendar = create_calendar(user, "Work")
+
+    assert post(client, "/layout/folders", {"name": "X", "parent_id": theirs.id}).status_code == 404
+    assert patch(client, f"/layout/folders/{mine.id}", {"parent_id": theirs.id}).status_code == 404
+    for item in (
+        {"type": "folder", "id": mine.id, "parent_id": theirs.id, "position": 0},
+        {"type": "calendar", "id": calendar.id, "parent_id": theirs.id, "position": 0},
+    ):
+        response = client.patch("/api/layout/items", {"items": [item]}, content_type="application/json")
+        assert response.status_code == 404
+    assert Folder.objects.get(id=theirs.id).name == "Theirs"
+    assert CalendarMember.objects.get(calendar=calendar, user=user).folder_id is None
+
+
+def test_items_that_are_gone_are_skipped(user_client):
+    user, client = user_client
+    calendar = create_calendar(user, "Work")
+    response = client.patch(
+        "/api/layout/items",
+        {"items": [
+            {"type": "folder", "id": "gone", "parent_id": None, "position": 0},
+            {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 7},
+        ]},
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert CalendarMember.objects.get(calendar=calendar, user=user).position == 7

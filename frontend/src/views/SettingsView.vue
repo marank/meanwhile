@@ -12,13 +12,17 @@ import CalendarShareSettings from '@/components/calendar-settings/CalendarShareS
 import { errorMessage } from '@/services/errors'
 import { useGoBack } from '@/composables/useGoBack'
 import { useQueryTab } from '@/composables/useQueryTab'
+import { provideCalendarSettingsSync } from '@/composables/useCalendarSettingsSync'
 import { toast } from '@/services/toast'
+import { useCalendarStore } from '@/stores/calendars'
 
 const validTabs = ['general', 'access', 'categories', 'resources', 'share'] as const
 
 const props = defineProps<{ calendarId: string }>()
 
+provideCalendarSettingsSync()
 const goBack = useGoBack()
+const calendarStore = useCalendarStore()
 const { t } = useI18n()
 const { tab, selectTab } = useQueryTab(validTabs)
 
@@ -43,7 +47,7 @@ watch(
 
 // Opened directly, the settings lead back to this calendar.
 function goBackToCalendar() {
-  goBack(`/calendar/${props.calendarId}`)
+  goBack(calendarStore.selectionPath(props.calendarId))
 }
 </script>
 
@@ -56,22 +60,31 @@ function goBackToCalendar() {
     @select-tab="selectTab"
   >
     <SettingsPanel v-if="!calendar" :title="tabs.find((item) => item.id === tab)!.label" loading />
+    <!-- Kept alive: a tab loads its data when first opened, not again on every switch. Another calendar
+         (the key) starts afresh. -->
     <div v-else :key="calendar.id">
-      <CalendarGeneralSettings
-        v-if="tab === 'general'"
-        :calendar="calendar"
-        :can-manage="canManage"
-        @updated="calendar = $event"
-      />
-      <CalendarAccessSettings
-        v-else-if="tab === 'access'"
-        :calendar="calendar"
-        :can-manage="canManage"
-        @updated="calendar = $event"
-      />
-      <CalendarCategories v-else-if="tab === 'categories'" :calendar-id="calendar.id" :can-manage="canManage" />
-      <CalendarResources v-else-if="tab === 'resources'" :calendar-id="calendar.id" :can-manage="canManage" />
-      <CalendarShareSettings v-else :calendar-id="calendar.id" />
+      <KeepAlive>
+        <CalendarGeneralSettings
+          v-if="tab === 'general'"
+          :calendar="calendar"
+          :can-manage="canManage"
+          @updated="calendar = $event"
+        />
+        <CalendarAccessSettings
+          v-else-if="tab === 'access'"
+          :calendar="calendar"
+          :can-manage="canManage"
+          @updated="calendar = $event"
+        />
+        <CalendarCategories v-else-if="tab === 'categories'" :calendar-id="calendar.id" :can-manage="canManage" />
+        <CalendarResources v-else-if="tab === 'resources'" :calendar-id="calendar.id" :can-manage="canManage" />
+        <CalendarShareSettings
+          v-else
+          :calendar="calendar"
+          :can-manage="canManage"
+          @updated="calendar = $event"
+        />
+      </KeepAlive>
     </div>
   </SettingsPage>
 </template>

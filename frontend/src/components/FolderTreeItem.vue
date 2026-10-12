@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { ChevronDown, ChevronRight, Folder as FolderIcon } from 'lucide-vue-next'
 import type { CalendarListItem, Folder } from '@/api'
 import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import { useCalendarStore } from '@/stores/calendars'
-import { useSidebarSortable, type SidebarSortEnd } from '@/composables/useSidebarSortable'
 import { collapsedFolders, dropTargetFolderId } from '@/services/sidebarState'
 
 const props = defineProps<{
   folder: Folder
-  onSortEnd: SidebarSortEnd
 }>()
 
 const emit = defineEmits<{
@@ -26,12 +24,8 @@ const expanded = computed({
     else collapsedFolders.add(props.folder.id)
   },
 })
-const childList = ref<HTMLElement | null>(null)
-const childFolders = computed(() => store.childFolders(props.folder.id))
-const calendars = computed(() => store.calendarsIn(props.folder.id))
-const hasChildren = computed(() => childFolders.value.length > 0 || calendars.value.length > 0)
-
-useSidebarSortable(childList, props.onSortEnd)
+const children = computed(() => store.childrenOf(props.folder.id))
+const hasChildren = computed(() => children.value.length > 0)
 
 function openContextMenu(event: MouseEvent) {
   emit('select', props.folder.id)
@@ -72,25 +66,24 @@ function openContextMenu(event: MouseEvent) {
       </button>
     </div>
 
-    <!-- v-show keeps the list element, so it stays registered with Sortable while collapsed. -->
-    <div v-show="expanded" ref="childList" class="sidebar-list ml-4" :data-folder-id="folder.id">
-      <SidebarCalendarItem
-        v-for="item in calendars"
-        :key="item.calendar.id"
-        :item="item"
-        :selected="store.selectedId === item.calendar.id"
-        @select="emit('select', $event)"
-        @context-menu="(event, calendar) => emit('calendarMenu', event, calendar)"
-      />
-      <FolderTreeItem
-        v-for="child in childFolders"
-        :key="child.id"
-        :folder="child"
-        :on-sort-end="onSortEnd"
-        @select="emit('select', $event)"
-        @folder-menu="(event, folder) => emit('folderMenu', event, folder)"
-        @calendar-menu="(event, item) => emit('calendarMenu', event, item)"
-      />
+    <!-- v-show keeps the list element, which the drag and drop looks up by its folder id. -->
+    <div v-show="expanded" class="sidebar-list ml-4" :data-folder-id="folder.id">
+      <template v-for="child in children" :key="child.id">
+        <FolderTreeItem
+          v-if="child.type === 'folder'"
+          :folder="child.folder"
+          @select="emit('select', $event)"
+          @folder-menu="(event, folder) => emit('folderMenu', event, folder)"
+          @calendar-menu="(event, item) => emit('calendarMenu', event, item)"
+        />
+        <SidebarCalendarItem
+          v-else
+          :item="child.item"
+          :selected="store.selectedId === child.id"
+          @select="emit('select', $event)"
+          @context-menu="(event, calendar) => emit('calendarMenu', event, calendar)"
+        />
+      </template>
     </div>
   </div>
 </template>

@@ -48,9 +48,10 @@ class Calendar(CalendarAppearance):
     feed_token = models.CharField(max_length=255, unique=True, db_index=True)
     # Path name a CalDAV client chose when it created the calendar; the id serves as path otherwise.
     dav_name = models.CharField(max_length=255, unique=True, blank=True, null=True)
+    url_path = models.CharField(max_length=100, unique=True, blank=True, null=True)
     is_public = models.BooleanField(default=False)
     public_role = models.CharField(
-        max_length=20, choices=Role.CHOICES, default=Role.VIEWER
+        max_length=20, choices=Role.CHOICES, default=Role.READ
     )
     owner = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="calendars_owned"
@@ -75,7 +76,7 @@ class CalendarMember(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="memberships"
     )
-    role = models.CharField(max_length=20, choices=Role.CHOICES, default=Role.VIEWER)
+    role = models.CharField(max_length=20, choices=Role.CHOICES, default=Role.READ)
     folder = models.ForeignKey(
         "Folder",
         on_delete=models.SET_NULL,
@@ -104,7 +105,7 @@ class CalendarGroup(models.Model):
     group = models.ForeignKey(
         UserGroup, on_delete=models.CASCADE, related_name="calendar_groups"
     )
-    role = models.CharField(max_length=20, choices=Role.CHOICES, default=Role.VIEWER)
+    role = models.CharField(max_length=20, choices=Role.CHOICES, default=Role.READ)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

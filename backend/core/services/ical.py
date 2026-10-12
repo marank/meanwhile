@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import icalendar
+from django.conf import settings
 from icalendar import Calendar as ICalCalendar
 from icalendar import Event as ICalEvent
 
@@ -19,12 +20,13 @@ PRODID = "-//Calendar App//EN"
 
 # What others see of a calendar (feed, CalDAV): pending, rejected and cancelled bookings stay out.
 SHARED_STATUSES = {EventStatus.CONFIRMED, EventStatus.APPROVED}
+_GONE = {EventStatus.REJECTED, EventStatus.CANCELLED}
 
 # Properties written from the database; everything else a client stored is passed through.
 _OWN_PROPERTIES = (
     "SUMMARY", "DESCRIPTION", "DTSTART", "DTEND", "DURATION", "DTSTAMP", "STATUS",
     "RRULE", "RDATE", "EXDATE", "RECURRENCE-ID", "UID",
-    "CATEGORIES", "LOCATION", "RESOURCES", "ORGANIZER", "ATTENDEE",
+    "CATEGORIES", "LOCATION", "RESOURCES", "ORGANIZER", "ATTENDEE", "SEQUENCE",
 )
 
 PARTSTAT = {
@@ -41,14 +43,18 @@ class Audience:
 
     `viewer`: the CalDAV user, whose reminders become VALARMs; None for the public feed.
     `people`: whether organizer and participants are included (not in the public feed).
+    `scheduling`: written for an iMIP message to participants: the organizer is the address
+    that receives their answers, and they're asked to answer.
     """
 
     viewer: User | None = None
     people: bool = False
+    scheduling: bool = False
 
 
 CALDAV = Audience(people=True)
 FEED = Audience()
+SCHEDULING = Audience(people=True, scheduling=True)
 
 
 def caldav_audience(viewer: User | None) -> Audience:
@@ -123,21 +129,37 @@ def _add_alarms(vevent: ICalEvent, minutes: list[int]) -> None:
         vevent.add_component(alarm)
 
 
-def _add_people(vevent: ICalEvent, event: Event, organizer: User | None) -> None:
+def organizer_address(organizer: User, scheduling: bool) -> str:
+    """Where participants' answers go: to the app's iMIP mailbox if there is one."""
+    if scheduling and settings.IMIP_ADDRESS:
+        return settings.IMIP_ADDRESS
+    return organizer.email
+
+
+def _add_people(vevent: ICalEvent, event: Event, organizer: User | None, scheduling: bool = False) -> None:
     participants = _participants(event)
     if not participants:
         return
     if organizer is not None:
         vevent.add(
             "organizer",
-            icalendar.vCalAddress(f"mailto:{organizer.email}"),
+            icalendar.vCalAddress(f"mailto:{organizer_address(organizer, scheduling)}"),
             parameters={"CN": organizer.display_name or organizer.email},
         )
     for participant in participants:
         params = {"PARTSTAT": PARTSTAT.get(participant.status, "NEEDS-ACTION"), "ROLE": "REQ-PARTICIPANT"}
         if participant.user is not None and participant.user.display_name:
             params["CN"] = participant.user.display_name
+        if scheduling:
+            params["RSVP"] = "TRUE"
         vevent.add("attendee", icalendar.vCalAddress(f"mailto:{participant.email}"), parameters=params)
+
+
+def _raw_sequence(raw: ICalEvent | None) -> int:
+    try:
+        return int(raw.get("SEQUENCE", 0)) if raw is not None else 0
+    except (TypeError, ValueError):
+        return 0
 
 
 def build_event_ical(
@@ -178,6 +200,10 @@ def build_event_ical(
         series = event.parent
         vevent.add("recurrence-id", _ical_time(series, event.recurrence_id))
     vevent.add("dtstamp", event.updated_at or datetime.now(timezone.utc))
+    # Changes sent to participants count up; a client's own count is kept if it is higher.
+    sequence = max((event.parent if event.parent_id else event).sequence, _raw_sequence(raw))
+    if sequence or (raw is not None and "SEQUENCE" in raw):
+        vevent.add("sequence", sequence)
     vevent.add("status", _map_status(event.status))
     if event.rrule:
         vevent.add("rrule", icalendar.vRecur.from_ical(normalized_rrule(event)))
@@ -200,7 +226,7 @@ def build_event_ical(
         vevent.add("resources", [event.resource.name])
 
     if audience.people:
-        _add_people(vevent, event, organizer)
+        _add_people(vevent, event, organizer, audience.scheduling)
     if audience.viewer is not None:
         _add_alarms(vevent, _reminder_minutes(event.parent if event.parent_id else event, audience.viewer))
     return vevent
@@ -223,7 +249,11 @@ def build_series_ical(event: Event, shared_only: bool = True, audience: Audience
     names = _category_names(event.calendar)
     organizer = event.creator if audience.people else None
     overrides = list(event.overrides.all()) if is_series(event) else []
-    visible = [o for o in overrides if not shared_only or o.status in SHARED_STATUSES]
+    if audience.scheduling:
+        # Participants see pending bookings too; rejected and cancelled ones are removed.
+        visible = [o for o in overrides if o.status not in _GONE]
+    else:
+        visible = [o for o in overrides if not shared_only or o.status in SHARED_STATUSES]
     exdates = parse_exdates(event.exdates)
     exdates.update(make_aware(o.recurrence_id) for o in overrides if o not in visible)
     components = [build_event_ical(event, raw.get(None), exdates, audience=audience, category_names=names, organizer=organizer)]
@@ -242,14 +272,16 @@ def build_series_ical(event: Event, shared_only: bool = True, audience: Audience
     return components
 
 
-def _new_calendar() -> ICalCalendar:
+def new_calendar(method: str | None = None) -> ICalCalendar:
     cal = ICalCalendar()
     cal.add("prodid", PRODID)
     cal.add("version", "2.0")
+    if method:
+        cal.add("method", method)
     return cal
 
 
-def _to_ical(cal: ICalCalendar) -> str:
+def to_ical(cal: ICalCalendar) -> str:
     # Adds the VTIMEZONE definitions for every TZID used, as RFC 5545 requires.
     cal.add_missing_timezones()
     return cal.to_ical().decode("utf-8")
@@ -258,10 +290,10 @@ def _to_ical(cal: ICalCalendar) -> str:
 def serialize_event_ical(event: Event, audience: Audience = CALDAV) -> str:
     """The series of `event` (or the event itself) as one iCalendar object, as CalDAV serves it."""
     series = event.parent if event.parent_id else event
-    cal = _new_calendar()
+    cal = new_calendar()
     for component in build_series_ical(series, audience=audience):
         cal.add_component(component)
-    return _to_ical(cal)
+    return to_ical(cal)
 
 
 def event_ical_text(event: Event, viewer: User | None = None) -> str:
@@ -274,7 +306,7 @@ FEED_REFRESH_INTERVAL = timedelta(hours=1)
 
 def build_calendar_feed(calendar, events) -> str:
     """`events`: the series and single events of `calendar` that others may see."""
-    cal = _new_calendar()
+    cal = new_calendar()
     cal.add("calscale", "GREGORIAN")
     cal.add("method", "PUBLISH")
     # The name subscribers see instead of the feed URL: RFC 7986, and the X-WR form most clients read.
@@ -293,4 +325,4 @@ def build_calendar_feed(calendar, events) -> str:
         for component in build_series_ical(event):
             cal.add_component(component)
 
-    return _to_ical(cal)
+    return to_ical(cal)

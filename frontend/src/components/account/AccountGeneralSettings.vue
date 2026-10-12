@@ -43,7 +43,8 @@ const form = ref({
   dateFormat: auth.user?.date_format ?? ('auto' as User['date_format']),
 })
 
-// Name and formats belong to the account; language and color scheme are kept in this browser.
+// Name, formats and language belong to the account (emails are written in its language);
+// the color scheme is kept in this browser.
 function save() {
   const value = form.value
   return run(
@@ -52,6 +53,7 @@ function save() {
         display_name: value.displayName,
         time_format: value.timeFormat,
         date_format: value.dateFormat,
+        language: value.language,
       })
       setLocale(value.language)
       theme.setPreference(value.theme)

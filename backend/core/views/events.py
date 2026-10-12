@@ -36,6 +36,7 @@ from core.services.bookings import (
     is_in_approver_pool,
     update_booking_status,
 )
+from core.services.itip import record_answer, send_cancel, send_request
 from core.services.notifications import notify
 from core.services.permissions import (
     get_membership,
@@ -67,6 +68,9 @@ router = CSRFRouter()
 
 
 PARTICIPANT_STATUSES = {"needs_action", "accepted", "declined", "tentative"}
+
+# Changes that participants are sent (the rest, e.g. the category, concern the calendar only).
+_SCHEDULED_FIELDS = {"title", "description", "location", "start", "end", "all_day", "rrule"}
 
 
 def _serialize_event(event: Event) -> dict:
@@ -148,8 +152,10 @@ def _calendar_occurrences(user, calendar: Calendar, membership, range_start: dat
             category_color=event.category.color if event.category else None,
             resource_id=str(event.resource_id) if event.resource_id else None,
             resource_name=event.resource.name if event.resource else None,
+            resource_icon=event.resource.icon if event.resource else "",
             location=event.location,
             location_resource_id=str(event.location_resource_id) if event.location_resource_id else None,
+            location_resource_icon=event.location_resource.icon if event.location_resource else "",
             creator_id=str(event.creator_id),
             can_edit=can_modify_event(event, user_id, membership.role),
             is_recurring=is_series(event) or bool(event.parent_id),
@@ -205,7 +211,7 @@ def create_event(request, calendar_id: str, payload: EventCreate):
     membership = get_membership(calendar, request.user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
-    if not has_at_least_role(membership, Role.CONTRIBUTOR):
+    if not has_at_least_role(membership, Role.OWN):
         raise HttpError(403, "You do not have permission to create events")
     if calendar.force_all_day and not payload.all_day:
         raise HttpError(422, "This calendar only allows all-day events")
@@ -253,6 +259,7 @@ def create_event(request, calendar_id: str, payload: EventCreate):
         if payload.participants:
             for invite in payload.participants:
                 _create_participant(event, request.user, invite)
+            send_request(event)
         if event.status == EventStatus.PENDING:
             notify(
                 [str(a.id) for a in approvers_of(awaiting_resources(event))] + [str(calendar.owner_id)],
@@ -473,6 +480,8 @@ def _apply_update(request, event: Event, data: dict) -> None:
             calendar_id=str(calendar.id),
             event_id=str(event.id),
         )
+    if status_reset or _SCHEDULED_FIELDS.intersection(changed):
+        send_request(event, update=True)
 
 
 @router.delete("/events/{event_id}", auth=django_auth)
@@ -483,7 +492,9 @@ def delete_event(request, event_id: str):
             # Deleting a changed occurrence removes it from the series instead of restoring it.
             remove_occurrence(event.parent, event.recurrence_id)
             record_activity(event.parent, str(request.user.id), "occurrence_deleted", _occurrence_details(event.recurrence_id))
+            send_request(event.parent, update=True)
         else:
+            send_cancel(event)
             event.delete()
     return {"ok": True}
 
@@ -523,6 +534,7 @@ def update_occurrence(
             following = split(series, rid)
             record_activity(following, str(request.user.id), "created")
             record_activity(series, str(request.user.id), "series_ended", _occurrence_details(rid))
+            send_request(series, update=True)
             _apply_update(request, following, data)
             return EventOut.model_validate(_serialize_event(following))
         # The whole series: the occurrence's new times move the series by as much.
@@ -542,13 +554,16 @@ def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: Oc
     series = _series_occurrence(event_id, request.user, rid)
     with transaction.atomic():
         if scope == "all" or (scope == "following" and occurrence_index(series, rid) == 0):
+            send_cancel(series)
             series.delete()
-        elif scope == "following":
+            return {"ok": True}
+        if scope == "following":
             end_before(series, rid)
             record_activity(series, str(request.user.id), "series_ended", _occurrence_details(rid))
         else:
             remove_occurrence(series, rid)
             record_activity(series, str(request.user.id), "occurrence_deleted", _occurrence_details(rid))
+        send_request(series, update=True)
     return {"ok": True}
 
 
@@ -561,7 +576,7 @@ def get_reminders(request, event_id: str):
 
 @router.put("/events/{event_id}/reminders", response=EventRemindersOut, auth=django_auth)
 def put_reminders(request, event_id: str, payload: EventRemindersIn):
-    # Everyone who sees an event may be reminded of it, viewers included; it concerns only them.
+    # Everyone who sees an event may be reminded of it, read-only members included; it concerns only them.
     event, _ = get_visible_event(event_id, request.user)
     return {"minutes": set_reminders(event, request.user, payload.minutes)}
 
@@ -590,7 +605,7 @@ def _participant_event(event_id: str, user: User):
     except Event.DoesNotExist:
         raise HttpError(404, "Event not found")
     membership = get_membership(event.calendar, user)
-    if membership is None or not has_at_least_role(membership, Role.VIEWER):
+    if membership is None or not has_at_least_role(membership, Role.READ):
         raise HttpError(403, "You cannot view this event")
     return event, membership
 
@@ -645,7 +660,9 @@ def add_event_participant(request, event_id: str, payload: EventParticipantCreat
     event, membership = _participant_event(event_id, request.user)
     if not can_modify_event(event, str(request.user.id), membership.role):
         raise HttpError(403, "You cannot modify this event")
-    participant = _create_participant(event, request.user, payload)
+    with transaction.atomic():
+        participant = _create_participant(event, request.user, payload)
+        send_request(event, [participant])
     return _serialize_participant(participant)
 
 
@@ -658,8 +675,8 @@ def update_my_participation(request, event_id: str, payload: EventParticipantUpd
         raise HttpError(404, "You are not a participant of this event")
     if payload.status is None or payload.status not in PARTICIPANT_STATUSES:
         raise HttpError(422, "Invalid participant status")
-    participant.status = payload.status
-    participant.save()
+    with transaction.atomic():
+        record_answer(participant, payload.status)
     return _serialize_participant(participant)
 
 
@@ -679,8 +696,12 @@ def update_event_participant(request, event_id: str, participant_id: str, payloa
         raise HttpError(403, "You cannot update this participant")
     if payload.status is None or payload.status not in PARTICIPANT_STATUSES:
         raise HttpError(422, "Invalid participant status")
-    participant.status = payload.status
-    participant.save()
+    with transaction.atomic():
+        if str(participant.user_id) == str(request.user.id):
+            record_answer(participant, payload.status)
+        else:
+            participant.status = payload.status
+            participant.save()
     return _serialize_participant(participant)
 
 
@@ -698,5 +719,9 @@ def delete_event_participant(request, event_id: str, participant_id: str):
     can_modify = membership is not None and can_modify_event(event, str(request.user.id), membership.role)
     if not (can_modify or str(participant.user_id) == str(request.user.id)):
         raise HttpError(403, "You cannot remove this participant")
-    participant.delete()
+    with transaction.atomic():
+        # Taken off the event by someone else; taken off one occurrence, they still come to the others.
+        if str(participant.user_id) != str(request.user.id) and not event.parent_id:
+            send_cancel(event, [participant])
+        participant.delete()
     return {"ok": True}

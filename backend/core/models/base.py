@@ -15,15 +15,15 @@ def default_weekend_days() -> list[int]:
 
 class Role:
     OWNER = "owner"
-    EDITOR = "editor"
-    CONTRIBUTOR = "contributor"
-    VIEWER = "viewer"
+    FULL = "full"
+    OWN = "own"
+    READ = "read"
 
     CHOICES = [
         (OWNER, "Owner"),
-        (EDITOR, "Editor"),
-        (CONTRIBUTOR, "Contributor"),
-        (VIEWER, "Viewer"),
+        (FULL, "Full access"),
+        (OWN, "Own"),
+        (READ, "Read only"),
     ]
 
 

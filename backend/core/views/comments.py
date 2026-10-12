@@ -37,7 +37,7 @@ def list_comments(request, event_id: str):
 @router.post("/events/{event_id}/comments", response=CommentOut, auth=django_auth)
 def create_comment(request, event_id: str, payload: CommentCreate):
     event, membership = get_visible_event(event_id, request.user)
-    if not has_at_least_role(membership, Role.CONTRIBUTOR):
+    if not has_at_least_role(membership, Role.OWN):
         raise HttpError(403, "You do not have permission to comment")
     body = payload.body.strip()
     if not body:
@@ -59,18 +59,19 @@ def create_comment(request, event_id: str, payload: CommentCreate):
         event.title,
         calendar_id=str(event.calendar_id),
         event_id=str(event.id),
+        data={"comment": body[:1000]},
     )
     return _serialize_comment(comment)
 
 
-@router.delete("/events/comments/{comment_id}", auth=django_auth)
-def delete_comment(request, comment_id: str):
+@router.delete("/events/{event_id}/comments/{comment_id}", auth=django_auth)
+def delete_comment(request, event_id: str, comment_id: str):
     try:
-        comment = EventComment.objects.get(id=comment_id)
+        comment = EventComment.objects.get(id=comment_id, event_id=event_id)
     except EventComment.DoesNotExist:
         raise HttpError(404, "Comment not found")
     membership = get_membership(comment.event.calendar, request.user)
-    if comment.author_id != request.user.id and not has_at_least_role(membership, Role.EDITOR):
+    if comment.author_id != request.user.id and not has_at_least_role(membership, Role.FULL):
         raise HttpError(403, "You do not have permission to delete this comment")
     comment.delete()
     return {"ok": True}

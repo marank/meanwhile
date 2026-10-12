@@ -4,11 +4,12 @@ A self-hosted calendar application with a Django backend and a Vue 3 frontend.
 
 ## Features
 
-- Multiple calendars per user with role-based membership (owner / editor / contributor / viewer).
+- Multiple calendars per user with role-based membership (owner / full access / own / read only).
 - Bookable resources per calendar with optional approval workflow.
 - Recurring events via RRULE.
 - Nested folders for personal sidebar organization.
 - Per-calendar iCal feed with unguessable token URL.
+- Email notifications with per-user choices, and invitations by email (iMIP) that participants answer from their mail program or a link.
 - Embedded CalDAV server (Radicale) with optional app passwords.
 - English and German UI locales.
 
@@ -86,6 +87,13 @@ Backend settings are read from environment variables:
 | `SECURE_COOKIES` | `true` outside development | Session and CSRF cookies over HTTPS only. |
 | `CSRF_TRUSTED_ORIGINS` | Vite dev servers | The public origin(s), e.g. `https://calendar.example.com`. |
 | `WEBSOCKET_PATH` | `/ws/` | Path of the live update WebSocket. |
+| `BASE_URL` | - | Public address of the app, e.g. `https://calendar.example.com`; used for feed URLs and links in emails (in development, links point to the Vite dev server). |
+| `EMAIL_HOST`, `EMAIL_PORT` | -, `587` | SMTP server. Without it, emails are printed to the console in development and not sent otherwise. |
+| `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | - | SMTP login. |
+| `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | `false` | STARTTLS (usually port 587) / implicit TLS (usually 465). |
+| `DEFAULT_FROM_EMAIL` | `calendar@localhost` | Sender address of all emails. |
+| `IMIP_ADDRESS` | - | Mailbox that receives participants' answers to invitations; invitations name it as organizer. Empty: answers go to the organizer's own address. |
+| `IMIP_IMAP_HOST`, `IMIP_IMAP_PORT`, `IMIP_IMAP_USER`, `IMIP_IMAP_PASSWORD`, `IMIP_IMAP_SSL`, `IMIP_IMAP_FOLDER` | -, `993`, -, -, `true`, `INBOX` | IMAP access to that mailbox, for `fetch_imip`. |
 
 ## Authentication
 
@@ -99,11 +107,64 @@ Every calendar a user can access appears in their calendar home, shared ones inc
 
 ## Reminders
 
-Users set their own reminders per event. Due reminders become in-app notifications whenever the app asks for the unread count (about once a minute while it is open). To deliver them while nobody has the app open, run this every minute, e.g. from cron:
+Users set their own reminders per event. Due reminders become in-app notifications. While the app is open, the server looks for due reminders every 30 seconds over the live connection (see below) and pops them up in all of the user's tabs. To also deliver them while nobody has the app open, run this every minute, e.g. from cron:
 
 ```bash
 DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py send_reminders
 ```
+
+## Email and invitations
+
+Notifications can also come by email: approval requests, decisions on bookings, comments, calendar
+access, participants' answers and (off by default) reminders. Each user chooses which in
+*Account → Email notifications*. Emails are written in the user's language and show times in their
+zone; they go out after the request in a background thread, and failures are logged.
+
+Participants of an event are invited by email (iMIP, RFC 6047): the email carries the event as
+iTIP `REQUEST`, inline and as `invite.ics`, so Thunderbird, Outlook, Apple Mail, Gmail and others
+show it with their accept/decline buttons. Changes are sent as updates (with a higher `SEQUENCE`),
+and deleting, cancelling or rejecting the event, or taking a participant off it, sends a `CANCEL`.
+Participants without an account are reached this way too. Users with an account who switched
+invitations off get them in the app only.
+
+Participants answer either
+
+- in their mail program: it sends an iTIP `REPLY` to the organizer address. With `IMIP_ADDRESS`
+  set, that is the app's mailbox; run `fetch_imip` every few minutes to read it (IMAP). An answer
+  only counts when it comes from the participant's own address (or the one they named as `SENT-BY`).
+  `process_imip FILE.eml` (or `-` for standard input, e.g. from a mail server's pipe) applies saved
+  messages; or
+- with the links in the email, which open `/rsvp/<token>` in the app, no account needed. The
+  link only preselects the answer; a click on the page gives it (mail scanners open links).
+
+The organizer is told of every answer in the app (and by email, as chosen).
+
+```bash
+uv run python manage.py fetch_imip
+```
+
+### Testing emails in development
+
+[Mailpit](https://mailpit.axllent.org/) catches every email and shows it in the browser:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d   # SMTP on 1025, web UI on http://localhost:8025
+cp backend/.env.example backend/.env             # Mailpit is preset; a real SMTP/IMAP server is option B there
+```
+
+Restart the backend, invite someone (any address) to an event and open the invitation in Mailpit;
+its links lead to the answer page of the Vite dev server. To test answers from mail programs,
+let a participant answer as their program would, then read the answer from Mailpit:
+
+```bash
+cd backend
+uv run python manage.py imip_reply <event-id> guest@example.com accepted   # sends an iTIP REPLY to IMIP_ADDRESS
+uv run python manage.py fetch_imip --mailpit http://localhost:8025         # reads unread answers from Mailpit
+```
+
+`imip_reply --process` applies the answer right away, without a mailbox. Without `EMAIL_HOST`,
+emails are printed to the backend's console. `manage.py sendtestemail you@example.com` checks the
+SMTP settings.
 
 ## iCal feed
 
@@ -120,6 +181,8 @@ what their permissions allow).
 The connection is kept alive with a heartbeat, reconnects with growing delays after interruptions
 (server restart, network change, sleep), and loads what it shows again after reconnecting, so
 nothing missed meanwhile is lost. Pages of other sites can't open it (the `Origin` is checked).
+
+Without a working WebSocket (a proxy that doesn't pass it on), the app falls back to fetching the unread count every minute; reminders then only arrive as notifications, so keep the `send_reminders` job running.
 
 In development nothing extra is needed: `manage.py runserver` serves WebSockets, and the Vite dev
 server passes `/ws` on.
@@ -195,4 +258,6 @@ Only the proxy should reach port 8000 (drop the `ports:` mapping of the backend 
 in the same Compose project); the backend trusts its forwarded headers.
 
 To deliver reminders while nobody has the app open, run `python manage.py send_reminders` every
-minute, e.g. from cron on the host via `docker compose exec backend`.
+minute, e.g. from cron on the host via `docker compose exec backend`. With `IMIP_ADDRESS` and the
+IMAP settings, also run `python manage.py fetch_imip` every few minutes to read participants'
+answers to invitations.

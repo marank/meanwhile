@@ -39,7 +39,7 @@ def test_reminders_are_set_per_user(world):
     event = create(world)
     assert remind(world, event, [30, 15, 15, -5]).json() == {"minutes": [15, 30]}
     # Viewers may be reminded too; it concerns only them.
-    world["api"]["owner"].post(f"/calendars/{world['cal']['id']}/members", {"user_id": str(world["users"]["outsider"].id), "role": "viewer"})
+    world["api"]["owner"].post(f"/calendars/{world['cal']['id']}/members", {"user_id": str(world["users"]["outsider"].id), "role": "read"})
     assert remind(world, event, [60], "outsider").json() == {"minutes": [60]}
     assert world["api"]["owner"].get(f"/events/{event['id']}/reminders").json() == {"minutes": [15, 30]}
     assert world["api"]["outsider"].get(f"/events/{event['id']}/reminders").json() == {"minutes": [60]}
@@ -106,12 +106,8 @@ def test_all_day_events_are_reminded_of_in_the_users_zone(world):
     assert len(deliver_due_reminders(now=datetime(2030, 1, 7, 8, 0, tzinfo=timezone.utc))) == 1
 
 
-def test_the_unread_count_delivers_due_reminders(world, monkeypatch):
-    import core.services.reminders as reminders
-
+def test_setting_a_reminder_does_not_notify(world):
     event = create(world)
     remind(world, event, [15])
-    monkeypatch.setattr(reminders, "datetime", type("FrozenNow", (datetime,), {"now": staticmethod(lambda tz=None: NOW)}))
-    body = world["api"]["owner"].get("/notifications/unread-count").json()
-    assert body["count"] == 1
-    assert [r["title"] for r in body["reminders"]] == ["Meeting"]
+    body = world["api"]["owner"].get("/notifications/counts").json()
+    assert body["unread"] == 0

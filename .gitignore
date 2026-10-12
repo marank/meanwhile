@@ -29,3 +29,6 @@ test.db
 
 # OS
 .DS_Store
+
+# Local settings
+.env

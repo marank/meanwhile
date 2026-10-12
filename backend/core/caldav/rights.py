@@ -44,7 +44,7 @@ class Rights(base_rights.BaseRights):
             membership = get_membership(calendar, user_obj)
             if membership is None:
                 return ""
-            if membership.role == Role.VIEWER:
+            if membership.role == Role.READ:
                 return "Rr"
             return "RWrw"
         finally:

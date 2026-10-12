@@ -132,14 +132,16 @@
   box-shadow: 0 0 0 1px var(--color-blue-500);
 }
 
-/* Table row actions: always visible on touch screens, revealed on hover or focus on wider ones. */
+/* Table and list row actions: always visible on touch screens, revealed on hover or focus on wider ones. */
 @utility row-actions {
   @media (width >= 48rem) {
     opacity: 0;
     transition: opacity 150ms ease;
 
     tr:hover &,
-    tr:focus-within & {
+    tr:focus-within &,
+    li:hover &,
+    li:focus-within & {
       opacity: 1;
     }
   }

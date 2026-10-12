@@ -43,6 +43,9 @@ class Api:
     def patch(self, url, data):
         return self._call("patch", url, data)
 
+    def put(self, url, data):
+        return self._call("put", url, data)
+
     def delete(self, url):
         return self._call("delete", url)
 
@@ -55,29 +58,34 @@ def make_user(name: str) -> User:
 def world():
     """A calendar with members in every role relevant to approvals."""
     users = {name: make_user(name) for name in (
-        "owner", "editor", "booker", "other", "approver", "resapprover", "outsider",
+        "owner", "full", "booker", "other", "approver", "resapprover", "outsider",
     )}
     apis = {name: Api(user) for name, user in users.items()}
     owner = apis["owner"]
 
     cal = owner.post("/calendars", {"name": "Team"}).json()
     for name, role in (
-        ("editor", "editor"),
-        ("booker", "contributor"),
-        ("other", "contributor"),
-        ("approver", "contributor"),
-        ("resapprover", "contributor"),
+        ("full", "full"),
+        ("booker", "own"),
+        ("other", "own"),
+        ("approver", "own"),
+        ("resapprover", "own"),
     ):
         res = owner.post(f"/calendars/{cal['id']}/members", {"user_id": str(users[name].id), "role": role})
         assert res.status_code == 200, res.content
 
-    def resource(name: str, requires_approval: bool = True, **extra):
+    def resource(name: str, requires_approval: bool = True, approver_ids: list[str] | None = None, **extra):
         res = owner.post(
             f"/calendars/{cal['id']}/resources",
             {"name": name, "requires_approval": requires_approval, **extra},
         )
         assert res.status_code == 200, res.content
-        return res.json()
+        created = res.json()
+        if approver_ids:
+            res = owner.put(f"/calendars/{cal['id']}/resources/{created['id']}/approvers", {"user_ids": approver_ids})
+            assert res.status_code == 200, res.content
+            created["approvers"] = res.json()
+        return created
 
     def book(api: Api, resource_id: str | None, start: datetime = BASE, hours: int = 1, **extra):
         return api.post(f"/calendars/{cal['id']}/events", {
@@ -95,18 +103,20 @@ def notified(user: User, type_: str, event_id: str) -> bool:
     return Notification.objects.filter(user=user, type=type_, event_id=event_id).exists()
 
 
+def add_approver(world, path: str, name: str):
+    """Adds a user to the approvers at `path`, keeping the others (the API sets the whole list)."""
+    owner = world["api"]["owner"]
+    current = [a["user_id"] for a in owner.get(path).json()]
+    return owner.put(path, {"user_ids": [*current, str(world["users"][name].id)]})
+
+
 def add_default_approver(world, name: str):
-    res = world["api"]["owner"].post(
-        f"/calendars/{world['cal']['id']}/approvers", {"user_id": str(world["users"][name].id)}
-    )
+    res = add_approver(world, f"/calendars/{world['cal']['id']}/approvers", name)
     assert res.status_code == 200, res.content
 
 
 def add_resource_approver(world, resource_id: str, name: str):
-    return world["api"]["owner"].post(
-        f"/calendars/{world['cal']['id']}/resources/{resource_id}/approvers",
-        {"user_id": str(world["users"][name].id)},
-    )
+    return add_approver(world, f"/calendars/{world['cal']['id']}/resources/{resource_id}/approvers", name)
 
 
 # --- Booking without and with approval ---------------------------------------------------
@@ -189,7 +199,7 @@ def test_default_approver_rejects_with_note(world):
     assert world["api"]["approver"].post(f"/events/{event['id']}/approve").status_code == 400
 
 
-@pytest.mark.parametrize("name", ["other", "booker", "editor"])
+@pytest.mark.parametrize("name", ["other", "booker", "full"])
 def test_members_outside_the_pool_cannot_decide(world, name):
     add_default_approver(world, "approver")
     room = world["resource"]("Room")
@@ -409,7 +419,7 @@ def test_creator_cancels_and_pool_is_notified(world):
 def test_editor_can_cancel_but_other_contributor_cannot(world):
     _, event = approved_booking(world)
     assert world["api"]["other"].post(f"/events/{event['id']}/cancel").status_code == 403
-    assert world["api"]["editor"].post(f"/events/{event['id']}/cancel").status_code == 200
+    assert world["api"]["full"].post(f"/events/{event['id']}/cancel").status_code == 200
 
 
 def test_pending_request_can_be_withdrawn(world):
@@ -479,7 +489,7 @@ def test_group_members_can_request_bookings(world):
 
     group = UserGroup.objects.create(name="Crew")
     world["users"]["outsider"].groups.add(group)
-    CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="contributor")
+    CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="own")
 
     room = world["resource"]("Room")
     res = world["book"](world["api"]["outsider"], room["id"])
@@ -505,7 +515,7 @@ def test_rejected_booking_is_hidden_from_other_contributors(world):
     event = world["book"](world["api"]["booker"], room["id"]).json()
     world["api"]["owner"].post(f"/events/{event['id']}/reject")
     assert world["api"]["booker"].get(f"/events/{event['id']}").status_code == 200
-    assert world["api"]["editor"].get(f"/events/{event['id']}").status_code == 200
+    assert world["api"]["full"].get(f"/events/{event['id']}").status_code == 200
     assert world["api"]["other"].get(f"/events/{event['id']}").status_code == 404
     assert world["api"]["outsider"].get(f"/events/{event['id']}").status_code == 404
 
@@ -582,7 +592,7 @@ def test_pending_bookings_are_only_listed_for_those_involved(world):
     world["book"](world["api"]["booker"], room["id"], title="Secret request")
     for name in ("booker", "approver", "owner"):
         assert "Secret request" in visible_titles(world, name), name
-    for name in ("other", "editor", "resapprover"):
+    for name in ("other", "full", "resapprover"):
         assert "Secret request" not in visible_titles(world, name), name
 
 
@@ -594,7 +604,7 @@ def test_participants_see_the_pending_booking(world):
     ).json()
     assert "With guest" in visible_titles(world, "other")
     assert world["api"]["other"].get(f"/events/{event['id']}").status_code == 200
-    assert "With guest" not in visible_titles(world, "editor")
+    assert "With guest" not in visible_titles(world, "full")
 
 
 def test_pending_booking_is_hidden_from_uninvolved_members(world):
@@ -602,14 +612,14 @@ def test_pending_booking_is_hidden_from_uninvolved_members(world):
     event = world["book"](world["api"]["booker"], room["id"]).json()
     for url in (f"/events/{event['id']}", f"/events/{event['id']}/comments"):
         assert world["api"]["other"].get(url).status_code == 404
-        assert world["api"]["editor"].get(url).status_code == 404
+        assert world["api"]["full"].get(url).status_code == 404
 
 
 def test_approved_bookings_are_visible_to_everyone(world):
     room = world["resource"]("Room")
     event = world["book"](world["api"]["booker"], room["id"], title="Public now").json()
     world["api"]["owner"].post(f"/events/{event['id']}/approve")
-    for name in ("other", "editor", "approver"):
+    for name in ("other", "full", "approver"):
         assert "Public now" in visible_titles(world, name), name
 
 
@@ -661,11 +671,11 @@ def test_notification_groups_and_live_status(world):
     all_types = {n["type"] for n in api.get("/notifications").json()}
     assert {"approval_requested", "participant_added", "member_added"} <= all_types
     assert api.get("/notifications?group=nope").status_code == 422
-    assert api.get("/notifications/open-counts").json() == {"approvals": 1, "invitations": 1}
+    assert api.get("/notifications/counts").json() == {"unread": 3, "approvals": 1, "invitations": 1}
 
     api.post(f"/events/{event['id']}/approve")
     assert api.get("/notifications?group=approvals").json()[0]["event_status"] == "approved"
-    assert api.get("/notifications/open-counts").json()["approvals"] == 0
+    assert api.get("/notifications/counts").json()["approvals"] == 0
 
 
 # --- CalDAV ------------------------------------------------------------------------------
@@ -675,3 +685,16 @@ def test_caldav_only_shares_confirmed_and_approved_events(world):
     from core.caldav.storage import _SHARED_STATUSES
 
     assert _SHARED_STATUSES == {"confirmed", "approved"}
+
+
+def test_comments_are_deleted_under_their_event(world):
+    api = world["api"]
+    event = world["book"](api["booker"], None).json()
+    other = world["book"](api["booker"], None, start=BASE + timedelta(days=1)).json()
+    comment = api["booker"].post(f"/events/{event['id']}/comments", {"body": "Hi"}).json()
+
+    # The comment belongs to its event, whatever event the path names.
+    assert api["booker"].delete(f"/events/{other['id']}/comments/{comment['id']}").status_code == 404
+    assert api["other"].delete(f"/events/{event['id']}/comments/{comment['id']}").status_code == 403
+    assert api["booker"].delete(f"/events/{event['id']}/comments/{comment['id']}").status_code == 200
+    assert api["booker"].get(f"/events/{event['id']}/comments").json() == []

@@ -1,0 +1,11 @@
+# Development helpers: `docker compose -f docker-compose.dev.yml up -d`
+services:
+  # Catches every email the backend sends (SMTP on 1025) and shows it at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "1025:1025"
+      - "8025:8025"

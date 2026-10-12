@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 import * as api from '@/api'
-import { realtime } from '@/services/realtime'
+import type { DueReminder } from '@/api'
+import { realtime, type RealtimeMessage } from '@/services/realtime'
 import { dueReminderText } from '@/services/reminders'
 import { toast } from '@/services/toast'
 
-const POLL_INTERVAL_MS = 60_000
+// Only while there is no live connection (e.g. a proxy that doesn't pass WebSockets): then the count
+// is fetched now and then.
+const FALLBACK_POLL_INTERVAL_MS = 60_000
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const items = ref<api.AppNotification[]>([])
@@ -17,26 +20,22 @@ export const useNotificationsStore = defineStore('notifications', () => {
   /** Whether a list is shown (the notifications page); live updates then reload it, too. */
   let listLoaded = false
 
-  /** Reminders that just came due also pop up, wherever one is in the app. */
-  function showReminders(reminders: api.DueReminder[] | undefined) {
-    for (const reminder of reminders ?? []) toast.info(dueReminderText(reminder))
-  }
-
   /** Loads the current tab; when loads overlap (fast tab switches), only the latest one is applied. */
   async function load() {
     listLoaded = true
     const version = ++loadVersion
-    const [list, counts, unread] = await Promise.all([
+    const [list, counts] = await Promise.all([
       api.listNotifications(group.value ?? undefined),
-      api.getOpenNotificationCounts(),
-      api.getUnreadCount(),
+      api.getNotificationCounts(),
     ])
-    // Each reminder is handed out once, so it pops up even if a newer load wins.
-    showReminders(unread.reminders)
     if (version !== loadVersion) return
     items.value = list
-    openCounts.value = counts
-    unreadCount.value = unread.count
+    applyCounts(counts)
+  }
+
+  function applyCounts(counts: { unread: number; approvals: number; invitations: number }) {
+    unreadCount.value = counts.unread
+    openCounts.value = { approvals: counts.approvals, invitations: counts.invitations }
   }
 
   async function setGroup(value: api.NotificationGroup | null) {
@@ -46,9 +45,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   async function refreshCount() {
     try {
-      const { count, reminders } = await api.getUnreadCount()
-      unreadCount.value = count
-      showReminders(reminders)
+      applyCounts(await api.getNotificationCounts())
     } catch {
       // ignore transient errors
     }
@@ -74,14 +71,18 @@ export const useNotificationsStore = defineStore('notifications', () => {
     await refreshCount()
   }
 
-  // Polling pauses while the tab is hidden and catches up as soon as it's visible again.
+  // The fallback poll pauses while the tab is hidden and catches up as soon as it's visible again.
+  function pollIfOffline() {
+    if (realtime.status.value !== 'open') void refreshCount()
+  }
+
   function onVisibilityChange() {
     if (document.hidden) {
       window.clearInterval(timer)
       timer = undefined
     } else if (timer === undefined) {
-      void refreshCount()
-      timer = window.setInterval(refreshCount, POLL_INTERVAL_MS)
+      pollIfOffline()
+      timer = window.setInterval(pollIfOffline, FALLBACK_POLL_INTERVAL_MS)
     }
   }
 
@@ -97,14 +98,23 @@ export const useNotificationsStore = defineStore('notifications', () => {
     timer = undefined
   }
 
-  // Live updates: new notifications and ones read in another tab show at once, not at the next poll.
-  // The poll stays, as it also delivers due reminders.
+  // Live updates: new notifications and ones read in another tab show at once.
   function onLiveUpdate() {
     if (listLoaded) void load().catch(() => {})
     else void refreshCount()
   }
-  realtime.on('notifications.changed', onLiveUpdate)
-  realtime.on('reconnected', onLiveUpdate)
+
+  // The server pushes reminders that came due; they pop up wherever one is in the app.
+  function onRemindersDue(message: RealtimeMessage) {
+    for (const reminder of (message.reminders ?? []) as DueReminder[]) toast.info(dueReminderText(reminder))
+  }
+
+  const stopListening = [
+    realtime.on('notifications.changed', onLiveUpdate),
+    realtime.on('reconnected', onLiveUpdate),
+    realtime.on('reminders.due', onRemindersDue),
+  ]
+  onScopeDispose(() => stopListening.forEach((stop) => stop()))
 
   function reset() {
     stopPolling()

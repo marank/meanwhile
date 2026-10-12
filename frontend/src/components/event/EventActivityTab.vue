@@ -97,7 +97,7 @@ async function postComment() {
 
 async function removeComment(comment: api.EventComment) {
   await run(async () => {
-    await api.deleteComment(comment.id)
+    await api.deleteComment(props.eventId, comment.id)
     comments.value = comments.value.filter((c) => c.id !== comment.id)
   })
 }

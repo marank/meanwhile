@@ -6,17 +6,16 @@ import { deferred } from './deferred'
 
 vi.mock('@/api', async (original) => ({
   ...(await original<typeof import('@/api')>()),
-  listCalendars: vi.fn(),
-  listFolders: vi.fn(),
+  getLayout: vi.fn(),
 }))
 
 function folder(id: string, parent_id: string | null = null): api.Folder {
   return { id, name: id, parent_id, position: 0 }
 }
 
-function calendarItem(id: string, folder_id: string | null = null): api.CalendarListItem {
+function calendarItem(id: string, folder_id: string | null = null, url_path: string | null = null): api.CalendarListItem {
   return {
-    calendar: { id, name: id } as api.Calendar,
+    calendar: { id, name: id, url_path } as api.Calendar,
     membership: { folder_id, position: 0, role: 'owner' } as api.CalendarMember,
   }
 }
@@ -51,16 +50,15 @@ describe('calendar store', () => {
 
   it('applies only the latest of overlapping loads', async () => {
     const store = useCalendarStore()
-    const first = deferred<api.CalendarListItem[]>()
-    const second = deferred<api.CalendarListItem[]>()
-    vi.mocked(api.listCalendars).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
-    vi.mocked(api.listFolders).mockResolvedValue([])
+    const first = deferred<api.Layout>()
+    const second = deferred<api.Layout>()
+    vi.mocked(api.getLayout).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
 
     const firstLoad = store.load()
     const secondLoad = store.load()
-    second.resolve([calendarItem('new')])
+    second.resolve({ folders: [], calendars: [calendarItem('new')] })
     await secondLoad
-    first.resolve([calendarItem('old')])
+    first.resolve({ folders: [], calendars: [calendarItem('old')] })
     await firstLoad
 
     expect(store.items.map((i) => i.calendar.id)).toEqual(['new'])
@@ -69,15 +67,23 @@ describe('calendar store', () => {
   it('builds the URL of a selection', () => {
     const store = useCalendarStore()
     store.folders = [folder('f')]
+    store.items = [calendarItem('c'), calendarItem('readable-id', null, 'team-calendar')]
     expect(store.selectionPath(ALL_CALENDARS)).toBe('/calendar')
     expect(store.selectionPath('f')).toBe('/calendar/folder/f')
     expect(store.selectionPath('c')).toBe('/calendar/c')
+    expect(store.selectionPath('readable-id')).toBe('/calendar/team-calendar')
+  })
+
+  it('resolves a readable URL path to its calendar id', () => {
+    const store = useCalendarStore()
+    store.items = [calendarItem('calendar-id', null, 'team-calendar')]
+    store.select('team-calendar')
+    expect(store.selectedCalendar?.id).toBe('calendar-id')
   })
 
   it('reports once calendars are loaded, until the session is reset', async () => {
     const store = useCalendarStore()
-    vi.mocked(api.listCalendars).mockResolvedValue([])
-    vi.mocked(api.listFolders).mockResolvedValue([])
+    vi.mocked(api.getLayout).mockResolvedValue({ folders: [], calendars: [] })
     expect(store.loaded).toBe(false)
     await store.load()
     expect(store.loaded).toBe(true)

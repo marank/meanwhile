@@ -10,12 +10,14 @@ from ninja.security import django_auth
 from core.api import CSRFRouter
 from core.models import AppPassword, OverviewSettings, User, get_or_create_app_settings
 from core.models.calendar_colors import APP_COLORS
+from core.services.notifications import email_preferences
 from core.schemas import (
     AppPasswordCreated,
     AppPasswordCreate,
     AppPasswordOut,
     OverviewSettingsOut,
     OverviewSettingsUpdate,
+    ProfileOut,
     UserOut,
     UserUpdate,
 )
@@ -23,18 +25,30 @@ from core.schemas import (
 router = CSRFRouter()
 
 
-@router.get("/users/me", response=UserOut, auth=django_auth)
+def _profile(user: User) -> ProfileOut:
+    data = UserOut.model_validate(user).dict()
+    return ProfileOut(**data, email_notifications=email_preferences(user))
+
+
+@router.get("/users/me", response=ProfileOut, auth=django_auth)
 def me(request):
-    return request.user
+    return _profile(request.user)
 
 
-@router.patch("/users/me", response=UserOut, auth=django_auth)
+@router.patch("/users/me", response=ProfileOut, auth=django_auth)
 def update_me(request, payload: UserUpdate):
     user: User = request.user
-    for attr, value in payload.dict(exclude_unset=True).items():
+    data = payload.dict(exclude_unset=True)
+    choices = data.pop("email_notifications", None)
+    for attr, value in data.items():
         setattr(user, attr, value)
+    if choices:
+        user.email_notifications = {
+            **email_preferences(user),
+            **{kind: value for kind, value in choices.items() if value is not None},
+        }
     user.save()
-    return user
+    return _profile(user)
 
 
 def _overview_settings(user: User) -> OverviewSettings:
@@ -53,12 +67,12 @@ def _overview_settings(user: User) -> OverviewSettings:
         )
 
 
-@router.get("/users/me/overview", response=OverviewSettingsOut, auth=django_auth)
+@router.get("/users/me/settings", response=OverviewSettingsOut, auth=django_auth)
 def get_overview_settings(request):
     return _overview_settings(request.user)
 
 
-@router.patch("/users/me/overview", response=OverviewSettingsOut, auth=django_auth)
+@router.patch("/users/me/settings", response=OverviewSettingsOut, auth=django_auth)
 def update_overview_settings(request, payload: OverviewSettingsUpdate):
     settings = _overview_settings(request.user)
     data = payload.dict(exclude_unset=True)

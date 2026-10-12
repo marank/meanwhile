@@ -5,6 +5,8 @@ declare module 'vue-router' {
   interface RouteMeta {
     /** Reachable without a session; logged-in users are sent to the calendar instead. */
     public?: boolean
+    /** Reachable with and without a session. */
+    anyone?: boolean
     /** Only for administrators. */
     admin?: boolean
   }
@@ -25,6 +27,14 @@ const router = createRouter({
       component: () => import('@/views/LoginView.vue'),
       props: { mode: 'register' },
       meta: { public: true },
+    },
+    {
+      // Answering an invitation from the link in its email; the token is the key.
+      path: '/rsvp/:token',
+      name: 'rsvp',
+      component: () => import('@/views/RsvpView.vue'),
+      props: true,
+      meta: { anyone: true },
     },
     {
       path: '/',
@@ -70,6 +80,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.init()
+  if (to.meta.anyone) return
   if (!to.meta.public && !auth.isLoggedIn) return '/login'
   if (to.meta.public && auth.isLoggedIn) return '/calendar'
   if (to.meta.admin && !auth.isAdmin) return '/calendar'

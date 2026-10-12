@@ -44,7 +44,35 @@ class UserOut(Schema):
     date_format: str
     # IANA zone of the user's browser; empty until the app reported it.
     timezone: str = ""
+    # Language of the app, for emails; empty until the app reported it.
+    language: str = ""
     created_at: datetime
+
+
+class EmailNotifications(Schema):
+    """Which kinds of notifications also come by email."""
+
+    invitations: bool
+    responses: bool
+    approvals: bool
+    decisions: bool
+    comments: bool
+    memberships: bool
+    reminders: bool
+
+
+class EmailNotificationsUpdate(Schema):
+    invitations: Optional[bool] = None
+    responses: Optional[bool] = None
+    approvals: Optional[bool] = None
+    decisions: Optional[bool] = None
+    comments: Optional[bool] = None
+    memberships: Optional[bool] = None
+    reminders: Optional[bool] = None
+
+
+class ProfileOut(UserOut):
+    email_notifications: EmailNotifications
 
 
 class UserUpdate(Schema):
@@ -52,6 +80,8 @@ class UserUpdate(Schema):
     time_format: Optional[Literal["auto", "24h", "12h"]] = None
     date_format: Optional[Literal["auto", "dmy", "mdy", "ymd"]] = None
     timezone: Optional[TimeZoneName] = None
+    language: Optional[Literal["en", "de"]] = None
+    email_notifications: Optional[EmailNotificationsUpdate] = None
 
 
 class OverviewSettingsOut(Schema):
@@ -254,13 +284,11 @@ class FolderOut(Schema):
 
 class CalendarMemberCreate(Schema):
     user_id: str
-    role: str = "viewer"
+    role: str = "read"
 
 
 class CalendarMemberUpdate(Schema):
     role: Optional[str] = None
-    folder_id: Optional[str] = None
-    position: Optional[int] = None
 
 
 class CalendarMemberBatchOut(Schema):
@@ -277,15 +305,6 @@ class CalendarMemberBatchOut(Schema):
 class CalendarMemberOut(CalendarMemberBatchOut):
     email: str
     display_name: str
-
-
-class MyMembershipOut(Schema):
-    model_config = {"from_attributes": True}
-
-    id: str
-    role: str
-    folder_id: Optional[str]
-    position: int
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +338,7 @@ class CalendarCreate(Schema):
 class CalendarUpdate(Schema):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
+    url_path: Optional[str] = Field(None, min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     force_all_day: Optional[bool] = None
     first_weekday: Optional[int] = Field(None, ge=0, le=6)
     show_weekends: Optional[bool] = None
@@ -337,7 +357,7 @@ class CalendarUpdate(Schema):
     dark_border_color: Optional[Color] = None
     dark_outer_border_color: Optional[Color] = None
     is_public: Optional[bool] = None
-    public_role: Optional[Literal["viewer", "contributor", "editor"]] = None
+    public_role: Optional[Literal["read", "own", "full"]] = None
 
 
 class CalendarOut(Schema):
@@ -346,6 +366,7 @@ class CalendarOut(Schema):
     id: str
     name: str
     description: Optional[str]
+    url_path: Optional[str]
     force_all_day: bool
     first_weekday: int
     show_weekends: bool
@@ -386,21 +407,29 @@ class CalendarGroupLinkGroupInfo(Schema):
     name: str
 
 
+class CalendarGroupLinkMember(Schema):
+    id: str
+    email: str
+    display_name: str
+
+
 class CalendarGroupLinkOut(Schema):
     model_config = {"from_attributes": True}
 
     id: str
     group: CalendarGroupLinkGroupInfo
     role: str
+    # Everyone in the group, who therefore has the role in this calendar.
+    members: list[CalendarGroupLinkMember]
 
 
 class CalendarGroupLinkCreate(Schema):
     group_id: str
-    role: Literal["viewer", "contributor", "editor"] = "viewer"
+    role: Literal["read", "own", "full"] = "read"
 
 
 class CalendarGroupLinkUpdate(Schema):
-    role: Optional[Literal["viewer", "contributor", "editor"]] = None
+    role: Optional[Literal["read", "own", "full"]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -408,8 +437,10 @@ class CalendarGroupLinkUpdate(Schema):
 # ---------------------------------------------------------------------------
 
 
-class ApproverCreate(Schema):
-    user_id: str
+class ApproversIn(Schema):
+    """The complete list of approvers; whoever is not in it is no approver any more."""
+
+    user_ids: List[str]
 
 
 class ApproverOut(Schema):
@@ -418,25 +449,28 @@ class ApproverOut(Schema):
     display_name: str
 
 
+# An icon's name: lower-case words joined by hyphens, or empty for none. Which names exist is up to the client.
+ResourceIconName = Annotated[str, Field(max_length=40, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$|^$")]
+
+
 class ResourceCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     color: Optional[str] = "#f59e0b"
+    icon: ResourceIconName = ""
     requires_approval: bool = False
     is_location: bool = False
     is_active: bool = True
-    approver_ids: List[str] = []
 
 
 class ResourceUpdate(Schema):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     color: Optional[str] = None
+    icon: Optional[ResourceIconName] = None
     requires_approval: Optional[bool] = None
     is_location: Optional[bool] = None
     is_active: Optional[bool] = None
-    # Replaces the resource's own approvers when given.
-    approver_ids: Optional[List[str]] = None
 
 
 class ResourceOut(Schema):
@@ -447,6 +481,7 @@ class ResourceOut(Schema):
     name: str
     description: Optional[str]
     color: str
+    icon: str
     requires_approval: bool
     is_location: bool
     is_active: bool
@@ -635,8 +670,10 @@ class OccurrenceOut(Schema):
     category_color: Optional[str]
     resource_id: Optional[str]
     resource_name: Optional[str]
+    resource_icon: str = ""
     location: str = ""
     location_resource_id: Optional[str] = None
+    location_resource_icon: str = ""
     creator_id: str
     can_edit: bool
     is_recurring: bool
@@ -731,15 +768,20 @@ class FeedTokenRotateOut(Schema):
 # ---------------------------------------------------------------------------
 
 
-class SidebarReorderItem(Schema):
+class LayoutItem(Schema):
     id: str
     type: Literal["calendar", "folder"]
     position: int
     parent_id: Optional[str] = None
 
 
-class SidebarReorderRequest(Schema):
-    items: List[SidebarReorderItem]
+class LayoutItemsUpdate(Schema):
+    items: List[LayoutItem]
+
+
+class LayoutOut(Schema):
+    folders: List[FolderOut]
+    calendars: List[CalendarListOut]
 
 
 # ---------------------------------------------------------------------------
@@ -768,3 +810,28 @@ class AvailabilityEntry(Schema):
 class AvailabilityOut(Schema):
     users: List[AvailabilityEntry]
     resources: List[AvailabilityEntry]
+
+
+# ---------------------------------------------------------------------------
+# Answering invitations by link (no account needed)
+# ---------------------------------------------------------------------------
+
+
+class RsvpOut(Schema):
+    title: str
+    start: datetime
+    end: datetime
+    all_day: bool
+    timezone: str
+    location: str
+    description: Optional[str] = None
+    rrule: Optional[str] = None
+    organizer_name: str
+    email: str
+    status: str
+    # Cancelled or rejected: there is nothing to answer any more.
+    cancelled: bool
+
+
+class RsvpAnswer(Schema):
+    status: Literal["accepted", "tentative", "declined"]

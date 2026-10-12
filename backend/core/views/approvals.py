@@ -21,6 +21,7 @@ from core.services.bookings import (
     find_booking_conflicts,
     is_in_approver_pool,
 )
+from core.services.itip import send_cancel, send_request
 from core.services.notifications import notify
 from core.services.permissions import get_membership, has_at_least_role
 from core.services.recurrence import make_aware
@@ -151,6 +152,8 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
     record_activity(event, str(request.user.id), "approved", details)
     if remaining:
         return ApprovalOut.model_validate(_serialize_approval(event))
+    # Participants were invited to a tentative event; now it takes place.
+    send_request(event, update=True)
     notify(
         [str(event.creator_id)],
         "booking_approved",
@@ -199,6 +202,7 @@ def reject_event(request, event_id: str, payload: ApprovalAction):
     event.decision_note = payload.note
     event.save()
     _decide_changed_occurrences(event, previous_status)
+    send_cancel(event)
     record_activity(
         event,
         str(request.user.id),
@@ -226,7 +230,7 @@ def cancel_event(request, event_id: str):
     membership = get_membership(event.calendar, request.user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
-    if str(event.creator_id) != str(request.user.id) and not has_at_least_role(membership, Role.EDITOR):
+    if str(event.creator_id) != str(request.user.id) and not has_at_least_role(membership, Role.FULL):
         raise HttpError(403, "You cannot cancel this event")
 
     had_booking = (
@@ -240,6 +244,7 @@ def cancel_event(request, event_id: str):
     event.decided_at = datetime.now(timezone.utc)
     event.save()
     _decide_changed_occurrences(event, previous_status)
+    send_cancel(event)
     record_activity(event, str(request.user.id), "cancelled")
     if had_booking:
         notify(

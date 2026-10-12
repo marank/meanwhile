@@ -4,11 +4,12 @@ import { useI18n } from 'vue-i18n'
 import SettingsPage from '@/components/SettingsPage.vue'
 import AccountGeneralSettings from '@/components/account/AccountGeneralSettings.vue'
 import AppPasswordsPanel from '@/components/account/AppPasswordsPanel.vue'
+import EmailNotificationsPanel from '@/components/account/EmailNotificationsPanel.vue'
 import OverviewSettingsPanel from '@/components/account/OverviewSettingsPanel.vue'
 import { useGoBack } from '@/composables/useGoBack'
 import { useQueryTab } from '@/composables/useQueryTab'
 
-const validTabs = ['general', 'overview', 'appPasswords'] as const
+const validTabs = ['general', 'overview', 'emailNotifications', 'appPasswords'] as const
 
 const goBack = useGoBack()
 const { t } = useI18n()
@@ -18,8 +19,12 @@ const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`) }
 
 <template>
   <SettingsPage :title="$t('app.account')" :tabs="tabs" :active-tab="tab" @back="goBack" @select-tab="selectTab">
-    <AccountGeneralSettings v-if="tab === 'general'" />
-    <OverviewSettingsPanel v-else-if="tab === 'overview'" />
-    <AppPasswordsPanel v-else />
+    <!-- Kept alive: a tab loads its data when first opened, not again on every switch. -->
+    <KeepAlive>
+      <AccountGeneralSettings v-if="tab === 'general'" />
+      <OverviewSettingsPanel v-else-if="tab === 'overview'" />
+      <EmailNotificationsPanel v-else-if="tab === 'emailNotifications'" />
+      <AppPasswordsPanel v-else />
+    </KeepAlive>
   </SettingsPage>
 </template>

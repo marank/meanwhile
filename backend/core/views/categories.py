@@ -14,10 +14,10 @@ from core.models.base import Role
 router = CSRFRouter()
 
 
-def _require_editor(user, calendar: Calendar):
+def _require_full_access(user, calendar: Calendar):
     membership = get_membership(calendar, user)
-    if membership is None or not has_at_least_role(membership, Role.EDITOR):
-        raise HttpError(403, "Editor access required")
+    if membership is None or not has_at_least_role(membership, Role.FULL):
+        raise HttpError(403, "Full access required")
 
 
 @router.get("/calendars/{calendar_id}/categories", response=list[CategoryOut], auth=django_auth)
@@ -31,7 +31,7 @@ def list_categories(request, calendar_id: str):
 @router.post("/calendars/{calendar_id}/categories", response=CategoryOut, auth=django_auth)
 def create_category(request, calendar_id: str, payload: CategoryCreate):
     calendar = Calendar.objects.get(id=calendar_id)
-    _require_editor(request.user, calendar)
+    _require_full_access(request.user, calendar)
     return Category.objects.create(
         calendar=calendar,
         name=payload.name,
@@ -43,7 +43,7 @@ def create_category(request, calendar_id: str, payload: CategoryCreate):
 @router.patch("/calendars/{calendar_id}/categories/{category_id}", response=CategoryOut, auth=django_auth)
 def update_category(request, calendar_id: str, category_id: str, payload: CategoryUpdate):
     calendar = Calendar.objects.get(id=calendar_id)
-    _require_editor(request.user, calendar)
+    _require_full_access(request.user, calendar)
     category = Category.objects.get(id=category_id, calendar=calendar)
     for attr, value in payload.dict(exclude_unset=True).items():
         setattr(category, attr, value)
@@ -54,6 +54,6 @@ def update_category(request, calendar_id: str, category_id: str, payload: Catego
 @router.delete("/calendars/{calendar_id}/categories/{category_id}", auth=django_auth)
 def delete_category(request, calendar_id: str, category_id: str):
     calendar = Calendar.objects.get(id=calendar_id)
-    _require_editor(request.user, calendar)
+    _require_full_access(request.user, calendar)
     Category.objects.filter(id=category_id, calendar=calendar).delete()
     return {"ok": True}

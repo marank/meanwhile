@@ -234,7 +234,7 @@ async def test_the_list_of_calendars_follows_access_and_settings(team):
     def act(step):
         calendar, other = team["calendar"], team["other"]
         if step == "shared":
-            CalendarMember.objects.create(calendar=calendar, user=team["other"], role="viewer")
+            CalendarMember.objects.create(calendar=calendar, user=team["other"], role="read")
         elif step == "renamed":
             calendar.name = "Renamed"
             calendar.save()
@@ -243,7 +243,7 @@ async def test_the_list_of_calendars_follows_access_and_settings(team):
         elif step == "group":
             group = UserGroup.objects.create(name="Crew")
             team["owner"].groups.add(group)
-            CalendarGroup.objects.create(calendar=team["private"], group=group, role="viewer")
+            CalendarGroup.objects.create(calendar=team["private"], group=group, role="read")
         elif step == "left":
             CalendarMember.objects.filter(calendar=calendar, user=other).delete()
 
@@ -274,8 +274,8 @@ async def test_reordering_the_sidebar_updates_the_users_other_tabs(team):
     def reorder():
         client = Client()
         client.force_login(team["owner"])
-        return client.post(
-            "/api/sidebar/reorder",
+        return client.patch(
+            "/api/layout/items",
             {"items": [{"type": "calendar", "id": team["calendar"].id, "position": 3, "parent_id": None}]},
             content_type="application/json",
         )
@@ -283,3 +283,70 @@ async def test_reordering_the_sidebar_updates_the_users_other_tabs(team):
     assert (await reorder()).status_code == 200
     assert await communicator.receive_json_from() == {"type": "calendars.changed"}
     await communicator.disconnect()
+
+
+@database_sync_to_async
+def remind_in(team, minutes_from_now: int, before: int = 15) -> Event:
+    from datetime import timedelta
+
+    from core.models import EventReminder
+
+    start = datetime.now(timezone.utc) + timedelta(minutes=minutes_from_now)
+    event = Event.objects.create(
+        calendar=team["calendar"], creator=team["owner"], title="Soon", uid=f"soon-{minutes_from_now}",
+        start=start, end=start + timedelta(hours=1),
+    )
+    EventReminder.objects.create(event=event, user=team["owner"], minutes_before=before)
+    return event
+
+
+async def receive_until(communicator, message_type: str, limit: int = 6) -> dict:
+    for _ in range(limit):
+        message = await communicator.receive_json_from()
+        if message["type"] == message_type:
+            return message
+    raise AssertionError(f"no {message_type} message")
+
+
+async def test_due_reminders_are_pushed_on_connecting(team):
+    await remind_in(team, 10)
+    communicator = socket(team["session"])
+    accepted, _ = await communicator.connect()
+    assert accepted
+    assert (await communicator.receive_json_from())["type"] == "hello"
+    message = await receive_until(communicator, "reminders.due")
+    assert [r["title"] for r in message["reminders"]] == ["Soon"]
+    assert message["reminders"][0]["minutes_before"] == 15
+    await communicator.disconnect()
+
+    # Handed out once: connecting again doesn't repeat it.
+    again = socket(team["session"])
+    await again.connect()
+    assert (await again.receive_json_from())["type"] == "hello"
+    assert await again.receive_nothing(timeout=0.5)
+    await again.disconnect()
+
+
+@database_sync_to_async
+def session_of(user: User) -> str:
+    client = Client()
+    client.force_login(user)
+    return client.cookies["sessionid"].value
+
+
+async def test_reminders_reach_every_connection_of_the_user_and_nobody_else(team, monkeypatch):
+    import core.realtime.consumers as consumers
+
+    monkeypatch.setattr(consumers, "REMINDER_INTERVAL_SECONDS", 0.2)
+    first, second = await connected(team), await connected(team)
+    other_socket = socket(await session_of(team["other"]))
+    await other_socket.connect()
+    await other_socket.receive_json_from()
+
+    await remind_in(team, 10)
+    # The loops find it within a moment; one delivers it, the group tells both connections.
+    assert [r["title"] for r in (await receive_until(first, "reminders.due"))["reminders"]] == ["Soon"]
+    assert [r["title"] for r in (await receive_until(second, "reminders.due"))["reminders"]] == ["Soon"]
+    assert await other_socket.receive_nothing(timeout=0.5)
+    for communicator in (first, second, other_socket):
+        await communicator.disconnect()

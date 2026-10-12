@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     pass
 
 
-ROLE_ORDER = [Role.VIEWER, Role.CONTRIBUTOR, Role.EDITOR, Role.OWNER]
+ROLE_ORDER = [Role.READ, Role.OWN, Role.FULL, Role.OWNER]
 
 
 def role_weight(role: str) -> int:
@@ -126,7 +126,7 @@ def can_see_event(event: Event, user: User, membership) -> bool:
         # Pending bookings are private to the requester, participants and approvers.
         return event.id in participant_event_ids(user) or is_in_approver_pool(event, user_id=user_id)
     if event.status in {EventStatus.REJECTED, EventStatus.CANCELLED}:
-        return has_at_least_role(membership, Role.EDITOR)
+        return has_at_least_role(membership, Role.FULL)
     return True
 
 

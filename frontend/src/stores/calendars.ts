@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, onScopeDispose, ref } from 'vue'
 import * as api from '@/api'
 import { realtime } from '@/services/realtime'
+import { compareSiblings } from '@/services/sidebarDrag'
 
 /** Selection of the calendar view: a calendar id, a folder id, or 'all'. It follows the URL. */
 export const ALL_CALENDARS = 'all'
@@ -40,6 +41,32 @@ export const useCalendarStore = defineStore('calendars', () => {
   const foldersByParent = computed(() => groupBy(folders.value, (f) => f.parent_id ?? null))
   const calendarsByFolder = computed(() => groupBy(items.value, (i) => i.membership.folder_id ?? null))
 
+  /** What is shown directly under a folder (or the root): its folders and calendars in one list. */
+  type TreeChild =
+    { type: 'folder'; id: string; folder: api.Folder } | { type: 'calendar'; id: string; item: api.CalendarListItem }
+
+  const childrenByParent = computed(() => {
+    const result = new Map<string | null, TreeChild[]>()
+    const add = (parentId: string | null, child: TreeChild) => {
+      const list = result.get(parentId)
+      if (list) list.push(child)
+      else result.set(parentId, [child])
+    }
+    for (const folder of folders.value) add(folder.parent_id ?? null, { type: 'folder', id: folder.id, folder })
+    for (const item of items.value)
+      add(item.membership.folder_id ?? null, { type: 'calendar', id: item.calendar.id, item })
+    const position = (child: TreeChild) =>
+      child.type === 'folder'
+        ? { type: child.type, position: child.folder.position, name: child.folder.name }
+        : { type: child.type, position: child.item.membership.position, name: child.item.calendar.name }
+    for (const list of result.values()) list.sort((a, b) => compareSiblings(position(a), position(b)))
+    return result
+  })
+
+  function childrenOf(parentId: string | null): TreeChild[] {
+    return childrenByParent.value.get(parentId) ?? []
+  }
+
   function childFolders(parentId: string | null): api.Folder[] {
     return foldersByParent.value.get(parentId) ?? []
   }
@@ -73,24 +100,27 @@ export const useCalendarStore = defineStore('calendars', () => {
   })
 
   /** Only the calendar view calls this, from its URL; everyone else navigates to `selectionPath(id)`. */
-  function select(id: string) {
-    selectedId.value = id
+  function select(idOrPath: string) {
+    selectedId.value = items.value.find(
+      (item) => item.calendar.id === idOrPath || item.calendar.url_path === idOrPath,
+    )?.calendar.id ?? idOrPath
   }
 
   /** The URL that shows a calendar, a folder, or all calendars. */
   function selectionPath(id: string): string {
     if (id === ALL_CALENDARS) return '/calendar'
     if (folders.value.some((f) => f.id === id)) return `/calendar/folder/${id}`
-    return `/calendar/${id}`
+    const calendar = calendarsById.value.get(id)
+    return `/calendar/${calendar?.url_path || id}`
   }
 
   /** Loads calendars and folders; when loads overlap, only the latest one is applied. */
   async function load() {
     const version = ++loadVersion
-    const [calendarList, folderList] = await Promise.all([api.listCalendars(), api.listFolders()])
+    const layout = await api.getLayout()
     if (version !== loadVersion) return
-    items.value = calendarList
-    folders.value = folderList
+    items.value = layout.calendars
+    folders.value = layout.folders
     loaded.value = true
   }
 
@@ -154,7 +184,7 @@ export const useCalendarStore = defineStore('calendars', () => {
   }
 
   /** Applies a drag-and-drop result right away and persists it; reloads if the server rejects it. */
-  async function reorder(updates: api.SidebarReorderItem[]) {
+  async function reorder(updates: api.LayoutItem[]) {
     for (const update of updates) {
       if (update.type === 'folder') {
         const folder = folders.value.find((f) => f.id === update.id)
@@ -176,7 +206,7 @@ export const useCalendarStore = defineStore('calendars', () => {
       .sort((a, b) => a.membership.position - b.membership.position || a.calendar.name.localeCompare(b.calendar.name))
 
     try {
-      await api.reorderSidebar(updates)
+      await api.updateLayoutItems(updates)
     } catch (error) {
       await load()
       throw error
@@ -193,6 +223,7 @@ export const useCalendarStore = defineStore('calendars', () => {
     selectedFolder,
     selectedCalendarIds,
     calendarsById,
+    childrenOf,
     childFolders,
     calendarsIn,
     descendantFolderIds,

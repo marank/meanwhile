@@ -65,7 +65,7 @@ def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT, locations
     if q.strip():
         query = query.filter(name__icontains=q.strip())
     resources = query.order_by("name").values(
-        "id", "name", "description", "requires_approval", "color", "is_location"
+        "id", "name", "description", "requires_approval", "color", "icon", "is_location"
     )[:limit]
     return [
         {
@@ -73,7 +73,12 @@ def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT, locations
             "type": "resource",
             "label": r["name"],
             "subtitle": r["description"],
-            "meta": {"requires_approval": r["requires_approval"], "color": r["color"], "is_location": r["is_location"]},
+            "meta": {
+                "requires_approval": r["requires_approval"],
+                "color": r["color"],
+                "icon": r["icon"],
+                "is_location": r["is_location"],
+            },
         }
         for r in resources
     ]

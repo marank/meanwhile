@@ -44,6 +44,8 @@ class Resource(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     color = models.CharField(max_length=7, default="#f59e0b")
+    # Name of an icon (kebab-case, e.g. "door-open") the client shows before the resource's name.
+    icon = models.CharField(max_length=40, blank=True, default="")
     requires_approval = models.BooleanField(default=False)
     # A place (e.g. a room): offered in an event's location field instead of the resource field;
     # picking it there books it, one event at a time like any resource.

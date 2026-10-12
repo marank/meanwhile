@@ -53,6 +53,10 @@ class User(AbstractUser):
     # IANA zone of the user's browser, kept current by the app; empty until first seen.
     # Times that clients send without a zone ("floating") are read in it.
     timezone = models.CharField(max_length=64, blank=True, default="")
+    # Language of the app ("en", "de"), kept current by the app; emails are written in it.
+    language = models.CharField(max_length=8, blank=True, default="")
+    # Which kinds of notifications also come by email, by kind; missing kinds use the defaults.
+    email_notifications = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

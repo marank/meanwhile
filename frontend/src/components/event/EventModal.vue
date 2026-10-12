@@ -7,6 +7,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue'
 import TabBar from '@/components/TabBar.vue'
 import EventActivityTab from './EventActivityTab.vue'
 import EventAvailabilityTab from './EventAvailabilityTab.vue'
+import AppSwitch from '@/components/AppSwitch.vue'
 import EventParticipantsTab, { type PendingParticipant } from './EventParticipantsTab.vue'
 import EventRecurrenceTab from './EventRecurrenceTab.vue'
 import EventRemindersTab from './EventRemindersTab.vue'
@@ -50,10 +51,10 @@ const statusLabels: Partial<Record<api.EventStatus, string>> = {
   cancelled: 'booking.cancelled',
 }
 const statusClasses: Partial<Record<api.EventStatus, string>> = {
-  pending: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100',
-  approved: 'border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100',
-  rejected: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100',
-  cancelled: 'border-line bg-surface-muted text-gray-700',
+  pending: 'text-amber-600 dark:text-amber-400',
+  approved: 'text-green-600 dark:text-green-400',
+  rejected: 'text-red-600 dark:text-red-400',
+  cancelled: 'text-gray-500',
 }
 
 const calendar = ref<api.Calendar | null>(null)
@@ -170,7 +171,7 @@ const tabs = computed(() =>
 )
 
 const myRole = computed(() => calendar.value?.my_membership?.role ?? null)
-const isCalendarEditor = computed(() => myRole.value === 'owner' || myRole.value === 'editor')
+const isCalendarEditor = computed(() => myRole.value === 'owner' || myRole.value === 'full')
 const canModify = computed(() => !event.value || isCalendarEditor.value || event.value.creator_id === auth.user?.id)
 const forceAllDay = computed(() => !!calendar.value?.force_all_day)
 // Only bookings (events with a resource) go through approval, so only they show a status.
@@ -180,7 +181,9 @@ const bookingStatus = computed(() => {
   return status && statusLabels[status] ? status : null
 })
 const resourceRequiresApproval = computed(() => selectedResource.value?.meta?.requires_approval === true)
-const locationRequiresApproval = computed(() => selectedLocation.value?.meta?.requires_approval === true)
+const locationRequiresApproval = computed(
+  () => !!form.locationResourceId && selectedLocation.value?.meta?.requires_approval === true,
+)
 const endBeforeStart = computed(() => {
   if (!form.startDate || !form.endDate) return false
   if (form.allDay) return form.endDate < form.startDate
@@ -403,20 +406,20 @@ async function decide(action: 'approve' | 'reject') {
     :title="eventId ? $t('app.edit') : $t('app.add')"
     @close="emit('cancel')"
   >
+    <template v-if="bookingStatus" #header>
+      <span class="text-lg text-gray-300" aria-hidden="true">|</span>
+      <span class="text-lg font-semibold" :class="statusClasses[bookingStatus]" role="status">
+        {{ $t(statusLabels[bookingStatus]!) }}
+      </span>
+    </template>
     <TabBar :tabs="tabs" :active="activeTab" class="mb-5" @select="activeTab = $event" />
 
-    <div
-      v-if="bookingStatus"
-      class="mb-4 rounded-lg border px-3 py-2 text-sm"
-      :class="statusClasses[bookingStatus]"
-      role="status"
-    >
-      <p class="font-medium">{{ $t(statusLabels[bookingStatus]!) }}</p>
-      <p v-if="bookingStatus === 'pending' && event?.awaiting_approval.length" class="mt-0.5 text-xs opacity-80">
+    <div v-if="bookingStatus" class="mb-4 text-sm text-gray-600">
+      <p v-if="bookingStatus === 'pending' && event?.awaiting_approval.length" class="text-xs">
         {{ $t('booking.awaiting', { names: event.awaiting_approval.join(', ') }) }}
       </p>
-      <p v-if="bookingStatus === 'pending'" class="mt-0.5 text-xs opacity-80">{{ $t('booking.pendingHint') }}</p>
-      <p v-else-if="event?.decision_note" class="mt-0.5 text-xs opacity-80">„{{ event.decision_note }}“</p>
+      <p v-if="bookingStatus === 'pending'" class="mt-0.5 text-xs">{{ $t('booking.pendingHint') }}</p>
+      <p v-else-if="event?.decision_note" class="text-xs">„{{ event.decision_note }}“</p>
       <div v-if="event?.can_decide" class="mt-2 flex flex-col gap-2 sm:flex-row">
         <input
           v-model="decisionNote"
@@ -466,7 +469,7 @@ async function decide(action: 'approve' | 'reject') {
         v-if="activityOpened && eventId"
         v-show="activeTab === 'activity'"
         :event-id="eventId"
-        :can-comment="myRole !== null && myRole !== 'viewer'"
+        :can-comment="myRole !== null && myRole !== 'read'"
         :can-moderate="isCalendarEditor"
       />
 
@@ -491,16 +494,20 @@ async function decide(action: 'approve' | 'reject') {
       <fieldset v-else class="contents" :disabled="!canModify">
         <div v-if="activeTab === 'details'" class="space-y-6">
           <section class="space-y-3">
-            <h3 class="text-sm font-semibold text-gray-800">{{ $t('event.sectionGeneral') }}</h3>
             <label class="block">
               <span class="block text-sm font-medium text-gray-700">{{ $t('event.title') }}</span>
               <input v-model="form.title" class="mt-1 w-full rounded-lg border px-3 py-2" />
             </label>
 
             <div>
-              <label :for="`${fieldId}-location`" class="block text-sm font-medium text-gray-700">{{
-                $t('event.location')
-              }}</label>
+              <div class="flex items-baseline justify-between gap-2">
+                <label :for="`${fieldId}-location`" class="block text-sm font-medium text-gray-700">{{
+                  $t('event.location')
+                }}</label>
+                <span v-if="locationRequiresApproval" class="text-xs text-amber-600 dark:text-amber-400">{{
+                  $t('event.approvalRequired')
+                }}</span>
+              </div>
               <SearchableSelect
                 :model-value="form.location || null"
                 :input-id="`${fieldId}-location`"
@@ -514,9 +521,6 @@ async function decide(action: 'approve' | 'reject') {
                 :placeholder="$t('event.locationPlaceholder')"
                 @select="onLocationSelect"
               />
-              <p v-if="form.locationResourceId" class="mt-1 text-xs text-gray-500">
-                {{ locationRequiresApproval ? $t('event.locationRequiresApproval') : $t('event.locationBooked') }}
-              </p>
             </div>
 
             <label class="block">
@@ -526,16 +530,10 @@ async function decide(action: 'approve' | 'reject') {
           </section>
 
           <section class="space-y-3 border-t border-line pt-5">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-sm font-semibold text-gray-800">{{ $t('event.sectionTime') }}</h3>
-              <label class="flex items-center gap-2 text-sm">
-                <input v-model="form.allDay" type="checkbox" :disabled="forceAllDay" />
-                {{ $t('event.allDay') }}
-              </label>
-            </div>
+            <AppSwitch v-model="form.allDay" :label="$t('event.allDay')" :disabled="forceAllDay" />
             <p v-if="forceAllDay" class="text-xs text-gray-500">{{ $t('event.allDayRequired') }}</p>
 
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div class="grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
               <div>
                 <label :for="`${fieldId}-start`" class="block text-sm font-medium text-gray-700">{{
                   $t('event.start')
@@ -556,6 +554,7 @@ async function decide(action: 'approve' | 'reject') {
                   />
                 </div>
               </div>
+              <span class="hidden pb-2 text-gray-400 sm:block" aria-hidden="true">–</span>
               <div>
                 <label :for="`${fieldId}-end`" class="block text-sm font-medium text-gray-700">{{
                   $t('event.end')
@@ -583,7 +582,6 @@ async function decide(action: 'approve' | 'reject') {
           </section>
 
           <section class="space-y-3 border-t border-line pt-5">
-            <h3 class="text-sm font-semibold text-gray-800">{{ $t('event.sectionBooking') }}</h3>
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
                 <label :for="`${fieldId}-category`" class="block text-sm font-medium text-gray-700">{{
@@ -602,9 +600,14 @@ async function decide(action: 'approve' | 'reject') {
               </div>
 
               <div>
-                <label :for="`${fieldId}-resource`" class="block text-sm font-medium text-gray-700">{{
-                  $t('event.bookResource')
-                }}</label>
+                <div class="flex items-baseline justify-between gap-2">
+                  <label :for="`${fieldId}-resource`" class="block text-sm font-medium text-gray-700">{{
+                    $t('event.resource')
+                  }}</label>
+                  <span v-if="resourceRequiresApproval" class="text-xs text-amber-600 dark:text-amber-400">{{
+                    $t('event.approvalRequired')
+                  }}</span>
+                </div>
                 <SearchableSelect
                   v-model="form.resourceId"
                   :input-id="`${fieldId}-resource`"
@@ -616,9 +619,6 @@ async function decide(action: 'approve' | 'reject') {
                   :placeholder="$t('event.noResource')"
                   @select="onResourceSelect"
                 />
-                <p v-if="resourceRequiresApproval" class="mt-1 text-xs text-amber-600">
-                  {{ $t('event.resourceRequiresApproval') }}
-                </p>
               </div>
             </div>
           </section>

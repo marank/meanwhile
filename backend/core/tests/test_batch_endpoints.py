@@ -66,7 +66,7 @@ def test_group_members_are_set_in_one_request(world):
     api = Api(owner)
     u = world["users"]
 
-    group = api.post("/groups", {"name": "Staff", "member_ids": [str(u["editor"].id), str(u["booker"].id)]}).json()
+    group = api.post("/groups", {"name": "Staff", "member_ids": [str(u["full"].id), str(u["booker"].id)]}).json()
     assert group["member_count"] == 2
 
     group = api.patch(f"/groups/{group['id']}", {"member_ids": [str(u["booker"].id)]}).json()
@@ -75,25 +75,45 @@ def test_group_members_are_set_in_one_request(world):
     assert [m["id"] for m in members] == [str(u["booker"].id)]
 
 
-def test_resource_approvers_are_set_in_one_request(world):
-    u = world["users"]
+def test_approvers_are_set_as_a_whole_list(world):
+    u, owner = world["users"], world["api"]["owner"]
+    path = f"/calendars/{world['cal']['id']}/resources"
     resource = world["resource"]("Room", approver_ids=[str(u["approver"].id)])
     assert [a["user_id"] for a in resource["approvers"]] == [str(u["approver"].id)]
 
-    res = world["api"]["owner"].patch(
-        f"/calendars/{world['cal']['id']}/resources/{resource['id']}",
-        {"approver_ids": [str(u["resapprover"].id)]},
-    )
+    res = owner.put(f"{path}/{resource['id']}/approvers", {"user_ids": [str(u["resapprover"].id), str(u["resapprover"].id)]})
     assert res.status_code == 200, res.content
-    assert list(ResourceApprover.objects.filter(resource_id=resource["id"]).values_list("user_id", flat=True)) == [
-        u["resapprover"].id
-    ]
+    assert [a["user_id"] for a in res.json()] == [str(u["resapprover"].id)]
+    assert [a["user_id"] for a in owner.get(f"{path}/{resource['id']}/approvers").json()] == [str(u["resapprover"].id)]
+    # The resource lists them, too.
+    listed = {r["id"]: r for r in owner.get(path).json()}
+    assert [a["user_id"] for a in listed[resource["id"]]["approvers"]] == [str(u["resapprover"].id)]
+
+    assert owner.put(f"{path}/{resource['id']}/approvers", {"user_ids": []}).json() == []
+    assert not ResourceApprover.objects.exists()
 
 
-def test_resource_approvers_must_be_members(world):
-    res = world["api"]["owner"].post(
-        f"/calendars/{world['cal']['id']}/resources",
-        {"name": "Room", "approver_ids": [str(world["users"]["outsider"].id)]},
-    )
-    assert res.status_code == 400
+def test_the_calendars_default_approvers_work_the_same_way(world):
+    u, owner = world["users"], world["api"]["owner"]
+    path = f"/calendars/{world['cal']['id']}/approvers"
+    assert owner.get(path).json() == []
+    res = owner.put(path, {"user_ids": [str(u["approver"].id), str(u["full"].id)]})
+    assert res.status_code == 200, res.content
+    assert sorted(a["user_id"] for a in res.json()) == sorted([str(u["approver"].id), str(u["full"].id)])
+    assert {"email", "display_name"} <= set(res.json()[0])
+
+    assert [a["user_id"] for a in owner.put(path, {"user_ids": [str(u["full"].id)]}).json()] == [str(u["full"].id)]
+    # Only the owner manages them.
+    assert world["api"]["full"].get(path).status_code == 403
+    assert world["api"]["full"].put(path, {"user_ids": []}).status_code == 403
+    assert world["api"]["outsider"].put(path, {"user_ids": []}).status_code == 403
+
+
+def test_approvers_must_be_members(world):
+    owner, outsider = world["api"]["owner"], str(world["users"]["outsider"].id)
+    resource = world["resource"]("Room")
+    cal = world["cal"]["id"]
+    assert owner.put(f"/calendars/{cal}/resources/{resource['id']}/approvers", {"user_ids": [outsider]}).status_code == 400
+    assert owner.put(f"/calendars/{cal}/approvers", {"user_ids": [outsider]}).status_code == 400
+    assert owner.put(f"/calendars/{cal}/approvers", {"user_ids": ["no-such-user"]}).status_code == 400
     assert not ResourceApprover.objects.exists()

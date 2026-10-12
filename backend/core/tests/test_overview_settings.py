@@ -17,7 +17,7 @@ def test_overview_starts_with_app_defaults_and_the_app_colors():
     app_settings.default_show_week_numbers = True
     app_settings.save()
 
-    settings = Api(make_user("owner")).get("/users/me/overview").json()
+    settings = Api(make_user("owner")).get("/users/me/settings").json()
     assert settings["first_weekday"] == 1
     assert settings["show_week_numbers"] is True
     assert settings["use_calendar_colors"] is True
@@ -27,7 +27,7 @@ def test_overview_starts_with_app_defaults_and_the_app_colors():
 def test_overview_settings_are_saved_per_user():
     owner = Api(make_user("owner"))
     other = Api(make_user("other"))
-    res = owner.patch("/users/me/overview", {
+    res = owner.patch("/users/me/settings", {
         "use_calendar_colors": False,
         "event_color": "#123456",
         "weekend_days": [6, 0, 6],
@@ -35,10 +35,10 @@ def test_overview_settings_are_saved_per_user():
     assert res.status_code == 200, res.content
     assert res.json()["weekend_days"] == [0, 6]
 
-    assert owner.get("/users/me/overview").json()["event_color"] == "#123456"
-    assert other.get("/users/me/overview").json()["use_calendar_colors"] is True
+    assert owner.get("/users/me/settings").json()["event_color"] == "#123456"
+    assert other.get("/users/me/settings").json()["use_calendar_colors"] is True
 
 
 def test_overview_colors_are_validated():
-    res = Api(make_user("owner")).patch("/users/me/overview", {"base_color": "blue"})
+    res = Api(make_user("owner")).patch("/users/me/settings", {"base_color": "blue"})
     assert res.status_code == 422

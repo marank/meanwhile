@@ -89,10 +89,10 @@ def sync_token(xml: str) -> str:
 def team():
     users = {
         name: User.objects.create_user(email=f"{name}@example.test", password=PASSWORD, display_name=name.title())
-        for name in ("owner", "contributor", "viewer", "outsider")
+        for name in ("owner", "own", "read", "outsider")
     }
     calendar = Calendar.objects.create(name="Team", owner=users["owner"], feed_token="team-feed")
-    for name, role in (("owner", "owner"), ("contributor", "contributor"), ("viewer", "viewer")):
+    for name, role in (("owner", "owner"), ("own", "own"), ("read", "read")):
         CalendarMember.objects.create(calendar=calendar, user=users[name], role=role)
     path = f"/caldav/{users['owner'].email}/{calendar.id}/"
     return {"users": users, "calendar": calendar, "path": path}
@@ -137,7 +137,7 @@ def login(email: str, password: str) -> bool:
 
 
 def test_deactivated_users_cannot_log_in(team):
-    user = team["users"]["viewer"]
+    user = team["users"]["read"]
     assert login(user.email, PASSWORD)
     user.is_active = False
     user.save()
@@ -149,7 +149,7 @@ def test_app_passwords_replace_the_account_password(team):
 
     from core.models import AppPassword
 
-    user = team["users"]["viewer"]
+    user = team["users"]["read"]
     AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
     assert login(user.email, "app-pw")
     assert not login(user.email, PASSWORD)
@@ -164,29 +164,29 @@ def test_requests_are_answered_for_valid_credentials_only(team):
 
 def test_contributors_change_only_their_own_events(team):
     assert put(team, "by-owner.ics") == 201
-    assert put(team, "by-owner.ics", "contributor", ics("by-owner", summary="Hijacked")) == 403
-    assert dav("DELETE", team["path"] + "by-owner.ics", team["users"]["contributor"])[0] == 403
+    assert put(team, "by-owner.ics", "own", ics("by-owner", summary="Hijacked")) == 403
+    assert dav("DELETE", team["path"] + "by-owner.ics", team["users"]["own"])[0] == 403
     assert Event.objects.get(uid="by-owner").title == "Meeting"
 
-    assert put(team, "mine.ics", "contributor") == 201
+    assert put(team, "mine.ics", "own") == 201
     mine = Event.objects.get(uid="mine")
-    assert mine.creator == team["users"]["contributor"]
-    assert put(team, "mine.ics", "contributor", ics("mine", summary="Renamed")) == 204
-    assert dav("DELETE", team["path"] + "mine.ics", team["users"]["contributor"])[0] == 200
+    assert mine.creator == team["users"]["own"]
+    assert put(team, "mine.ics", "own", ics("mine", summary="Renamed")) == 204
+    assert dav("DELETE", team["path"] + "mine.ics", team["users"]["own"])[0] == 200
     assert not Event.objects.filter(uid="mine").exists()
 
 
 def test_editors_change_everyones_events(team):
-    put(team, "mine.ics", "contributor")
-    team["calendar"].members.filter(user=team["users"]["contributor"]).update(role="editor")
+    put(team, "mine.ics", "own")
+    team["calendar"].members.filter(user=team["users"]["own"]).update(role="full")
     put(team, "by-owner.ics")
-    assert put(team, "by-owner.ics", "contributor", ics("by-owner", summary="Edited")) == 204
-    assert dav("DELETE", team["path"] + "by-owner.ics", team["users"]["contributor"])[0] == 200
+    assert put(team, "by-owner.ics", "own", ics("by-owner", summary="Edited")) == 204
+    assert dav("DELETE", team["path"] + "by-owner.ics", team["users"]["own"])[0] == 200
 
 
 def test_viewers_and_outsiders_cannot_write(team):
     put(team, "by-owner.ics")
-    for name in ("viewer", "outsider"):
+    for name in ("read", "outsider"):
         assert put(team, "new.ics", name) == 403
         assert dav("DELETE", team["path"] + "by-owner.ics", team["users"][name])[0] in (403, 404)
     assert Event.objects.filter(uid="by-owner").exists()
@@ -198,7 +198,7 @@ def test_only_the_owner_renames_the_calendar(team):
         '<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:"><d:set><d:prop>'
         "<d:displayname>Renamed</d:displayname></d:prop></d:set></d:propertyupdate>"
     )
-    assert dav("PROPPATCH", team["path"], team["users"]["contributor"], body)[0] == 403
+    assert dav("PROPPATCH", team["path"], team["users"]["own"], body)[0] == 403
     assert Calendar.objects.get(id=team["calendar"].id).name == "Team"
     assert dav("PROPPATCH", team["path"], team["users"]["owner"], body)[0] == 207
     assert Calendar.objects.get(id=team["calendar"].id).name == "Renamed"
@@ -420,7 +420,7 @@ def test_caldav_shows_the_current_booking_status(team):
 
 
 def test_shared_calendars_are_listed_in_every_members_home(team):
-    contributor = team["users"]["contributor"]
+    contributor = team["users"]["own"]
     home = f"/caldav/{contributor.email}/"
     body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
     status, content, _ = dav("PROPFIND", home, contributor, body, DEPTH="1")
@@ -428,7 +428,7 @@ def test_shared_calendars_are_listed_in_every_members_home(team):
     assert f"{team['calendar'].id}/" in content and "<displayname>Team</displayname>" in content
 
     own_path = f"{home}{team['calendar'].id}/"
-    assert put(team, "x.ics", "contributor") == 201
+    assert put(team, "x.ics", "own") == 201
     status, content, _ = dav("GET", own_path + "x.ics", contributor)
     assert status == 200 and "UID:x" in content
     # The owner's path keeps working for clients set up with it.
@@ -437,7 +437,7 @@ def test_shared_calendars_are_listed_in_every_members_home(team):
     outsider = team["users"]["outsider"]
     assert dav("PROPFIND", f"/caldav/{outsider.email}/{team['calendar'].id}/", outsider, DEPTH="0")[0] in (403, 404)
     # Nobody reaches a calendar through someone else's home.
-    assert dav("GET", own_path + "x.ics", team["users"]["viewer"])[0] in (403, 404)
+    assert dav("GET", own_path + "x.ics", team["users"]["read"])[0] in (403, 404)
 
 
 def test_occurrences_changed_in_the_app_reach_clients(team):
@@ -503,15 +503,15 @@ def test_move_to_another_calendar(team, other_calendar):
 
 def test_move_needs_write_access_on_both_sides(team, other_calendar):
     calendar, other_path = other_calendar
-    CalendarMember.objects.create(calendar=calendar, user=team["users"]["contributor"], role="viewer")
-    put(team, "mine.ics", "contributor")
+    CalendarMember.objects.create(calendar=calendar, user=team["users"]["own"], role="read")
+    put(team, "mine.ics", "own")
     put(team, "theirs.ics")
     # Viewer in the target calendar.
-    assert move(team, team["path"] + "mine.ics", other_path + "mine.ics", "contributor") == 403
+    assert move(team, team["path"] + "mine.ics", other_path + "mine.ics", "own") == 403
     # Someone else's event in the source calendar.
-    CalendarMember.objects.filter(calendar=calendar, user=team["users"]["contributor"]).update(role="contributor")
-    assert move(team, team["path"] + "theirs.ics", other_path + "theirs.ics", "contributor") == 403
-    assert move(team, team["path"] + "mine.ics", other_path + "mine.ics", "contributor") == 201
+    CalendarMember.objects.filter(calendar=calendar, user=team["users"]["own"]).update(role="own")
+    assert move(team, team["path"] + "theirs.ics", other_path + "theirs.ics", "own") == 403
+    assert move(team, team["path"] + "mine.ics", other_path + "mine.ics", "own") == 201
 
 
 def test_bookings_stay_in_their_calendar(team, other_calendar):
@@ -546,7 +546,7 @@ def mkcalendar(user: User, path: str, components: str = "VEVENT", name: str = "P
 
 
 def test_clients_create_calendars_in_their_home(team):
-    contributor = team["users"]["contributor"]
+    contributor = team["users"]["own"]
     path = f"/caldav/{contributor.email}/3F2504E0-4F89-11D3-9A0C-0305E82C3301/"
     assert mkcalendar(contributor, path) == 201
     calendar = Calendar.objects.get(dav_name="3F2504E0-4F89-11D3-9A0C-0305E82C3301")
@@ -565,7 +565,7 @@ def test_clients_create_calendars_in_their_home(team):
 
 
 def test_calendars_are_not_created_elsewhere_or_for_tasks(team):
-    contributor, owner = team["users"]["contributor"], team["users"]["owner"]
+    contributor, owner = team["users"]["own"], team["users"]["owner"]
     assert mkcalendar(contributor, f"/caldav/{owner.email}/new/") == 403
     assert mkcalendar(contributor, f"/caldav/{contributor.email}/tasks/", components="VTODO") == 403
     assert mkcalendar(contributor, f"/caldav/{contributor.email}/{team['calendar'].id}/") in (403, 405, 409)
@@ -575,7 +575,7 @@ def test_calendars_are_not_created_elsewhere_or_for_tasks(team):
 def test_only_the_owner_deletes_a_calendar(team):
     calendar = team["calendar"]
     put(team, "e.ics")
-    assert dav("DELETE", team["path"], team["users"]["contributor"])[0] == 403
+    assert dav("DELETE", team["path"], team["users"]["own"])[0] == 403
     assert Calendar.objects.filter(id=calendar.id).exists()
     assert dav("DELETE", team["path"], team["users"]["owner"])[0] == 200
     assert not Calendar.objects.filter(id=calendar.id).exists()
@@ -606,13 +606,13 @@ def test_all_day_calendars_refuse_timed_events(team):
 def test_changes_from_clients_are_recorded(team):
     from core.models import EventActivity
 
-    put(team, "daily.ics", "contributor", series_ics("daily", with_override=False))
-    put(team, "daily.ics", "contributor", series_ics("daily").replace("SUMMARY:Daily\r\n", "SUMMARY:Standup\r\n"))
+    put(team, "daily.ics", "own", series_ics("daily", with_override=False))
+    put(team, "daily.ics", "own", series_ics("daily").replace("SUMMARY:Daily\r\n", "SUMMARY:Standup\r\n"))
     series = Event.objects.get(uid="daily", parent__isnull=True)
     entries = [(a.action, a.actor.email, a.details) for a in EventActivity.objects.filter(event=series).order_by("created_at")]
-    assert entries[0] == ("created", "contributor@example.test", None)
-    assert entries[1] == ("updated", "contributor@example.test", {"fields": ["title"]})
-    assert ("occurrence_changed", "contributor@example.test", {"occurrence": "2030-10-09T07:00:00+00:00"}) in entries
+    assert entries[0] == ("created", "own@example.test", None)
+    assert entries[1] == ("updated", "own@example.test", {"fields": ["title"]})
+    assert ("occurrence_changed", "own@example.test", {"occurrence": "2030-10-09T07:00:00+00:00"}) in entries
 
 
 def test_owner_sets_the_calendar_color(team):
@@ -673,14 +673,14 @@ def test_category_resource_and_participants(team):
         "CATEGORIES:workshop,Private\r\n"
         "ORGANIZER;CN=Owner:mailto:owner@example.test\r\n"
         "ATTENDEE;PARTSTAT=ACCEPTED:mailto:owner@example.test\r\n"
-        "ATTENDEE;PARTSTAT=TENTATIVE:mailto:Viewer@example.test\r\n"
+        "ATTENDEE;PARTSTAT=TENTATIVE:mailto:Read@example.test\r\n"
         "ATTENDEE:mailto:guest@elsewhere.test\r\n",
     )
     assert put(team, "meet.ics", text=text) == 201
     event = Event.objects.get(uid="meet")
     assert event.category.name == "Workshop"
     assert {(p.email, p.status, bool(p.user)) for p in EventParticipant.objects.filter(event=event)} == {
-        ("viewer@example.test", "tentative", True),
+        ("read@example.test", "tentative", True),
         ("guest@elsewhere.test", "needs_action", False),
     }
     Event.objects.filter(pk=event.pk).update(resource=projector)
@@ -699,7 +699,7 @@ def test_category_resource_and_participants(team):
 
     # Dropping an attendee on the phone removes the participant.
     assert put(team, "meet.ics", text=text.replace("ATTENDEE:mailto:guest@elsewhere.test\r\n", "")) == 204
-    assert list(EventParticipant.objects.filter(event=event).values_list("email", flat=True)) == ["viewer@example.test"]
+    assert list(EventParticipant.objects.filter(event=event).values_list("email", flat=True)) == ["read@example.test"]
 
 
 def test_reminders_are_per_user(team):
@@ -717,7 +717,7 @@ def test_reminders_are_per_user(team):
 
     owner_view = dav("GET", team["path"] + "remind.ics", team["users"]["owner"])[1]
     assert owner_view.count("BEGIN:VALARM") == 2 and "TRIGGER:-PT15M" in owner_view
-    assert "BEGIN:VALARM" not in dav("GET", team["path"] + "remind.ics", team["users"]["viewer"])[1]
+    assert "BEGIN:VALARM" not in dav("GET", team["path"] + "remind.ics", team["users"]["read"])[1]
     assert "BEGIN:VALARM" not in __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
 
 

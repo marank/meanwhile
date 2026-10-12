@@ -1,4 +1,4 @@
-export type CalendarRole = 'owner' | 'editor' | 'contributor' | 'viewer'
+export type CalendarRole = 'owner' | 'full' | 'own' | 'read'
 /** Roles that can be granted to members, groups and the public; ownership isn't transferable here. */
 export type GrantableRole = Exclude<CalendarRole, 'owner'>
 export type EventStatus = 'confirmed' | 'pending' | 'approved' | 'rejected' | 'cancelled'
@@ -16,6 +16,7 @@ export type NotificationType =
   | 'member_role_changed'
   | 'comment_added'
   | 'event_reminder'
+  | 'participant_replied'
 
 export interface User {
   id: string
@@ -29,7 +30,23 @@ export interface User {
   date_format: 'auto' | 'dmy' | 'mdy' | 'ymd'
   /** The zone of the user's browser as last reported; the server reads times without a zone in it. */
   timezone: string
+  /** The app's language as last reported; emails are written in it. */
+  language: string
+  /** Which kinds of notifications also come by email. */
+  email_notifications: EmailNotifications
   created_at: string
+}
+
+export interface EmailNotifications {
+  /** Invitations to events, their changes and cancellations (with the event as .ics) */
+  invitations: boolean
+  /** Participants' answers to the user's invitations */
+  responses: boolean
+  approvals: boolean
+  decisions: boolean
+  comments: boolean
+  memberships: boolean
+  reminders: boolean
 }
 
 export interface UserGroup {
@@ -133,6 +150,7 @@ export interface Calendar {
   id: string
   name: string
   description: string | null
+  url_path: string | null
   force_all_day: boolean
   first_weekday: number
   show_weekends: boolean
@@ -185,6 +203,8 @@ export interface CalendarGroupLink {
   id: string
   group: { id: string; name: string }
   role: GrantableRole
+  /** Everyone in the group; they all have the role in the calendar. */
+  members: { id: string; email: string; display_name: string }[]
 }
 
 export interface CalendarGroupLinkCreate {
@@ -202,6 +222,7 @@ export type CalendarUpdate = Partial<
     Calendar,
     | 'name'
     | 'description'
+    | 'url_path'
     | 'force_all_day'
     | 'first_weekday'
     | 'show_weekends'
@@ -236,11 +257,17 @@ export interface Folder {
   position: number
 }
 
-export interface SidebarReorderItem {
+export interface LayoutItem {
   type: 'folder' | 'calendar'
   id: string
   parent_id: string | null
   position: number
+}
+
+/** What the sidebar shows: the user's folders, and the calendars with the place each has in the tree. */
+export interface Layout {
+  folders: Folder[]
+  calendars: CalendarListItem[]
 }
 
 export interface Category {
@@ -259,6 +286,8 @@ export interface Resource {
   name: string
   description: string | null
   color: string
+  /** The name of the icon shown before the name (see services/resourceIcons); empty for none. */
+  icon: string
   requires_approval: boolean
   /** A place, offered in an event's location field instead of the resource field. */
   is_location: boolean
@@ -270,11 +299,10 @@ export interface ResourceInput {
   name: string
   description: string | null
   color: string
+  icon: string
   requires_approval: boolean
   is_location: boolean
   is_active: boolean
-  /** The resource's own approvers; empty means the calendar's default approvers decide. */
-  approver_ids: string[]
 }
 
 export interface CategoryInput {
@@ -346,8 +374,11 @@ export interface Occurrence {
   category_color: string | null
   resource_id: string | null
   resource_name: string | null
+  /** The icons of the booked resource and place, for showing them before the title. */
+  resource_icon: string
   location: string
   location_resource_id: string | null
+  location_resource_icon: string
   creator_id: string
   can_edit: boolean
   is_recurring: boolean
@@ -415,7 +446,28 @@ export interface EventInput {
   participants?: EventParticipantCreate[]
 }
 
-export type ProfileUpdate = Partial<Pick<User, 'display_name' | 'time_format' | 'date_format' | 'timezone'>>
+export type ProfileUpdate = Partial<
+  Pick<User, 'display_name' | 'time_format' | 'date_format' | 'timezone' | 'language'> & {
+    email_notifications: Partial<EmailNotifications>
+  }
+>
+
+/** An invitation as its participant sees it from the link in the invitation email. */
+export interface Invitation {
+  title: string
+  start: string
+  end: string
+  all_day: boolean
+  timezone: string
+  location: string
+  description: string | null
+  rrule: string | null
+  organizer_name: string
+  email: string
+  status: ParticipantStatus
+  /** Cancelled or rejected: nothing to answer any more. */
+  cancelled: boolean
+}
 
 export type SearchEntity = 'users' | 'members' | 'groups' | 'resources' | 'locations' | 'categories'
 
@@ -435,7 +487,19 @@ export interface AppNotification {
   calendar_id: string | null
   event_id: string | null
   title: string
-  data: { note?: string; role?: string; start?: string; all_day?: boolean; minutes_before?: number } | null
+  data: {
+    note?: string
+    role?: string
+    start?: string
+    all_day?: boolean
+    minutes_before?: number
+    /** comment_added: the comment */
+    comment?: string
+    /** participant_replied: the answer, and who gave it (name only for participants with an account) */
+    status?: ParticipantStatus
+    email?: string
+    name?: string | null
+  } | null
   read_at: string | null
   created_at: string
   event_status: EventStatus | null
@@ -464,7 +528,7 @@ export interface Availability {
   resources: AvailabilityEntry[]
 }
 
-/** A reminder that has just come due; also stored as a notification. */
+/** A reminder that has just come due (pushed over the WebSocket); also stored as a notification. */
 export interface DueReminder {
   event_id: string
   title: string

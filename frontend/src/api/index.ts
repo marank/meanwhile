@@ -16,7 +16,6 @@ import type {
   CalendarGroupLink,
   CalendarGroupLinkCreate,
   CalendarGroupLinkUpdate,
-  CalendarListItem,
   CalendarMember,
   CalendarUpdate,
   Category,
@@ -30,18 +29,20 @@ import type {
   EventParticipantUpdate,
   Folder,
   GrantableRole,
+  Invitation,
   NotificationGroup,
-  DueReminder,
   Availability,
   Occurrence,
   OccurrenceScope,
   OverviewSettings,
+  ParticipantStatus,
   ProfileUpdate,
   Resource,
   ResourceInput,
   SearchEntity,
   SearchResult,
-  SidebarReorderItem,
+  Layout,
+  LayoutItem,
   User,
   UserGroup,
   UserGroupCreate,
@@ -104,13 +105,17 @@ export const deleteAppPassword = (id: string) => api<void>(`/api/users/me/app-pa
 
 export const updateProfile = (data: ProfileUpdate) => api<User>('/api/users/me', { method: 'PATCH', body: data })
 
-export const getOverviewSettings = () => api<OverviewSettings>('/api/users/me/overview')
+// Answering an invitation from the link in its email; the token is the key, no session needed.
+export const getInvitation = (token: string) => api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`)
+export const answerInvitation = (token: string, status: Exclude<ParticipantStatus, 'needs_action'>) =>
+  api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`, { method: 'POST', body: { status } })
+
+export const getOverviewSettings = () => api<OverviewSettings>('/api/users/me/settings')
 
 export const updateOverviewSettings = (data: Partial<OverviewSettings>) =>
-  api<OverviewSettings>('/api/users/me/overview', { method: 'PATCH', body: data })
+  api<OverviewSettings>('/api/users/me/settings', { method: 'PATCH', body: data })
 
 // Calendars
-export const listCalendars = () => api<CalendarListItem[]>('/api/calendars')
 
 export const getCalendar = (id: string) => api<Calendar>(`/api/calendars/${id}`)
 
@@ -129,6 +134,12 @@ export const addMember = (calendarId: string, userId: string, role: GrantableRol
   api<CalendarMember>(`/api/calendars/${calendarId}/members`, {
     method: 'POST',
     body: { user_id: userId, role },
+  })
+
+export const updateMember = (calendarId: string, userId: string, role: GrantableRole) =>
+  api<CalendarMember>(`/api/calendars/${calendarId}/members/${userId}`, {
+    method: 'PATCH',
+    body: { role },
   })
 
 export const removeMember = (calendarId: string, userId: string) =>
@@ -150,19 +161,20 @@ export const updateCalendarGroup = (calendarId: string, linkId: string, data: Ca
 export const removeCalendarGroup = (calendarId: string, linkId: string) =>
   api<void>(`/api/calendars/${calendarId}/groups/${linkId}`, { method: 'DELETE' })
 
-export const reorderSidebar = (items: SidebarReorderItem[]) =>
-  api<void>('/api/sidebar/reorder', { method: 'POST', body: { items } })
+// Layout: the user's folders, and where the calendars sit in them (the sidebar)
+export const getLayout = () => api<Layout>('/api/layout')
 
-// Folders
-export const listFolders = () => api<Folder[]>('/api/folders')
+/** Places folders and calendars (parent folder and position) in one request. */
+export const updateLayoutItems = (items: LayoutItem[]) =>
+  api<void>('/api/layout/items', { method: 'PATCH', body: { items } })
 
 export const createFolder = (name: string, parent_id?: string | null) =>
-  api<Folder>('/api/folders', { method: 'POST', body: { name, parent_id } })
+  api<Folder>('/api/layout/folders', { method: 'POST', body: { name, parent_id } })
 
 export const updateFolder = (id: string, data: Partial<Folder>) =>
-  api<Folder>(`/api/folders/${id}`, { method: 'PATCH', body: data })
+  api<Folder>(`/api/layout/folders/${id}`, { method: 'PATCH', body: data })
 
-export const deleteFolder = (id: string) => api<void>(`/api/folders/${id}`, { method: 'DELETE' })
+export const deleteFolder = (id: string) => api<void>(`/api/layout/folders/${id}`, { method: 'DELETE' })
 
 // Categories
 export const listCategories = (calendarId: string) => api<Category[]>(`/api/calendars/${calendarId}/categories`)
@@ -191,10 +203,15 @@ export const deleteResource = (calendarId: string, id: string) =>
 // Calendar approvers
 export const listCalendarApprovers = (calendarId: string) => api<Approver[]>(`/api/calendars/${calendarId}/approvers`)
 
-export const addCalendarApprover = (calendarId: string, userId: string) =>
-  api<Approver>(`/api/calendars/${calendarId}/approvers`, {
-    method: 'POST',
-    body: { user_id: userId },
+/** Sets the default approvers: whoever is not in the list is no approver any more. */
+export const setCalendarApprovers = (calendarId: string, userIds: string[]) =>
+  api<Approver[]>(`/api/calendars/${calendarId}/approvers`, { method: 'PUT', body: { user_ids: userIds } })
+
+/** Sets a resource's own approvers; with none, the calendar's default approvers decide. */
+export const setResourceApprovers = (calendarId: string, resourceId: string, userIds: string[]) =>
+  api<Approver[]>(`/api/calendars/${calendarId}/resources/${resourceId}/approvers`, {
+    method: 'PUT',
+    body: { user_ids: userIds },
   })
 
 export const removeCalendarApprover = (calendarId: string, userId: string) =>
@@ -261,7 +278,8 @@ export const addComment = (eventId: string, body: string) =>
     body: { body },
   })
 
-export const deleteComment = (commentId: string) => api<void>(`/api/events/comments/${commentId}`, { method: 'DELETE' })
+export const deleteComment = (eventId: string, commentId: string) =>
+  api<void>(`/api/events/${eventId}/comments/${commentId}`, { method: 'DELETE' })
 
 export const listActivity = (eventId: string) => api<EventActivity[]>(`/api/events/${eventId}/activity`)
 
@@ -290,11 +308,9 @@ export const listNotifications = (group?: NotificationGroup, limit = 50) => {
   return api<AppNotification[]>(`/api/notifications?${params}`)
 }
 
-export const getOpenNotificationCounts = () =>
-  api<{ approvals: number; invitations: number }>('/api/notifications/open-counts')
-
-/** Also delivers the user's due reminders, which come back in `reminders`. */
-export const getUnreadCount = () => api<{ count: number; reminders: DueReminder[] }>('/api/notifications/unread-count')
+/** The numbers shown as badges: unread notifications, and requests still waiting for the user. */
+export const getNotificationCounts = () =>
+  api<{ unread: number; approvals: number; invitations: number }>('/api/notifications/counts')
 
 export const markNotificationRead = (id: string) =>
   api<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST' })

@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } fro
 import { useI18n } from 'vue-i18n'
 import { ChevronDown, X } from 'lucide-vue-next'
 import * as api from '@/api'
+import OptionMark from '@/components/OptionMark.vue'
+import { optionMark } from '@/services/optionMark'
 
 const props = withDefaults(
   defineProps<{
@@ -49,6 +51,16 @@ const loading = ref(false)
 const isOpen = ref(false)
 const activeIndex = ref(-1)
 const selectedOption = ref<api.SearchResult | null>(null)
+// What the input shows before the chosen option's label (a category's color, a resource's icon).
+const selectedMark = computed(() => {
+  let option = selectedOption.value?.id === props.modelValue ? selectedOption.value : null
+  // A free-text field holds the name of a chosen option, not its id.
+  if (!option && props.allowFreeText && props.modelValue) {
+    const name = props.modelValue.toLowerCase()
+    option = options.value.find((o) => o.label.toLowerCase() === name) ?? null
+  }
+  return option && optionMark(option) ? option : null
+})
 const dropdownStyle = ref<Record<string, string>>({})
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -305,11 +317,15 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
       :aria-expanded="isOpen"
       aria-autocomplete="list"
       :aria-controls="listboxId"
-      class="w-full rounded-lg border px-3 py-2 pr-8 text-sm disabled:bg-surface-muted"
+      class="w-full rounded-lg border py-2 pr-8 text-sm disabled:bg-surface-muted"
+      :class="selectedMark ? 'pl-9' : 'px-3'"
       @focus="onFocus"
       @input="onInput"
       @keydown="onKeydown"
     />
+    <span v-if="selectedMark" class="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 items-center">
+      <OptionMark :option="selectedMark" />
+    </span>
     <button
       v-if="clearable && modelValue && !disabled"
       type="button"
@@ -351,9 +367,14 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
           @mouseenter="activeIndex = index"
           @mouseup="choose(option)"
         >
-          <div class="truncate">{{ option.label }}</div>
-          <div v-if="option.subtitle" class="truncate text-xs text-gray-500">
-            {{ option.subtitle }}
+          <div class="flex items-center gap-2">
+            <OptionMark :option="option" />
+            <div class="min-w-0 flex-1">
+              <div class="truncate">{{ option.label }}</div>
+              <div v-if="option.subtitle" class="truncate text-xs text-gray-500">
+                {{ option.subtitle }}
+              </div>
+            </div>
           </div>
         </li>
         <li

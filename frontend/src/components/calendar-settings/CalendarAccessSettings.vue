@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus } from 'lucide-vue-next'
+import { ChevronRight, Trash2, Users } from 'lucide-vue-next'
 import * as api from '@/api'
+import AccessGrantSearch from '@/components/AccessGrantSearch.vue'
+import IconButton from '@/components/IconButton.vue'
 import RoleSelect from '@/components/RoleSelect.vue'
-import SearchableSelect from '@/components/SearchableSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useCalendarSettingsSync } from '@/composables/useCalendarSettingsSync'
 import { confirm } from '@/services/dialog'
 import { useCalendarStore } from '@/stores/calendars'
 
@@ -24,15 +26,27 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const calendarStore = useCalendarStore()
 const { busy, run } = useAction()
+const sync = useCalendarSettingsSync()
 
 const isPublic = ref(props.calendar.is_public)
 const publicRole = ref<api.GrantableRole>(props.calendar.public_role)
 const members = ref<api.CalendarMember[]>([])
 const groupLinks = ref<api.CalendarGroupLink[]>([])
-const newMemberId = ref<string | null>(null)
-const newMemberRole = ref<api.GrantableRole>('contributor')
-const newGroupId = ref<string | null>(null)
-const newGroupRole = ref<api.GrantableRole>('viewer')
+
+// Picking someone adds them with the least privileged role; the role is changed in the new row.
+const NEW_ROLE: api.GrantableRole = 'read'
+const expandedGroups = ref(new Set<string>())
+const ROLE_ORDER: api.CalendarRole[] = ['read', 'own', 'full', 'owner']
+// The best role a person gets through groups; the highest of all their groups applies.
+const bestGroupRole = computed(() => {
+  const best = new Map<string, number>()
+  for (const link of groupLinks.value) {
+    for (const user of link.members) best.set(user.id, Math.max(best.get(user.id) ?? 0, ROLE_ORDER.indexOf(link.role)))
+  }
+  return best
+})
+const memberIds = computed(() => new Set(members.value.map((m) => m.user_id)))
+const groupIds = computed(() => new Set(groupLinks.value.map((l) => l.group.id)))
 
 // Group links are only visible to owners.
 const { loading } = useLoader(() => Promise.all(props.canManage ? [loadMembers(), loadGroupLinks()] : [loadMembers()]))
@@ -56,17 +70,22 @@ function savePublicAccess() {
   )
 }
 
-async function addMember() {
-  const userId = newMemberId.value
-  if (!userId) return
+async function addMember(userId: string) {
   await run(
     async () => {
-      await api.addMember(props.calendar.id, userId, newMemberRole.value)
-      newMemberId.value = null
+      await api.addMember(props.calendar.id, userId, NEW_ROLE)
       await loadMembers()
+      sync.membersChanged()
     },
     { success: t('app.memberAdded') },
   )
+}
+
+function updateMember(userId: string, role: api.GrantableRole) {
+  return run(async () => {
+    await api.updateMember(props.calendar.id, userId, role)
+    await loadMembers()
+  })
 }
 
 async function removeMember(userId: string) {
@@ -75,19 +94,35 @@ async function removeMember(userId: string) {
     async () => {
       await api.removeMember(props.calendar.id, userId)
       await loadMembers()
+      // The other tabs list members, too (the approvers), and a removed one is no approver any more.
+      sync.membersChanged()
     },
     { success: t('app.memberRemoved') },
   )
 }
 
-async function addGroupLink() {
-  const groupId = newGroupId.value
-  if (!groupId) return
+async function addGroupLink(groupId: string) {
   await run(async () => {
-    await api.addCalendarGroup(props.calendar.id, { group_id: groupId, role: newGroupRole.value })
-    newGroupId.value = null
+    await api.addCalendarGroup(props.calendar.id, { group_id: groupId, role: NEW_ROLE })
     await loadGroupLinks()
   })
+}
+
+function addAccess(target: { kind: 'user' | 'group'; id: string }) {
+  return target.kind === 'user' ? addMember(target.id) : addGroupLink(target.id)
+}
+
+/** A direct role replaces every group role, and a group role is replaced by a higher one from another group. */
+function isOverridden(link: api.CalendarGroupLink, userId: string) {
+  return memberIds.value.has(userId) || (bestGroupRole.value.get(userId) ?? 0) > ROLE_ORDER.indexOf(link.role)
+}
+
+function toggleGroup(id: string) {
+  if (!expandedGroups.value.delete(id)) expandedGroups.value.add(id)
+}
+
+function initial(name: string) {
+  return (name || '?').charAt(0).toUpperCase()
 }
 
 function updateGroupLink(linkId: string, role: api.GrantableRole) {
@@ -110,114 +145,157 @@ async function removeGroupLink(linkId: string) {
 </script>
 
 <template>
-  <SettingsPanel :title="$t('app.access')" :description="$t('app.accessDescription')" :loading="loading">
-    <div class="space-y-6">
-      <template v-if="canManage">
-        <section class="space-y-3">
-          <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.publicCalendar') }}</h3>
-          <div class="grid items-start gap-3 sm:grid-cols-2">
-            <SettingsToggle
-              v-model="isPublic"
-              :title="$t('app.publicCalendar')"
-              :description="$t('app.publicCalendarHelp')"
-            />
-            <label v-if="isPublic" class="block">
-              <span class="mb-1 block text-sm font-medium text-gray-800">{{ $t('app.publicRole') }}</span>
-              <RoleSelect v-model="publicRole" />
-            </label>
-          </div>
-        </section>
-
-        <section class="space-y-4 border-t border-line pt-6">
-          <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.groupAccess') }}</h3>
-          <div class="flex items-start gap-2">
-            <SearchableSelect v-model="newGroupId" entity="groups" open-on-focus class="flex-1" />
-            <RoleSelect v-model="newGroupRole" class="w-48" />
-            <button
-              type="button"
-              :disabled="!newGroupId || busy"
-              :aria-label="$t('app.add')"
-              class="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-              @click="addGroupLink"
-            >
-              <Plus :size="18" />
-            </button>
-          </div>
-          <ul class="divide-y divide-line rounded-lg border">
-            <li
-              v-for="link in groupLinks"
-              :key="link.id"
-              class="flex items-center justify-between px-3 py-2 hover:bg-hover"
-            >
-              <span class="text-sm text-gray-800">{{ link.group.name }}</span>
-              <div class="flex items-start gap-2">
-                <RoleSelect
-                  compact
-                  :model-value="link.role"
-                  :disabled="busy"
-                  @update:model-value="updateGroupLink(link.id, $event)"
-                />
-                <button type="button" class="text-sm text-red-600 hover:underline" @click="removeGroupLink(link.id)">
-                  {{ $t('app.delete') }}
-                </button>
-              </div>
-            </li>
-            <li v-if="!groupLinks.length" class="px-3 py-6 text-center text-sm text-gray-500">
-              {{ $t('app.noGroupAccess') }}
-            </li>
-          </ul>
-        </section>
+  <div class="space-y-6">
+    <SettingsPanel
+      v-if="canManage"
+      :title="$t('app.publicCalendar')"
+      :description="$t('app.publicCalendarHelp')"
+      :loading="loading"
+    >
+      <div class="grid items-start gap-4 sm:grid-cols-2">
+        <SettingsToggle
+          v-model="isPublic"
+          :title="$t('app.publicCalendar')"
+          :description="$t('app.publicCalendarHelp')"
+        />
+        <label v-if="isPublic" class="block">
+          <span class="mb-1 block text-sm font-medium text-gray-800">{{ $t('app.publicRole') }}</span>
+          <RoleSelect v-model="publicRole" />
+        </label>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          :disabled="busy"
+          class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+          @click="savePublicAccess"
+        >
+          {{ $t('app.save') }}
+        </button>
       </template>
+    </SettingsPanel>
 
-      <section class="space-y-4" :class="{ 'border-t border-line pt-6': canManage }">
-        <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.members') }}</h3>
-        <ul class="divide-y divide-line">
-          <li v-for="member in members" :key="member.id" class="flex items-center justify-between py-2">
-            <div>
-              <div class="font-medium text-gray-800">{{ member.display_name }} ({{ member.email }})</div>
-              <div class="text-xs text-gray-500">{{ $t(`roles.${member.role}`) }}</div>
-            </div>
-            <button
-              v-if="canManage && member.role !== 'owner'"
-              type="button"
-              class="text-sm text-red-600 hover:underline"
-              @click="removeMember(member.user_id)"
+    <SettingsPanel :title="$t('app.access')" :description="$t('app.accessDescription')" :loading="loading">
+      <div class="space-y-4">
+        <AccessGrantSearch
+          v-if="canManage"
+          :placeholder="$t('app.addAccessPlaceholder')"
+          :disabled="busy"
+          :exclude-user-ids="memberIds"
+          :exclude-group-ids="groupIds"
+          groups
+          @pick="addAccess"
+        />
+
+        <ul class="divide-y divide-line rounded-lg border border-line">
+          <li
+            v-for="member in members"
+            :key="member.id"
+            class="group flex items-center gap-3 px-4 py-2.5 hover:bg-hover"
+          >
+            <span
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200"
+              aria-hidden="true"
             >
-              {{ $t('app.delete') }}
-            </button>
+              {{ initial(member.display_name) }}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm font-medium text-gray-800">{{ member.display_name }}</div>
+              <div class="truncate text-xs text-gray-500">{{ member.email }}</div>
+            </div>
+            <RoleSelect
+              v-if="canManage && member.role !== 'owner'"
+              compact
+              hide-description
+              class="w-44 shrink-0"
+              :model-value="member.role as api.GrantableRole"
+              :disabled="busy"
+              @update:model-value="updateMember(member.user_id, $event)"
+            />
+            <span v-else class="w-44 shrink-0 px-3 text-sm text-gray-500">{{ $t(`roles.${member.role}`) }}</span>
+            <div class="row-actions flex w-8 shrink-0 justify-end">
+              <IconButton
+                v-if="canManage && member.role !== 'owner'"
+                :label="$t('app.delete')"
+                tone="danger"
+                :disabled="busy"
+                @click="removeMember(member.user_id)"
+              >
+                <Trash2 :size="18" :stroke-width="2.25" />
+              </IconButton>
+            </div>
+          </li>
+
+          <li v-for="link in groupLinks" :key="link.id" class="group">
+            <div class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 items-center gap-3 text-left"
+                :aria-expanded="expandedGroups.has(link.id)"
+                @click="toggleGroup(link.id)"
+              >
+                <span
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-muted text-gray-500"
+                  aria-hidden="true"
+                >
+                  <Users :size="16" />
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium text-gray-800">{{ link.group.name }}</span>
+                  <span class="block text-xs text-gray-500">
+                    {{ $t('app.groupMemberCount', link.members.length) }}
+                  </span>
+                </span>
+                <ChevronRight
+                  :size="16"
+                  class="shrink-0 text-gray-400 transition-transform"
+                  :class="{ 'rotate-90': expandedGroups.has(link.id) }"
+                />
+              </button>
+              <RoleSelect
+                compact
+                hide-description
+                class="w-44 shrink-0"
+                :model-value="link.role"
+                :disabled="busy"
+                @update:model-value="updateGroupLink(link.id, $event)"
+              />
+              <div class="row-actions flex w-8 shrink-0 justify-end">
+                <IconButton :label="$t('app.delete')" tone="danger" :disabled="busy" @click="removeGroupLink(link.id)">
+                  <Trash2 :size="18" :stroke-width="2.25" />
+                </IconButton>
+              </div>
+            </div>
+            <ul v-if="expandedGroups.has(link.id)" class="border-t border-line bg-surface-muted/40">
+              <li
+                v-for="user in link.members"
+                :key="user.id"
+                class="flex items-center gap-3 py-2 pl-14 pr-4"
+                :class="{ 'opacity-50': isOverridden(link, user.id) }"
+              >
+                <span
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200"
+                  aria-hidden="true"
+                >
+                  {{ initial(user.display_name) }}
+                </span>
+                <span class="truncate text-sm text-gray-800">{{ user.display_name }}</span>
+                <span class="truncate text-xs text-gray-500">{{ user.email }}</span>
+                <span v-if="isOverridden(link, user.id)" class="ml-auto shrink-0 text-xs text-gray-500">
+                  {{ $t('app.overridden') }}
+                </span>
+              </li>
+              <li v-if="!link.members.length" class="py-3 pl-14 text-sm text-gray-500">
+                {{ $t('app.groupHasNoMembers') }}
+              </li>
+            </ul>
+          </li>
+
+          <li v-if="!members.length && !groupLinks.length" class="px-4 py-8 text-center text-sm text-gray-500">
+            {{ $t('app.noMembers') }}
           </li>
         </ul>
-
-        <div v-if="canManage" class="flex items-start gap-2">
-          <SearchableSelect
-            v-model="newMemberId"
-            entity="users"
-            :min-search-length="2"
-            :placeholder="$t('app.searchUsers')"
-            class="flex-1"
-          />
-          <RoleSelect v-model="newMemberRole" class="w-48" />
-          <button
-            type="button"
-            :disabled="!newMemberId || busy"
-            :aria-label="$t('app.add')"
-            class="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-            @click="addMember"
-          >
-            <Plus :size="18" />
-          </button>
-        </div>
-      </section>
-    </div>
-    <template v-if="canManage" #footer>
-      <button
-        type="button"
-        :disabled="busy"
-        class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-        @click="savePublicAccess"
-      >
-        {{ $t('app.save') }}
-      </button>
-    </template>
-  </SettingsPanel>
+      </div>
+    </SettingsPanel>
+  </div>
 </template>

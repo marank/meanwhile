@@ -7,6 +7,8 @@ can consume them directly.
 
 from allauth.headless.adapter import DefaultHeadlessAdapter
 
+from core.services.notifications import email_preferences
+
 
 class HeadlessAdapter(DefaultHeadlessAdapter):
     def serialize_user(self, user):
@@ -20,5 +22,8 @@ class HeadlessAdapter(DefaultHeadlessAdapter):
             "is_active": user.is_active,
             "time_format": user.time_format,
             "date_format": user.date_format,
+            "timezone": user.timezone,
+            "language": user.language,
+            "email_notifications": email_preferences(user),
             "created_at": user.created_at.isoformat() if user.created_at else None,
         }

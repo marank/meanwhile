@@ -33,13 +33,13 @@ from core.views import (  # noqa: E402
     categories,
     comments,
     events,
-    folders,
     groups,
     misc,
     notifications,
     resources,
     search,
-    sidebar,
+    layout,
+    rsvp,
     users,
 )
 
@@ -47,8 +47,7 @@ api.add_router("", misc.router)
 api.add_router("", users.router)
 api.add_router("", admin.router)
 api.add_router("", groups.router)
-api.add_router("", folders.router)
-api.add_router("", sidebar.router)
+api.add_router("", layout.router)
 api.add_router("", search.router)
 api.add_router("", calendars.router)
 api.add_router("", categories.router)
@@ -58,3 +57,4 @@ api.add_router("", comments.router)
 api.add_router("", notifications.router)
 api.add_router("", approvals.router)
 api.add_router("", availability.router)
+api.add_router("", rsvp.router)

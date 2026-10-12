@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
+import { i18n } from '@/i18n'
 import { browserTimeZone } from '@/services/datetime'
 import { realtime } from '@/services/realtime'
 import { useCalendarStore } from './calendars'
@@ -21,12 +22,17 @@ export const useAuthStore = defineStore('auth', () => {
     (id) => (id ? realtime.start() : realtime.stop()),
   )
 
-  // The server reads times that calendar apps send without a zone in the user's zone,
-  // so it learns the browser's zone whenever it differs.
+  // The server reads times that calendar apps send without a zone in the user's zone, and
+  // writes emails in the user's language, so it learns both whenever they differ.
   watch(user, (current) => {
+    if (!current) return
+    const changes: api.ProfileUpdate = {}
     const zone = browserTimeZone()
-    if (current && zone && current.timezone !== zone) {
-      api.updateProfile({ timezone: zone }).then(
+    if (zone && current.timezone !== zone) changes.timezone = zone
+    const language = i18n.global.locale.value
+    if (current.language !== language) changes.language = language
+    if (Object.keys(changes).length) {
+      api.updateProfile(changes).then(
         (updated) => {
           if (user.value?.id === updated.id) user.value = updated
         },

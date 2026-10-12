@@ -14,7 +14,6 @@ from core.models import EventParticipant, Notification
 from core.models.base import EventStatus
 from core.realtime import broadcast
 from core.schemas import NotificationOut
-from core.services.reminders import deliver_due_reminders
 
 router = CSRFRouter()
 
@@ -67,9 +66,11 @@ def list_notifications(request, limit: int = 50, group: str | None = None):
     return [_serialize(n, responses) for n in notifications]
 
 
-@router.get("/notifications/open-counts", auth=django_auth)
-def open_counts(request):
-    """Requests still waiting for this user: pending approvals and unanswered invitations."""
+@router.get("/notifications/counts", auth=django_auth)
+def counts(request):
+    """The numbers the app shows as badges: unread notifications, and requests still waiting for this user
+    (pending approvals and unanswered invitations)."""
+    unread = Notification.objects.filter(user=request.user, read_at__isnull=True).count()
     approvals = (
         Notification.objects.filter(
             user=request.user, type="approval_requested", event__status=EventStatus.PENDING
@@ -84,15 +85,7 @@ def open_counts(request):
         .exclude(event__creator=request.user)
         .count()
     )
-    return {"approvals": approvals, "invitations": invitations}
-
-
-@router.get("/notifications/unread-count", auth=django_auth)
-def unread_count(request):
-    """The unread count; the app asks for it every minute, which also delivers due reminders."""
-    reminders = deliver_due_reminders(request.user)
-    count = Notification.objects.filter(user=request.user, read_at__isnull=True).count()
-    return {"count": count, "reminders": reminders}
+    return {"unread": unread, "approvals": approvals, "invitations": invitations}
 
 
 @router.post("/notifications/read-all", auth=django_auth)
