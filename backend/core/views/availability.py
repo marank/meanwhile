@@ -4,27 +4,26 @@ Availability endpoint: when people and resources are taken, for planning an even
 
 from datetime import timedelta
 
+from ninja import Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
 from core.models import Resource, User
 from core.schemas import AvailabilityIn, AvailabilityOut
 from core.services.availability import resource_periods, user_periods
 from core.services.permissions import get_membership
-from core.services.recurrence import make_aware
+from core.services.recurrence import as_utc
 
-router = CSRFRouter()
+router = Router()
 
 MAX_RANGE = timedelta(days=62)
 
 
-@router.post("/availability", response=AvailabilityOut, auth=django_auth)
+@router.post("/availability", response=AvailabilityOut)
 def availability(request, data: AvailabilityIn):
     """Busy periods only, no titles or details. Users can be looked up by anyone signed in, as in
     the user search; resources only by members of their calendar. A POST, though it changes nothing:
     see AvailabilityIn."""
-    start, end = make_aware(data.start), make_aware(data.end)
+    start, end = as_utc(data.start), as_utc(data.end)
     user_ids, resource_ids, exclude_event_id = data.user_ids, data.resource_ids, data.exclude_event_id
     if not start < end <= start + MAX_RANGE:
         raise HttpError(422, "end must be after start and at most 62 days later")

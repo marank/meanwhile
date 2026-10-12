@@ -4,23 +4,18 @@ Resource and resource-approver models.
 
 from django.db import models
 
-from core.models.base import new_uuid7
+from core.models.base import TimestampedModel, UUIDModel
 from core.models.calendars import Calendar
 from core.models.users import User
 
 
-class Category(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class Category(UUIDModel, TimestampedModel):
     calendar = models.ForeignKey(
         Calendar, on_delete=models.CASCADE, related_name="categories"
     )
     name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, default="")
     color = models.CharField(max_length=7, default="#64748b")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "categories"
@@ -34,15 +29,12 @@ class Category(models.Model):
         return self.name
 
 
-class Resource(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class Resource(UUIDModel, TimestampedModel):
     calendar = models.ForeignKey(
         Calendar, on_delete=models.CASCADE, related_name="resources"
     )
     name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, default="")
     color = models.CharField(max_length=7, default="#f59e0b")
     # Name of an icon (kebab-case, e.g. "door-open") the client shows before the resource's name.
     icon = models.CharField(max_length=40, blank=True, default="")
@@ -54,8 +46,6 @@ class Resource(models.Model):
     # and are kept only so existing bookings still reference them.
     is_active = models.BooleanField(default=True)
     archived_at = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "resources"
@@ -64,10 +54,7 @@ class Resource(models.Model):
         return self.name
 
 
-class ResourceApprover(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class ResourceApprover(UUIDModel):
     resource = models.ForeignKey(
         Resource, on_delete=models.CASCADE, related_name="approvers"
     )

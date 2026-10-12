@@ -13,7 +13,7 @@ server → client
     {"type": "subscribed", "calendars": [...]}         the calendars the user may follow
     {"type": "events.changed", "calendar_id": "<id>"}  load that calendar's events again
     {"type": "notifications.changed"}                  load the notifications again
-    {"type": "reminders.due", "reminders": [...]}      reminders that came due: show them
+    {"type": "reminders.due", "reminders": [...]}      reminders that came due (core.tasks): show them
     {"type": "calendars.changed"}                      load the list of calendars and folders again
     {"type": "error", "message": "..."}
 
@@ -21,7 +21,6 @@ The connection closes with 4401 when the session is missing or has ended; client
 reconnecting until the user signs in again.
 """
 
-import asyncio
 import json
 import logging
 
@@ -31,8 +30,7 @@ from django.contrib.sessions.backends.base import SessionBase
 
 from core.models import Calendar, User
 from core.realtime.broadcast import calendar_group, user_group
-from core.services.permissions import get_membership
-from core.services.reminders import deliver_due_reminders
+from core.services.permissions import memberships_of
 
 logger = logging.getLogger(__name__)
 
@@ -41,24 +39,13 @@ CLOSE_UNAUTHENTICATED = 4401
 # A client follows the calendars on screen; more than this is not a client of this app.
 MAX_SUBSCRIPTIONS = 200
 MAX_MESSAGE_BYTES = 16 * 1024
-# How often the server looks for reminders that came due, for each connected user.
-REMINDER_INTERVAL_SECONDS = 30
 
 
 @database_sync_to_async
 def _readable_calendars(user: User, calendar_ids: list[str]) -> set[str]:
     if not user.is_active:
         return set()
-    return {
-        str(calendar.id)
-        for calendar in Calendar.objects.filter(id__in=calendar_ids)
-        if get_membership(calendar, user) is not None
-    }
-
-
-@database_sync_to_async
-def _deliver_reminders(user: User) -> list[dict]:
-    return deliver_due_reminders(user)
+    return set(memberships_of(user, Calendar.objects.filter(id__in=calendar_ids)))
 
 
 @database_sync_to_async
@@ -82,33 +69,10 @@ class LiveUpdatesConsumer(AsyncWebsocketConsumer):
         await self._join(user_group(self.user.pk))
         await self.accept()
         await self._send({"type": "hello", "protocol": PROTOCOL_VERSION})
-        self.reminder_task = asyncio.create_task(self._reminder_loop())
 
     async def disconnect(self, code):
-        task = getattr(self, "reminder_task", None)
-        if task is not None:
-            task.cancel()
         for group in list(self.groups_joined):
             await self._leave(group)
-
-    async def _reminder_loop(self):
-        """Delivers the user's due reminders, right away and then regularly.
-
-        Each reminder is handed out once, whichever of the user's connections finds it first; it
-        goes to all their connections (and tabs), as a notification and as a pop-up.
-        """
-        while True:
-            try:
-                delivered = await _deliver_reminders(self.user)
-                if delivered:
-                    await self.channel_layer.group_send(
-                        user_group(self.user.pk), {"type": "reminders.due", "reminders": delivered}
-                    )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.warning("Could not deliver reminders", exc_info=True)
-            await asyncio.sleep(REMINDER_INTERVAL_SECONDS)
 
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None or len(text_data) > MAX_MESSAGE_BYTES:

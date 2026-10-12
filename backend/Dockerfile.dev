@@ -1,0 +1,19 @@
+# Development image for docker-compose.dev.yml: the source is mounted at /app, so the virtualenv
+# lives outside of it (/opt/venv). Rebuild after changing the dependencies (uv.lock).
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
+
+ENV UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev && rm -rf /var/lib/apt/lists/*
+
+# With the dev dependencies, so that the tests run in the container too.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+EXPOSE 8000

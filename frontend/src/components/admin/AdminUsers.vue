@@ -19,24 +19,12 @@ interface UserForm {
   display_name: string
   password: string
   is_admin: boolean
-  is_staff: boolean
-  is_superuser: boolean
   is_active: boolean
   groups: Array<{ id: string; name: string }>
 }
 
 const roleBadges = [
   { flag: 'is_admin', label: 'app.admin', classes: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  {
-    flag: 'is_staff',
-    label: 'app.staff',
-    classes: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  },
-  {
-    flag: 'is_superuser',
-    label: 'app.superuser',
-    classes: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-  },
 ] as const
 
 const { t } = useI18n()
@@ -69,8 +57,6 @@ function openForm(user: api.AdminUser | null) {
     display_name: user?.display_name ?? '',
     password: '',
     is_admin: user?.is_admin ?? false,
-    is_staff: user?.is_staff ?? false,
-    is_superuser: user?.is_superuser ?? false,
     is_active: user?.is_active ?? true,
     groups: user?.groups.map(({ id, name }) => ({ id, name })) ?? [],
   }
@@ -97,8 +83,6 @@ async function save() {
     email: value.email,
     display_name: value.display_name,
     is_admin: value.is_admin,
-    is_staff: value.is_staff,
-    is_superuser: value.is_superuser,
     is_active: value.is_active,
     group_ids: value.groups.map((g) => g.id),
   }
@@ -256,10 +240,8 @@ async function resetPassword(user: api.AdminUser) {
         </div>
       </label>
       <div class="grid gap-3 sm:grid-cols-2">
-        <SettingsToggle v-model="form.is_admin" :title="$t('app.admin')" />
-        <SettingsToggle v-model="form.is_staff" :title="$t('app.staff')" />
-        <SettingsToggle v-model="form.is_superuser" :title="$t('app.superuser')" />
-        <SettingsToggle v-model="form.is_active" :title="$t('app.active')" />
+        <SettingsToggle v-model="form.is_admin" :title="$t('app.admin')" :description="$t('app.adminDescription')" />
+        <SettingsToggle v-model="form.is_active" :title="$t('app.active')" :description="$t('app.activeDescription')" />
       </div>
       <div>
         <h3 class="mb-3 text-sm font-semibold text-gray-700">{{ $t('app.groups') }}</h3>

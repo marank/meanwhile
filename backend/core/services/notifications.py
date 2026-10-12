@@ -6,6 +6,7 @@ from datetime import datetime
 
 from core.models import Calendar, Event, User
 from core.models.events import Notification
+from core.realtime import broadcast
 from core.services import mail
 from core.services.mail_texts import text
 
@@ -53,12 +54,9 @@ def notify(
     event_id: str | None = None,
     data: dict | None = None,
 ) -> None:
-    seen = set()
-    for recipient_id in recipient_ids:
-        if recipient_id is None or recipient_id == actor_id or recipient_id in seen:
-            continue
-        seen.add(recipient_id)
-        Notification.objects.create(
+    seen = [r for r in dict.fromkeys(recipient_ids) if r is not None and r != actor_id]
+    Notification.objects.bulk_create(
+        Notification(
             user_id=recipient_id,
             type=type,
             actor_id=actor_id,
@@ -67,6 +65,11 @@ def notify(
             title=title,
             data=data,
         )
+        for recipient_id in seen
+    )
+    # A bulk insert sends no signals (core.signals); the recipients' tabs update their notifications.
+    for recipient_id in seen:
+        broadcast.notifications_changed(recipient_id)
 
     kind = EMAIL_KIND_OF.get(type)
     if kind is None or not seen:
@@ -77,12 +80,13 @@ def notify(
     actor = User.objects.filter(id=actor_id).first() if actor_id else None
     calendar = Calendar.objects.filter(id=calendar_id).first() if calendar_id else None
     event = Event.objects.filter(id=event_id).first() if event_id else None
+    app = mail.app_name()
     mail.send(
-        _notification_email(user, type, actor, title, calendar, event, data or {}) for user in recipients
+        _notification_email(user, type, actor, title, calendar, event, data or {}, app) for user in recipients
     )
 
 
-def _notification_email(user, type, actor, title, calendar, event, data):
+def _notification_email(user, type, actor, title, calendar, event, data, app: str):
     language = mail.language_of(user)
     reader = mail.Reader.of(user, language, event.timezone if event else "UTC")
     if actor is not None:
@@ -116,7 +120,7 @@ def _notification_email(user, type, actor, title, calendar, event, data):
         url = mail.app_link(f"/calendar/{calendar.id}")
     else:
         url = mail.app_link("/notifications")
-    links = [mail.Link(text(language, "open", app=mail.app_name()), url)] if url else []
+    links = [mail.Link(text(language, "open", app=app), url)] if url else []
 
     return mail.build_message(
         to=user.email,
@@ -127,4 +131,5 @@ def _notification_email(user, type, actor, title, calendar, event, data):
         links=links,
         from_name=actor.display_name if actor else None,
         footer="footer_settings",
+        app=app,
     )

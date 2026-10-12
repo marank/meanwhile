@@ -10,7 +10,9 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv(BASE_DIR / ".env")
+# The .env of the project root, shared by all setups (template: .env.example there). In the
+# containers there is none; Compose passes its values as environment variables.
+load_dotenv(BASE_DIR.parent / ".env")
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -60,6 +62,9 @@ INSTALLED_APPS = [
     "allauth.headless",
     "corsheaders",
     "channels",
+    # The task queue: emails, reminders and other regular jobs (core.tasks), run by
+    # `manage.py procrastinate worker`.
+    "procrastinate.contrib.django",
     "core",
 ]
 
@@ -104,7 +109,8 @@ ASGI_APPLICATION = "config.asgi.application"
 # Database
 # ---------------------------------------------------------------------------
 
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'calendar.db'}")
+# PostgreSQL only (the task queue, procrastinate, lives in it); by default the one of docker-compose.dev.yml.
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://calendar:calendar@localhost:5432/calendar")
 DATABASES = {
     "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)
 }
@@ -202,8 +208,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Application-specific settings
 # ---------------------------------------------------------------------------
 
-ALLOW_REGISTRATION = _bool_env("ALLOW_REGISTRATION", True)
+# Anyone may sign up only where that's wanted: users find each other (by name and email) to share.
+ALLOW_REGISTRATION = _bool_env("ALLOW_REGISTRATION", ENVIRONMENT == "development")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+# The admin user that `manage.py ensure_admin` creates or updates on every start of the containers.
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_NAME = os.environ.get("ADMIN_NAME", "")
 BASE_URL = os.environ.get("BASE_URL", "")
 CALDAV_PATH = os.environ.get("CALDAV_PATH", "/caldav")
 
@@ -215,17 +225,21 @@ CALDAV_PATH = os.environ.get("CALDAV_PATH", "/caldav")
 # Path of the WebSocket endpoint; the reverse proxy must pass WebSocket upgrades for it.
 WEBSOCKET_PATH = os.environ.get("WEBSOCKET_PATH", "/ws/")
 
-# Every server process must reach the others' WebSocket connections: with more than one process
-# (e.g. several uvicorn workers), set REDIS_URL. Without it, messages stay within one process,
-# which is enough for development.
+# Every process must reach the WebSocket connections of the others: with more than one (several
+# uvicorn workers, and the task queue's worker, whose reminders pop up in the users' tabs), set
+# REDIS_URL. Without it, messages stay within the process that sends them.
 REDIS_URL = os.environ.get("REDIS_URL", "")
 if REDIS_URL:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [REDIS_URL]},
+            # Each receive waits up to 5 s for messages (BZPOPMIN); redis-py 8 gives up reading after
+            # 5 s by default, which killed every WebSocket connection after a few seconds.
+            "CONFIG": {"hosts": [{"address": REDIS_URL, "socket_timeout": 30}]},
         }
     }
+    # Shared by all processes, so that limits (failed logins, also CalDAV's) count across them.
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}}
 else:
     CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
@@ -260,7 +274,8 @@ elif ENVIRONMENT == "development":
 else:
     EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "calendar@localhost")
-# Emails go out after the request in a background thread, so a slow mail server doesn't hold it up.
+# Emails go out as jobs of the task queue (core.tasks), retried while the mail server fails;
+# without, right after the request (tests do so).
 EMAIL_SEND_IN_BACKGROUND = _bool_env("EMAIL_SEND_IN_BACKGROUND", True)
 
 # Address of the app for links in emails; BASE_URL, or in development the Vite dev server.

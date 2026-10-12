@@ -2,32 +2,39 @@
 Model signal handlers.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 from core.models import (
     Calendar,
     CalendarGroup,
     CalendarMember,
-    CalendarSubscription,
     DeletedEvent,
     Event,
     EventParticipant,
     Folder,
     Notification,
     User,
+    UserGroup,
 )
 from core.realtime import broadcast
+from core.services import memberships, reminders
 
 # CalDAV clients that haven't synced for longer than this start over with a full sync.
 DELETED_EVENT_RETENTION = timedelta(days=90)
 
 
+def _deleted_along(origin, model) -> bool:
+    """Whether a deletion started at an object (or a queryset) of `model`."""
+    return isinstance(origin, model) or getattr(origin, "model", None) is model
+
+
 def _touch_series(event: Event) -> None:
     # A changed occurrence is part of its series' iCalendar object, so the series counts as changed.
-    Event.objects.filter(pk=event.parent_id).update(updated_at=datetime.now(timezone.utc))
+    Event.objects.filter(pk=event.parent_id).update(updated_at=timezone.now())
 
 
 @receiver(post_save, sender=Event)
@@ -37,16 +44,24 @@ def touch_series_of_saved_occurrence(sender, instance: Event, **kwargs) -> None:
 
 
 @receiver(post_delete, sender=Event)
-def remember_deleted_event(sender, instance: Event, **kwargs) -> None:
+def remember_deleted_event(sender, instance: Event, origin=None, **kwargs) -> None:
+    if _deleted_along(origin, Calendar):
+        return  # the calendar's record of deleted events goes with it
     if instance.parent_id:
-        _touch_series(instance)
+        if not (isinstance(origin, Event) and origin.pk == instance.parent_id):
+            _touch_series(instance)  # not when the whole series goes
         return
-    DeletedEvent.objects.create(
-        calendar_id=instance.calendar_id, href=instance.href or f"{instance.uid}.ics"
-    )
-    DeletedEvent.objects.filter(
-        deleted_at__lt=datetime.now(timezone.utc) - DELETED_EVENT_RETENTION
-    ).delete()
+    # Old records are removed regularly (core.tasks).
+    DeletedEvent.objects.create(calendar_id=instance.calendar_id, href=instance.dav_href)
+
+
+@receiver(post_save, sender=Event)
+@receiver(post_delete, sender=Event)
+def work_out_reminders_again(sender, instance: Event, raw: bool = False, origin=None, **kwargs) -> None:
+    # A new time, rule or status, or a changed occurrence, moves when the series' reminders are due.
+    if raw or _deleted_along(origin, Calendar) or (instance.parent_id is None and _deleted_along(origin, Event)):
+        return  # their reminders go too
+    reminders.reminders_changed(series_id=instance.parent_id or instance.pk)
 
 
 @receiver(post_delete, sender=Calendar)
@@ -78,10 +93,9 @@ def announce_notification_change(sender, instance: Notification, **kwargs) -> No
 
 
 def _calendar_audience(calendar_id) -> set:
-    """Everyone whose list of calendars shows the calendar: members, members of linked groups, and those
-    who added it (a public one) to their sidebar."""
+    """Everyone whose list of calendars shows the calendar: its members (granted, from a group or added) and
+    the members of linked groups."""
     users = set(CalendarMember.objects.filter(calendar_id=calendar_id).values_list("user_id", flat=True))
-    users |= set(CalendarSubscription.objects.filter(calendar_id=calendar_id).values_list("user_id", flat=True))
     users |= set(
         User.objects.filter(groups__calendar_groups__calendar_id=calendar_id).values_list("pk", flat=True)
     )
@@ -103,12 +117,6 @@ def announce_membership_change(sender, instance: CalendarMember, **kwargs) -> No
     broadcast.calendars_changed([instance.user_id])
 
 
-@receiver(post_save, sender=CalendarSubscription)
-@receiver(post_delete, sender=CalendarSubscription)
-def announce_subscription_change(sender, instance: CalendarSubscription, **kwargs) -> None:
-    broadcast.calendars_changed([instance.user_id])
-
-
 @receiver(post_save, sender=CalendarGroup)
 @receiver(post_delete, sender=CalendarGroup)
 def announce_group_link_change(sender, instance: CalendarGroup, **kwargs) -> None:
@@ -126,6 +134,57 @@ def announce_group_membership_change(sender, instance, action, reverse, pk_set, 
         broadcast.calendars_changed(pk_set)
     elif action == "pre_clear":
         broadcast.calendars_changed(instance.user_set.values_list("pk", flat=True))
+
+
+# Memberships from a group or a public calendar follow what they come from (core.services.memberships).
+# Fixtures (loaddata, `raw`) bring their memberships along, so their rows aren't synced.
+
+
+@receiver(post_save, sender=Calendar)
+def sync_public_memberships(sender, instance: Calendar, raw: bool = False, **kwargs) -> None:
+    if not raw:
+        memberships.sync_public(instance)
+
+
+@receiver(post_save, sender=CalendarGroup)
+@receiver(post_delete, sender=CalendarGroup)
+def sync_group_link_memberships(sender, instance: CalendarGroup, raw: bool = False, **kwargs) -> None:
+    if raw:
+        return
+    # Going with its calendar, the link takes nothing along that would have to be replaced.
+    if _deleted_along(kwargs.get("origin"), Calendar):
+        return
+    memberships.sync_group_link(instance.calendar_id)
+
+
+@receiver(m2m_changed, sender=User.groups.through)
+def sync_group_memberships(sender, instance, action, reverse, pk_set, **kwargs) -> None:
+    if reverse:
+        _group_members_changed(instance, action, pk_set)
+    else:
+        _user_groups_changed(instance, action, pk_set)
+
+
+def _user_groups_changed(user: User, action: str, group_ids: set | None) -> None:
+    """user.groups.add/remove/clear: the calendars of these groups (of all, when cleared) may come or go."""
+    if action in {"post_add", "post_remove"}:
+        memberships.sync_user_groups(user.pk, group_ids)
+    elif action == "post_clear":
+        memberships.sync_user_groups(user.pk)
+
+
+def _group_members_changed(group: UserGroup, action: str, user_ids: set | None) -> None:
+    """group.user_set.add/remove/clear: these users may gain or lose the group's calendars."""
+    if action == "pre_clear":
+        # Once cleared, the group can't tell who was in it.
+        group._cleared_user_ids = list(group.user_set.values_list("pk", flat=True))
+        return
+    if action == "post_clear":
+        user_ids = group.__dict__.pop("_cleared_user_ids", [])
+    elif action not in {"post_add", "post_remove"}:
+        return
+    for user_id in user_ids:
+        memberships.sync_user_groups(user_id, [group.pk])
 
 
 @receiver(post_save, sender=Folder)

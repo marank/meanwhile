@@ -2,17 +2,17 @@
 Resource booking approval/conflict logic.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
-from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
-from core.models.base import EventStatus, Role
+from core.models.base import EventStatus
 from core.models.calendars import CalendarApprover
 from core.models.events import Event
 from core.models.resources import Resource
 from core.models.users import User
-from core.services.recurrence import find_conflicts, make_aware
+from core.services.recurrence import find_conflicts
 
 
 def get_resource_approvers(resource: Resource):
@@ -31,11 +31,11 @@ def get_resource_approvers(resource: Resource):
 
 def can_decide_booking(calendar, resource: Resource | None, user_id: str) -> bool:
     """The calendar owner and the resource's approver pool may approve or reject bookings."""
-    if str(calendar.owner_id) == str(user_id):
+    if calendar.owner_id == user_id:
         return True
     if resource is None:
         return False
-    return any(str(a.id) == str(user_id) for a in get_resource_approvers(resource))
+    return any(a.id == user_id for a in get_resource_approvers(resource))
 
 
 def booked_resources(event: Event) -> list[Resource]:
@@ -53,12 +53,8 @@ def awaiting_resources(event: Event) -> list[Resource]:
     return [r for r in booked_resources(event) if str(r.pk) in awaiting]
 
 
-def is_in_approver_pool(event: Event, user: User | None = None, user_id: str | None = None) -> bool:
+def is_in_approver_pool(event: Event, user_id: str) -> bool:
     """Whether the user may decide on the event's bookings: those it waits for, if it is pending."""
-    if user_id is None and user is not None:
-        user_id = str(user.id)
-    if user_id is None:
-        return False
     resources = awaiting_resources(event) if event.status == EventStatus.PENDING else booked_resources(event)
     return any(can_decide_booking(event.calendar, r, user_id) for r in resources)
 
@@ -98,13 +94,13 @@ def update_booking_status(event: Event, user: User, recheck: list[Resource]) -> 
         event.status = EventStatus.PENDING
         event.decided_by = None
         event.decided_at = None
-        event.decision_note = None
+        event.decision_note = ""
     elif any(r.requires_approval for r in booked):
         if was_pending or event.status == EventStatus.CONFIRMED or recheck:
             # Booked by someone who may approve it all: the approval step is skipped.
             event.status = EventStatus.APPROVED
             event.decided_by = user
-            event.decided_at = datetime.now(timezone.utc)
+            event.decided_at = timezone.now()
     else:
         event.status = EventStatus.CONFIRMED
         event.decided_by = None
@@ -120,23 +116,22 @@ def find_booking_conflicts(event: Event) -> list[Event]:
 
 
 def find_conflicting_approved_bookings(resource: Resource, event: Event):
-    with transaction.atomic():
-        # Serialize concurrent approvals on the same resource.
-        Resource.objects.select_for_update().get(pk=resource.pk)
+    """Approved bookings of the resource at the same time as the event.
 
-        horizon = max(make_aware(event.end), make_aware(event.start) + timedelta(days=730))
-        # A series doesn't conflict with its own changed occurrences, nor they with it.
-        series_id = event.parent_id or event.pk
-        approved = Event.objects.filter(
-            Q(resource=resource) | Q(location_resource=resource),
-            status__in={EventStatus.APPROVED, EventStatus.CONFIRMED},
-            start__lt=horizon,
-        )
-        if series_id is not None:
-            approved = approved.exclude(Q(pk=series_id) | Q(parent_id=series_id))
-        approved = approved.exclude(pk=event.pk)
-        return find_conflicts(event, approved, horizon)
+    Locks the resource until the caller's transaction ends, so concurrent bookings and approvals of it
+    happen one after the other; the caller saves the event in that same transaction.
+    """
+    Resource.objects.select_for_update().get(pk=resource.pk)
 
-
-def can_modify_event(event: Event, user_id: str, role: str) -> bool:
-    return role in {Role.OWNER, Role.MANAGE, Role.FULL} or str(event.creator_id) == str(user_id)
+    horizon = max(event.end, event.start + timedelta(days=730))
+    # A series doesn't conflict with its own changed occurrences, nor they with it.
+    series_id = event.parent_id or event.pk
+    approved = Event.objects.filter(
+        Q(resource=resource) | Q(location_resource=resource),
+        status__in={EventStatus.APPROVED, EventStatus.CONFIRMED},
+        start__lt=horizon,
+    )
+    if series_id is not None:
+        approved = approved.exclude(Q(pk=series_id) | Q(parent_id=series_id))
+    approved = approved.exclude(pk=event.pk)
+    return find_conflicts(event, approved, horizon)

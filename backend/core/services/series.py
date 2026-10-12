@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 
 from core.models import Event, EventParticipant
 from core.services.recurrence import (
+    as_utc,
     format_exdate,
-    is_series,
     format_rrule,
-    make_aware,
+    is_series,
     nth_occurrence,
     occurrence_index,
     parse_exdates,
@@ -28,7 +28,7 @@ def snapshot(event: Event) -> Event:
 
 def is_occurrence(series: Event, start: datetime) -> bool:
     """Whether the series has an occurrence starting then that hasn't been removed."""
-    start = make_aware(start)
+    start = as_utc(start)
     if series.overrides.filter(recurrence_id=start).exists():
         return True
     return start not in parse_exdates(series.exdates) and occurrence_index(series, start) is not None
@@ -36,11 +36,11 @@ def is_occurrence(series: Event, start: datetime) -> bool:
 
 def override_for(series: Event, start: datetime) -> Event:
     """The changed occurrence starting at `start`, created as a copy of the series if needed."""
-    start = make_aware(start)
+    start = as_utc(start)
     override = series.overrides.filter(recurrence_id=start).first()
     if override is not None:
         return override
-    duration = make_aware(series.end) - make_aware(series.start)
+    duration = series.end - series.start
     override = Event(
         calendar=series.calendar,
         # The occurrence belongs to whoever owns the series, so the same people may change it.
@@ -74,7 +74,7 @@ def override_for(series: Event, start: datetime) -> Event:
 
 
 def remove_occurrence(series: Event, start: datetime) -> None:
-    start = make_aware(start)
+    start = as_utc(start)
     series.overrides.filter(recurrence_id=start).delete()
     exdates = parse_exdates(series.exdates) | {start}
     series.exdates = sorted(format_exdate(d) for d in exdates)
@@ -83,7 +83,7 @@ def remove_occurrence(series: Event, start: datetime) -> None:
 
 def end_before(series: Event, start: datetime) -> None:
     """Ends the series with the last occurrence before `start`; later exceptions are dropped."""
-    start = make_aware(start)
+    start = as_utc(start)
     if series.rrule:
         parts = rrule_parts(series.rrule)
         parts.pop("COUNT", None)
@@ -103,7 +103,7 @@ def split(series: Event, start: datetime) -> Event:
 
     The occurrences changed or removed from `start` on move to the new series.
     """
-    start = make_aware(start)
+    start = as_utc(start)
     index = occurrence_index(series, start)
     rrule = None
     if series.rrule:
@@ -112,7 +112,7 @@ def split(series: Event, start: datetime) -> Event:
             # COUNT includes the extra dates (RDATE) before `start`; good enough for the rare mix of both.
             parts["COUNT"] = str(max(1, int(parts["COUNT"]) - index))
         rrule = format_rrule(parts)
-    duration = make_aware(series.end) - make_aware(series.start)
+    duration = series.end - series.start
     later_exdates = [d for d in parse_exdates(series.exdates) if d >= start]
     later_overrides = list(series.overrides.filter(recurrence_id__gte=start))
 
@@ -168,7 +168,7 @@ def remap_exceptions(series: Event, before: Event) -> None:
     unchanged = (
         before.rrule == series.rrule
         and before.rdates == series.rdates
-        and make_aware(before.start) == make_aware(series.start)
+        and before.start == series.start
         and before.all_day == series.all_day
         and before.timezone == series.timezone
     )
@@ -190,7 +190,7 @@ def remap_exceptions(series: Event, before: Event) -> None:
         format_exdate(new) for d in parse_exdates(series.exdates) if (new := moved(d)) is not None
     )
     overrides = list(series.overrides.all())
-    targets = {o.pk: moved(make_aware(o.recurrence_id)) for o in overrides}
+    targets = {o.pk: moved(o.recurrence_id) for o in overrides}
     # Clear the old ids first so that two occurrences can trade places without a clash.
     Event.objects.filter(pk__in=[o.pk for o in overrides]).update(recurrence_id=None)
     for override in overrides:

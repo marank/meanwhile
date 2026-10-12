@@ -4,7 +4,7 @@ Calendar and membership models.
 
 from django.db import models
 
-from core.models.base import default_weekend_days, new_uuid7, Role
+from core.models.base import MembershipSource, Role, TimestampedModel, UUIDModel
 from core.models.calendar_colors import DEFAULT_COLORS
 from core.models.users import User, UserGroup
 
@@ -16,10 +16,12 @@ def _color_field(name: str):
 class CalendarAppearance(models.Model):
     """Week layout and colors, shared by calendars and the calendar overview."""
 
-    first_weekday = models.IntegerField(default=0)
-    show_weekends = models.BooleanField(default=True)
-    weekend_days = models.JSONField(default=default_weekend_days)
-    show_week_numbers = models.BooleanField(default=False)
+    # The week layout: empty follows the app's defaults (AppSettings), also when they change later;
+    # set once someone chooses a value. The API fills in the defaults (schemas.WeekLayoutOut).
+    first_weekday = models.IntegerField(blank=True, null=True, default=None)
+    show_weekends = models.BooleanField(blank=True, null=True, default=None)
+    weekend_days = models.JSONField(blank=True, null=True, default=None)
+    show_week_numbers = models.BooleanField(blank=True, null=True, default=None)
     # Colors per role and theme; see calendar_colors.py.
     base_color = _color_field("base_color")
     weekend_color = _color_field("weekend_color")
@@ -34,16 +36,15 @@ class CalendarAppearance(models.Model):
     dark_border_color = _color_field("dark_border_color")
     dark_outer_border_color = _color_field("dark_outer_border_color")
 
+    LAYOUT_FIELDS = ("first_weekday", "show_weekends", "weekend_days", "show_week_numbers")
+
     class Meta:
         abstract = True
 
 
-class Calendar(CalendarAppearance):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
     name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, default="")
     force_all_day = models.BooleanField(default=False)
     feed_token = models.CharField(max_length=255, unique=True, db_index=True)
     # Path name a CalDAV client chose when it created the calendar; the id serves as path otherwise.
@@ -51,13 +52,11 @@ class Calendar(CalendarAppearance):
     url_path = models.CharField(max_length=100, unique=True, blank=True, null=True)
     is_public = models.BooleanField(default=False)
     public_role = models.CharField(
-        max_length=20, choices=Role.CHOICES, default=Role.READ
+        max_length=20, choices=Role.choices, default=Role.READ
     )
     owner = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="calendars_owned"
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "calendars"
@@ -66,17 +65,20 @@ class Calendar(CalendarAppearance):
         return self.name
 
 
-class CalendarMember(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class CalendarMember(UUIDModel):
     calendar = models.ForeignKey(
         Calendar, on_delete=models.CASCADE, related_name="members"
     )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="memberships"
     )
-    role = models.CharField(max_length=20, choices=Role.CHOICES, default=Role.READ)
+    source = models.CharField(max_length=10, choices=MembershipSource.choices, default=MembershipSource.DIRECT)
+    # Granted with a direct membership only. From a group or a public calendar the role is what they give, worked
+    # out when it's needed (core.services.permissions.get_membership), so there is none to keep in step.
+    role = models.CharField(  # noqa: DJ001
+        max_length=20, choices=Role.choices, default=Role.READ, null=True, blank=True
+    )
+    # Where the calendar sits in the user's sidebar.
     folder = models.ForeignKey(
         "Folder",
         on_delete=models.SET_NULL,
@@ -95,55 +97,14 @@ class CalendarMember(models.Model):
         ]
 
 
-class CalendarSubscription(models.Model):
-    """
-    A calendar in someone's sidebar without a membership of theirs, and where it sits there: a public calendar
-    they added (public calendars only show up once added), or one shared with them through a group that they
-    moved in the sidebar.
-    """
-
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="subscriptions"
-    )
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="calendar_subscriptions"
-    )
-    # Where it sits in the sidebar, as for memberships.
-    folder = models.ForeignKey(
-        "Folder",
-        on_delete=models.SET_NULL,
-        related_name="subscriptions",
-        blank=True,
-        null=True,
-    )
-    position = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "calendar_subscriptions"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["calendar", "user"], name="uq_calendar_subscription"
-            )
-        ]
-
-
-class CalendarGroup(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class CalendarGroup(UUIDModel, TimestampedModel):
     calendar = models.ForeignKey(
         Calendar, on_delete=models.CASCADE, related_name="calendar_groups"
     )
     group = models.ForeignKey(
         UserGroup, on_delete=models.CASCADE, related_name="calendar_groups"
     )
-    role = models.CharField(max_length=20, choices=Role.CHOICES, default=Role.READ)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.READ)
 
     class Meta:
         db_table = "calendar_groups"
@@ -154,10 +115,7 @@ class CalendarGroup(models.Model):
         ]
 
 
-class CalendarApprover(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class CalendarApprover(UUIDModel):
     calendar = models.ForeignKey(
         Calendar, on_delete=models.CASCADE, related_name="approvers"
     )

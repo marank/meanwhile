@@ -1,10 +1,9 @@
-from core.models.base import EventStatus, ParticipantStatus, Role, default_weekend_days, new_uuid7
+from core.models.base import EventStatus, MembershipSource, ParticipantStatus, Role, default_weekend_days, new_uuid7
 from core.models.calendars import (
     Calendar,
     CalendarApprover,
     CalendarGroup,
     CalendarMember,
-    CalendarSubscription,
     OverviewSettings,
 )
 from core.models.events import (
@@ -23,6 +22,7 @@ from core.models.users import AppPassword, AppSettings, User, UserGroup, get_or_
 
 __all__ = [
     "Role",
+    "MembershipSource",
     "EventStatus",
     "ParticipantStatus",
     "new_uuid7",
@@ -35,7 +35,6 @@ __all__ = [
     "Folder",
     "Calendar",
     "CalendarMember",
-    "CalendarSubscription",
     "CalendarGroup",
     "CalendarApprover",
     "OverviewSettings",

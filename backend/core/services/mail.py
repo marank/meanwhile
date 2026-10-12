@@ -1,13 +1,12 @@
 """
 Sending emails: notifications and invitations.
 
-Messages are built during the request (from the data as it is then) and go out once its
-transaction has committed, in a background thread, so a slow or unreachable mail server neither
-holds up nor fails the request. Failures are logged.
+Messages are built during the request (from the data as it is then) and go out as jobs of the task
+queue (core.tasks), which are saved along with the request's changes: a slow or unreachable mail
+server neither holds up nor fails the request, and the worker tries again until it takes them.
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from email.utils import formataddr
@@ -19,20 +18,18 @@ from django.db import transaction
 
 from core.models.users import User, get_or_create_app_settings
 from core.services.mail_texts import text
-from core.services.recurrence import make_aware, zone
+from core.services.recurrence import as_utc, zone
 
 logger = logging.getLogger(__name__)
-
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mail")
 
 
 def app_name() -> str:
     return get_or_create_app_settings().app_name or "Calendar"
 
 
-def sender(name: str | None = None) -> str:
+def sender(name: str | None = None, app: str | None = None) -> str:
     """The From address: the app's address, under the name of whoever acts, if anyone."""
-    app = app_name()
+    app = app or app_name()
     return formataddr((f"{name} ({app})" if name else app, settings.DEFAULT_FROM_EMAIL))
 
 
@@ -91,10 +88,10 @@ def _time(moment: datetime, reader: Reader) -> str:
 def format_when(start: datetime, end: datetime, all_day: bool, reader: Reader) -> str:
     """E.g. "Mon, Jan 7, 2030, 9:00 AM – 10:00 AM (Europe/Berlin)"; all-day ends are inclusive."""
     if all_day:
-        first, last = make_aware(start).date(), make_aware(end).date()
+        first, last = as_utc(start).date(), as_utc(end).date()
         return _date(first, reader) if last <= first else f"{_date(first, reader)} – {_date(last, reader)}"
     tz = zone(reader.timezone)
-    local_start, local_end = make_aware(start).astimezone(tz), make_aware(end).astimezone(tz)
+    local_start, local_end = start.astimezone(tz), end.astimezone(tz)
     begin = f"{_date(local_start.date(), reader)}, {_time(local_start, reader)}"
     if local_end.date() == local_start.date() or local_end - local_start < timedelta(0):
         finish = _time(local_end, reader)
@@ -122,9 +119,14 @@ def build_message(
     from_name: str | None = None,
     reply_to: str | None = None,
     footer: str = "footer",
+    app: str | None = None,
 ) -> EmailMultiAlternatives:
-    """A plain-text and HTML email: paragraphs, then labelled details, then links as buttons."""
-    footer = text(language, footer, app=app_name())
+    """A plain-text and HTML email: paragraphs, then labelled details, then links as buttons.
+
+    `app`: the app's name, when the caller has it already (it's looked up otherwise).
+    """
+    app = app or app_name()
+    footer = text(language, footer, app=app)
     plain = ["\n\n".join(paragraphs)]
     if details:
         plain.append("\n".join(f"{label}: {value}" for label, value in details))
@@ -152,7 +154,7 @@ def build_message(
     message = EmailMultiAlternatives(
         subject=subject,
         body="\n\n".join(plain) + "\n",
-        from_email=sender(from_name),
+        from_email=sender(from_name, app),
         to=[to],
         reply_to=[reply_to] if reply_to else None,
     )
@@ -166,9 +168,14 @@ def build_message(
 # Sending --------------------------------------------------------------------------------------
 
 
-def _send_now(messages: list[EmailMultiAlternatives]) -> None:
+def deliver(messages: list[EmailMultiAlternatives]) -> None:
+    """Hands the messages to the mail server; raises if that fails."""
+    get_connection().send_messages(messages)
+
+
+def _deliver_logging_failures(messages: list[EmailMultiAlternatives]) -> None:
     try:
-        get_connection().send_messages(messages)
+        deliver(messages)
     except Exception:
         logger.exception("Sending %d email(s) failed", len(messages))
 
@@ -178,15 +185,46 @@ def _after_commit(callback) -> None:
 
 
 def send(messages) -> None:
-    """Sends the messages once the current transaction has committed; not at all if it fails."""
+    """Sends the messages if the current transaction commits.
+
+    With EMAIL_SEND_IN_BACKGROUND, each becomes a job of the task queue, saved in the transaction;
+    otherwise they go out right after it, and a failure is only logged.
+    """
     messages = [m for m in messages if m is not None]
     if not messages:
         return
+    if settings.EMAIL_SEND_IN_BACKGROUND:
+        from core.tasks import send_email  # core.tasks uses this module
 
-    def dispatch():
-        if settings.EMAIL_SEND_IN_BACKGROUND:
-            _executor.submit(_send_now, messages)
-        else:
-            _send_now(messages)
+        for message in messages:
+            send_email.defer(message=message_data(message))
+    else:
+        _after_commit(lambda: _deliver_logging_failures(messages))
 
-    _after_commit(dispatch)
+
+def message_data(message: EmailMultiAlternatives) -> dict:
+    """The message as JSON, for a job of the task queue; message_from_data() reads it."""
+    return {
+        "subject": message.subject,
+        "body": message.body,
+        "from_email": message.from_email,
+        "to": message.to,
+        "reply_to": message.reply_to,
+        "alternatives": [[content, mimetype] for content, mimetype in message.alternatives],
+        "attachments": [[name, content, mimetype] for name, content, mimetype in message.attachments],
+    }
+
+
+def message_from_data(data: dict) -> EmailMultiAlternatives:
+    message = EmailMultiAlternatives(
+        subject=data["subject"],
+        body=data["body"],
+        from_email=data["from_email"],
+        to=data["to"],
+        reply_to=data["reply_to"],
+    )
+    for content, mimetype in data["alternatives"]:
+        message.attach_alternative(content, mimetype)
+    for name, content, mimetype in data["attachments"]:
+        message.attach(name, content, mimetype)
+    return message

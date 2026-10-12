@@ -17,8 +17,6 @@ class HeadlessAdapter(DefaultHeadlessAdapter):
             "email": user.email,
             "display_name": user.display_name,
             "is_admin": user.is_admin,
-            "is_staff": user.is_staff,
-            "is_superuser": user.is_superuser,
             "is_active": user.is_active,
             "time_format": user.time_format,
             "date_format": user.date_format,

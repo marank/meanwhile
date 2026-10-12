@@ -159,8 +159,9 @@ const de: MessageSchema = {
     removeFavicon: 'Favicon entfernen',
     role: 'Rolle',
     admin: 'Admin',
-    staff: 'Mitarbeiter',
-    superuser: 'Superuser',
+    adminDescription: 'Darf Benutzer, Gruppen und die Einstellungen der App verwalten.',
+    activeDescription:
+      'Inaktive Benutzer können sich nicht anmelden, weder in der App noch per CalDAV, und bekommen keine E-Mails.',
     addUser: 'Benutzer hinzufügen',
     editUser: 'Benutzer bearbeiten',
     noUsers: 'Noch keine Benutzer vorhanden.',

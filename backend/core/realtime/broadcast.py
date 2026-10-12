@@ -9,6 +9,7 @@ events) are sent once.
 """
 
 import logging
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import transaction
@@ -43,16 +44,24 @@ def calendars_changed(user_ids) -> None:
             _queue(user_group(user_id), {"type": "calendars.changed"})
 
 
+def reminders_due(user_id, reminders: list[dict]) -> None:
+    """Reminders of the user came due: their tabs show them."""
+    if user_id and reminders:
+        _queue(user_group(user_id), {"type": "reminders.due", "reminders": reminders})
+
+
 def _queue(group: str, message: dict) -> None:
+    # Kept by group and type: one message of each kind per transaction, none taking another's place.
+    key = (group, message["type"])
     connection = transaction.get_connection()
     if not connection.in_atomic_block:
-        _send({group: message})
+        _send({key: message})
         return
     # One batch per transaction, sent once it commits. A batch whose callback Django dropped
     # (its savepoint was rolled back) is replaced, so later changes still go out.
     batch = getattr(connection, "_live_updates", None)
     if batch is None or not any(entry[1] is batch["flush"] for entry in connection.run_on_commit):
-        messages: dict[str, dict] = {}
+        messages: dict[tuple[str, str], dict] = {}
 
         def flush() -> None:
             connection._live_updates = None
@@ -60,14 +69,14 @@ def _queue(group: str, message: dict) -> None:
 
         batch = connection._live_updates = {"messages": messages, "flush": flush}
         transaction.on_commit(flush, robust=True)
-    batch["messages"][group] = message
+    batch["messages"][key] = message
 
 
-def _send(messages: dict[str, dict]) -> None:
+def _send(messages: dict[tuple[str, str], dict]) -> None:
     layer = get_channel_layer()
     if layer is None:
         return
-    for group, message in messages.items():
+    for (group, _), message in messages.items():
         try:
             async_to_sync(layer.group_send)(group, message)
         except Exception:

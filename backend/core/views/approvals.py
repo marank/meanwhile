@@ -2,13 +2,13 @@
 Approval workflow endpoints.
 """
 
-from datetime import datetime, timezone
 
+from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
+from ninja import Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
 from core.models import Event
 from core.models.base import EventStatus, Role
 from core.schemas import ApprovalAction, ApprovalOut, ApproverOut
@@ -24,9 +24,9 @@ from core.services.bookings import (
 from core.services.itip import send_cancel, send_request
 from core.services.notifications import notify
 from core.services.permissions import get_membership, has_at_least_role
-from core.services.recurrence import make_aware
+from core.views.common import serialize_event
 
-router = CSRFRouter()
+router = Router()
 
 
 def _approval_recipients(event: Event):
@@ -35,42 +35,8 @@ def _approval_recipients(event: Event):
     return recipients
 
 
-def _serialize_event(event: Event) -> dict:
-    return {
-        "id": event.id,
-        "calendar_id": str(event.calendar_id),
-        "creator_id": str(event.creator_id),
-        "creator_name": event.creator_name,
-        "creator_email": event.creator_email,
-        "title": event.title,
-        "description": event.description,
-        "start": make_aware(event.start),
-        "end": make_aware(event.end),
-        "all_day": event.all_day,
-        "timezone": event.timezone,
-        "show_recurrence_count": event.show_recurrence_count,
-        "rrule": event.rrule,
-        "uid": event.uid,
-        "category_id": str(event.category_id) if event.category_id else None,
-        "category_name": event.category.name if event.category else None,
-        "category_color": event.category.color if event.category else None,
-        "resource_id": str(event.resource_id) if event.resource_id else None,
-        "resource_name": event.resource.name if event.resource else None,
-        "location": event.location,
-        "location_resource_id": str(event.location_resource_id) if event.location_resource_id else None,
-        "location_resource_name": event.location_resource.name if event.location_resource else None,
-        "status": event.status,
-        "awaiting_approval": [r.name for r in awaiting_resources(event)],
-        "decided_by": str(event.decided_by_id) if event.decided_by_id else None,
-        "decided_at": event.decided_at,
-        "decision_note": event.decision_note,
-        "created_at": event.created_at,
-        "updated_at": event.updated_at,
-    }
-
-
 def _serialize_approval(event: Event) -> dict:
-    data = _serialize_event(event)
+    data = serialize_event(event)
     data["approver_pool"] = [
         ApproverOut(
             user_id=str(a.id),
@@ -82,7 +48,7 @@ def _serialize_approval(event: Event) -> dict:
     return data
 
 
-@router.get("/approvals", response=list[ApprovalOut], auth=django_auth)
+@router.get("/approvals", response=list[ApprovalOut])
 def list_pending_approvals(request):
     user = request.user
     pending = (
@@ -99,17 +65,15 @@ def list_pending_approvals(request):
     )
     result = []
     for event in pending:
-        if is_in_approver_pool(event, user=user):
+        if is_in_approver_pool(event, user.id):
             result.append(ApprovalOut.model_validate(_serialize_approval(event)))
     return result
 
 
-@router.post("/events/{event_id}/approve", response=ApprovalOut, auth=django_auth)
+@router.post("/events/{event_id}/approve", response=ApprovalOut)
+@transaction.atomic
 def approve_event(request, event_id: str, payload: ApprovalAction):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
+    event = Event.objects.get(id=event_id)
     if event.status != EventStatus.PENDING:
         raise HttpError(400, "Event is not pending")
     membership = get_membership(event.calendar, request.user)
@@ -140,7 +104,7 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
     previous_status = event.status
     event.awaiting_approval = remaining
     event.decided_by = request.user
-    event.decided_at = datetime.now(timezone.utc)
+    event.decided_at = timezone.now()
     event.decision_note = payload.note
     if not remaining:
         event.status = EventStatus.APPROVED
@@ -169,7 +133,9 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
 def _decide_changed_occurrences(series: Event, previous_status: str, decided_ids: set[str] | None = None) -> None:
     # Changed occurrences that shared the series' status follow its decision.
     for occurrence in series.overrides.filter(status=previous_status):
-        awaiting = [i for i in occurrence.awaiting_approval or [] if decided_ids is not None and str(i) not in decided_ids]
+        awaiting = [
+            i for i in occurrence.awaiting_approval or [] if decided_ids is not None and str(i) not in decided_ids
+        ]
         if decided_ids is not None and awaiting:
             occurrence.awaiting_approval = awaiting
         else:
@@ -181,24 +147,22 @@ def _decide_changed_occurrences(series: Event, previous_status: str, decided_ids
         occurrence.save()
 
 
-@router.post("/events/{event_id}/reject", response=ApprovalOut, auth=django_auth)
+@router.post("/events/{event_id}/reject", response=ApprovalOut)
+@transaction.atomic
 def reject_event(request, event_id: str, payload: ApprovalAction):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
+    event = Event.objects.get(id=event_id)
     if event.status != EventStatus.PENDING:
         raise HttpError(400, "Event is not pending")
     if get_membership(event.calendar, request.user) is None:
         raise HttpError(403, "Not a member of this calendar")
-    if not is_in_approver_pool(event, user=request.user):
+    if not is_in_approver_pool(event, request.user.id):
         raise HttpError(403, "You cannot reject this booking")
 
     previous_status = event.status
     event.status = EventStatus.REJECTED
     event.awaiting_approval = []
     event.decided_by = request.user
-    event.decided_at = datetime.now(timezone.utc)
+    event.decided_at = timezone.now()
     event.decision_note = payload.note
     event.save()
     _decide_changed_occurrences(event, previous_status)
@@ -221,16 +185,14 @@ def reject_event(request, event_id: str, payload: ApprovalAction):
     return ApprovalOut.model_validate(_serialize_approval(event))
 
 
-@router.post("/events/{event_id}/cancel", response=ApprovalOut, auth=django_auth)
+@router.post("/events/{event_id}/cancel", response=ApprovalOut)
+@transaction.atomic
 def cancel_event(request, event_id: str):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
+    event = Event.objects.get(id=event_id)
     membership = get_membership(event.calendar, request.user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
-    if str(event.creator_id) != str(request.user.id) and not has_at_least_role(membership, Role.FULL):
+    if event.creator_id != request.user.id and not has_at_least_role(membership, Role.FULL):
         raise HttpError(403, "You cannot cancel this event")
 
     had_booking = (
@@ -241,7 +203,7 @@ def cancel_event(request, event_id: str):
     event.status = EventStatus.CANCELLED
     event.awaiting_approval = []
     event.decided_by = request.user
-    event.decided_at = datetime.now(timezone.utc)
+    event.decided_at = timezone.now()
     event.save()
     _decide_changed_occurrences(event, previous_status)
     send_cancel(event)

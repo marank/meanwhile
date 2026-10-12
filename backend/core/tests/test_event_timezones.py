@@ -6,7 +6,7 @@ import pytest
 
 from core.models import Event
 from core.services.ical import serialize_event_ical
-from core.tests.test_approval_workflow import Api, make_user
+from core.tests.helpers import Api, make_user
 
 pytestmark = pytest.mark.django_db
 

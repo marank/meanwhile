@@ -1,19 +1,20 @@
 """
 Top-level Django Ninja API.
 
-CSRF protection is handled automatically by the `django_auth` session-cookie
-authentication class used on all protected endpoints.
+Endpoints need a signed-in user (the session cookie, `django_auth`) unless they say `auth=None`;
+with the session comes Ninja's CSRF check.
 """
 
-from ninja import NinjaAPI, Router
+from django.apps import apps
+from django.core.exceptions import ObjectDoesNotExist
+from ninja import NinjaAPI
 from ninja.errors import HttpError
-
-
-CSRFRouter = Router
+from ninja.security import django_auth
 
 api = NinjaAPI(
     title="Calendar API",
     version="0.1.0",
+    auth=django_auth,
 )
 
 
@@ -23,6 +24,15 @@ def http_error(request, exc: HttpError):
     # booking conflicts ({"message": ..., "conflicts": [...]}); pass those through as-is.
     detail = exc.message if isinstance(exc.message, (dict, list)) else str(exc)
     return api.create_response(request, {"detail": detail}, status=exc.status_code)
+
+
+@api.exception_handler(ObjectDoesNotExist)
+def not_found(request, exc: ObjectDoesNotExist):
+    # An id in the path or payload that names nothing, e.g. Calendar.objects.get(id=calendar_id).
+    model = next((m for m in apps.get_models() if type(exc) is m.DoesNotExist), None)
+    name = model._meta.verbose_name.capitalize() if model else "Object"
+    return api.create_response(request, {"detail": f"{name} not found"}, status=404)
+
 
 # Register routers
 from core.views import (  # noqa: E402
@@ -34,12 +44,12 @@ from core.views import (  # noqa: E402
     comments,
     events,
     groups,
+    layout,
     misc,
     notifications,
     resources,
-    search,
-    layout,
     rsvp,
+    search,
     users,
 )
 

@@ -2,13 +2,11 @@
 Global search endpoint.
 """
 
+from ninja import Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
-from core.models import Calendar
 from core.schemas import SearchResult
-from core.services.permissions import get_membership
+from core.services.permissions import get_member_calendar
 from core.services.search import (
     search_calendar_members,
     search_categories,
@@ -17,10 +15,10 @@ from core.services.search import (
     search_users,
 )
 
-router = CSRFRouter()
+router = Router()
 
 
-@router.get("/search", response=list[SearchResult], auth=django_auth)
+@router.get("/search", response=list[SearchResult])
 def search(
     request,
     entity: str,
@@ -35,9 +33,7 @@ def search(
     if entity in {"resources", "locations", "categories", "members"}:
         if calendar_id is None:
             raise HttpError(422, "calendar_id is required for this entity")
-        calendar = Calendar.objects.get(id=calendar_id)
-        if get_membership(calendar, request.user) is None and not calendar.is_public:
-            raise HttpError(403, "Not a member of this calendar")
+        get_member_calendar(calendar_id, request.user)
         if entity in {"resources", "locations"}:
             # "locations": the resources offered in an event's location field; "resources" the others.
             return search_resources(calendar_id, q, limit, locations=entity == "locations")

@@ -4,11 +4,11 @@ email to the event's organizer address. Sent through the configured mail server 
 from where `fetch_imip` picks it up; or applied right away with `--process`.
 """
 
-from datetime import datetime, timezone
 
 import icalendar
 from django.core.mail import EmailMessage
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from core.models import EventParticipant
 from core.services.ical import PARTSTAT, new_calendar, organizer_address, to_ical
@@ -19,7 +19,7 @@ def reply_email(participant: EventParticipant, status: str) -> EmailMessage:
     series = series_of(participant.event)
     vevent = icalendar.Event()
     vevent.add("uid", series.uid)
-    vevent.add("dtstamp", datetime.now(timezone.utc))
+    vevent.add("dtstamp", timezone.now())
     vevent.add("sequence", series.sequence)
     vevent.add("summary", series.title)
     vevent.add("dtstart", series.start)

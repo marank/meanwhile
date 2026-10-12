@@ -3,18 +3,19 @@ Health and public settings endpoints.
 """
 
 
-from core.api import CSRFRouter
+from ninja import Router
+
 from core.models import get_or_create_app_settings
 from core.schemas import AppSettingsOut
 
-router = CSRFRouter()
+router = Router()
 
 
-@router.get("/health")
+@router.get("/health", auth=None)
 def health(request):
     return {"status": "ok"}
 
 
-@router.get("/settings", response=AppSettingsOut)
+@router.get("/settings", response=AppSettingsOut, auth=None)
 def public_settings(request):
     return get_or_create_app_settings()

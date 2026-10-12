@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from core.models import CalendarGroup, UserGroup
-from core.tests.test_approval_workflow import BASE, iso, world  # noqa: F401
+from core.tests.helpers import BASE, iso
 
 pytestmark = pytest.mark.django_db
 

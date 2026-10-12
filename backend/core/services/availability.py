@@ -7,7 +7,7 @@ from datetime import datetime
 from django.db.models import Q
 
 from core.models import Event, EventParticipant, Resource, User
-from core.models.base import EventStatus
+from core.models.base import EventStatus, ParticipantStatus
 from core.services.recurrence import expand_events
 
 _TAKEN = {EventStatus.CONFIRMED, EventStatus.APPROVED}
@@ -71,16 +71,20 @@ def user_periods(user: User, start: datetime, end: datetime, exclude_event_id: s
     occurrences = [
         (event, begin, finish)
         for event, begin, finish in expand_events(events, start, end)
-        if answers.get(event.id) != "declined"
+        if answers.get(event.id) != ParticipantStatus.DECLINED
     ]
 
+    unsure = {ParticipantStatus.NEEDS_ACTION, ParticipantStatus.TENTATIVE}
+
     def tentative(event: Event) -> bool:
-        return event.status == EventStatus.PENDING or answers.get(event.id) in {"needs_action", "tentative"}
+        return event.status == EventStatus.PENDING or answers.get(event.id) in unsure
 
     return _periods(occurrences, start, end, tentative)
 
 
-def resource_periods(resource: Resource, start: datetime, end: datetime, exclude_event_id: str | None = None) -> list[dict]:
+def resource_periods(
+    resource: Resource, start: datetime, end: datetime, exclude_event_id: str | None = None
+) -> list[dict]:
     """When the resource is booked; bookings awaiting approval count as tentative."""
     events = _overlapping(
         Event.objects.filter(

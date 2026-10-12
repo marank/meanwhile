@@ -1,6 +1,6 @@
 import pytest
 
-from core.tests.test_approval_workflow import Api, make_user
+from core.tests.helpers import Api, make_user
 
 pytestmark = pytest.mark.django_db
 

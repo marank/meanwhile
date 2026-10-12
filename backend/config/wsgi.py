@@ -14,6 +14,7 @@ django_application = get_wsgi_application()
 
 # Import after Django apps are configured so settings/ORM access is safe.
 from django.conf import settings  # noqa: E402
+
 from core.caldav.app import create_application  # noqa: E402
 
 radicale_application = create_application()

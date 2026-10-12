@@ -4,11 +4,10 @@ Calendar resource endpoints.
 
 from django.db import transaction
 from django.utils import timezone
-from ninja.errors import HttpError
-from ninja.security import django_auth
+from ninja import Router
 
-from core.api import CSRFRouter
-from core.models import Calendar, Resource, ResourceApprover
+from core.models import Resource, ResourceApprover
+from core.models.base import Role
 from core.schemas import (
     ApproverOut,
     ApproversIn,
@@ -16,24 +15,15 @@ from core.schemas import (
     ResourceOut,
     ResourceUpdate,
 )
-from core.models.base import Role
-from core.services.permissions import get_membership, has_at_least_role
+from core.services.permissions import get_member_calendar
 from core.views.common import approvers_of, replace_approvers
 
-router = CSRFRouter()
+router = Router()
 
 
-def _require_full_access(user, calendar: Calendar):
-    membership = get_membership(calendar, user)
-    if membership is None or not has_at_least_role(membership, Role.FULL):
-        raise HttpError(403, "Full access required")
-
-
-@router.get("/calendars/{calendar_id}/resources", response=list[ResourceOut], auth=django_auth)
+@router.get("/calendars/{calendar_id}/resources", response=list[ResourceOut])
 def list_resources(request, calendar_id: str):
-    calendar = Calendar.objects.get(id=calendar_id)
-    if get_membership(calendar, request.user) is None and not calendar.is_public:
-        raise HttpError(403, "Not a member of this calendar")
+    calendar, _ = get_member_calendar(calendar_id, request.user)
     return (
         Resource.objects.filter(calendar=calendar, archived_at__isnull=True)
         .prefetch_related("approvers__user")
@@ -41,11 +31,10 @@ def list_resources(request, calendar_id: str):
     )
 
 
-@router.post("/calendars/{calendar_id}/resources", response=ResourceOut, auth=django_auth)
+@router.post("/calendars/{calendar_id}/resources", response=ResourceOut)
 @transaction.atomic
 def create_resource(request, calendar_id: str, payload: ResourceCreate):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.create(
         calendar=calendar,
         name=payload.name,
@@ -59,11 +48,10 @@ def create_resource(request, calendar_id: str, payload: ResourceCreate):
     return resource
 
 
-@router.patch("/calendars/{calendar_id}/resources/{resource_id}", response=ResourceOut, auth=django_auth)
+@router.patch("/calendars/{calendar_id}/resources/{resource_id}", response=ResourceOut)
 @transaction.atomic
 def update_resource(request, calendar_id: str, resource_id: str, payload: ResourceUpdate):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     data = payload.dict(exclude_unset=True)
     for attr, value in data.items():
@@ -72,10 +60,9 @@ def update_resource(request, calendar_id: str, resource_id: str, payload: Resour
     return resource
 
 
-@router.delete("/calendars/{calendar_id}/resources/{resource_id}", auth=django_auth)
+@router.delete("/calendars/{calendar_id}/resources/{resource_id}")
 def delete_resource(request, calendar_id: str, resource_id: str):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     # Archive instead of deleting so existing bookings keep their resource.
     Resource.objects.filter(id=resource_id, calendar=calendar).update(archived_at=timezone.now())
     return {"ok": True}
@@ -84,11 +71,9 @@ def delete_resource(request, calendar_id: str, resource_id: str):
 @router.get(
     "/calendars/{calendar_id}/resources/{resource_id}/approvers",
     response=list[ApproverOut],
-    auth=django_auth,
 )
 def list_resource_approvers(request, calendar_id: str, resource_id: str):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     return approvers_of(ResourceApprover, resource=resource)
 
@@ -96,13 +81,11 @@ def list_resource_approvers(request, calendar_id: str, resource_id: str):
 @router.put(
     "/calendars/{calendar_id}/resources/{resource_id}/approvers",
     response=list[ApproverOut],
-    auth=django_auth,
 )
 @transaction.atomic
 def set_resource_approvers(request, calendar_id: str, resource_id: str, payload: ApproversIn):
     """Sets the resource's own approvers; without any, the calendar's default approvers decide."""
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     replace_approvers(ResourceApprover, "resource", resource, calendar.id, payload.user_ids)
     return approvers_of(ResourceApprover, resource=resource)

@@ -25,8 +25,6 @@ export interface User {
   email: string
   display_name: string
   is_admin: boolean
-  is_staff: boolean
-  is_superuser: boolean
   is_active: boolean
   time_format: 'auto' | '24h' | '12h'
   date_format: 'auto' | 'dmy' | 'mdy' | 'ymd'
@@ -86,8 +84,6 @@ export interface AdminUser {
   email: string
   display_name: string
   is_admin: boolean
-  is_staff: boolean
-  is_superuser: boolean
   is_active: boolean
   groups: UserGroup[]
   created_at: string
@@ -99,8 +95,6 @@ export interface AdminUserCreate {
   display_name: string
   password: string
   is_admin?: boolean
-  is_staff?: boolean
-  is_superuser?: boolean
   is_active?: boolean
   group_ids?: string[]
 }
@@ -110,8 +104,6 @@ export interface AdminUserUpdate {
   display_name?: string
   password?: string
   is_admin?: boolean
-  is_staff?: boolean
-  is_superuser?: boolean
   is_active?: boolean
   group_ids?: string[]
 }

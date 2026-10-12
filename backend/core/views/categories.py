@@ -2,36 +2,26 @@
 Calendar category endpoints.
 """
 
-from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
-from core.models import Calendar, Category
-from core.schemas import CategoryCreate, CategoryOut, CategoryUpdate
-from core.services.permissions import get_membership, has_at_least_role
+from ninja import Router
+
+from core.models import Category
 from core.models.base import Role
+from core.schemas import CategoryCreate, CategoryOut, CategoryUpdate
+from core.services.permissions import get_member_calendar
 
-router = CSRFRouter()
-
-
-def _require_full_access(user, calendar: Calendar):
-    membership = get_membership(calendar, user)
-    if membership is None or not has_at_least_role(membership, Role.FULL):
-        raise HttpError(403, "Full access required")
+router = Router()
 
 
-@router.get("/calendars/{calendar_id}/categories", response=list[CategoryOut], auth=django_auth)
+@router.get("/calendars/{calendar_id}/categories", response=list[CategoryOut])
 def list_categories(request, calendar_id: str):
-    calendar = Calendar.objects.get(id=calendar_id)
-    if get_membership(calendar, request.user) is None and not calendar.is_public:
-        raise HttpError(403, "Not a member of this calendar")
+    calendar, _ = get_member_calendar(calendar_id, request.user)
     return Category.objects.filter(calendar=calendar).order_by("name")
 
 
-@router.post("/calendars/{calendar_id}/categories", response=CategoryOut, auth=django_auth)
+@router.post("/calendars/{calendar_id}/categories", response=CategoryOut)
 def create_category(request, calendar_id: str, payload: CategoryCreate):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     return Category.objects.create(
         calendar=calendar,
         name=payload.name,
@@ -40,10 +30,9 @@ def create_category(request, calendar_id: str, payload: CategoryCreate):
     )
 
 
-@router.patch("/calendars/{calendar_id}/categories/{category_id}", response=CategoryOut, auth=django_auth)
+@router.patch("/calendars/{calendar_id}/categories/{category_id}", response=CategoryOut)
 def update_category(request, calendar_id: str, category_id: str, payload: CategoryUpdate):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     category = Category.objects.get(id=category_id, calendar=calendar)
     for attr, value in payload.dict(exclude_unset=True).items():
         setattr(category, attr, value)
@@ -51,9 +40,8 @@ def update_category(request, calendar_id: str, category_id: str, payload: Catego
     return category
 
 
-@router.delete("/calendars/{calendar_id}/categories/{category_id}", auth=django_auth)
+@router.delete("/calendars/{calendar_id}/categories/{category_id}")
 def delete_category(request, calendar_id: str, category_id: str):
-    calendar = Calendar.objects.get(id=calendar_id)
-    _require_full_access(request.user, calendar)
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     Category.objects.filter(id=category_id, calendar=calendar).delete()
     return {"ok": True}

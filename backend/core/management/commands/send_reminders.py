@@ -1,6 +1,5 @@
 """
-Delivers due event reminders; run it every minute (cron, systemd timer) so that reminders also go
-out while nobody has the app open.
+Delivers due event reminders once, as the worker does every 30 seconds (core.tasks).
 """
 
 from django.core.management.base import BaseCommand

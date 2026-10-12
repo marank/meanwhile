@@ -2,7 +2,7 @@
 Reading events from the iCalendar objects CalDAV clients send.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import vobject
 
@@ -19,13 +19,13 @@ PARTSTATS = {
 }
 
 
-def to_utc(dt: datetime | date, naive_zone=timezone.utc) -> datetime:
+def to_utc(dt: datetime | date, naive_zone=UTC) -> datetime:
     """A date or date-time in UTC; date-times without a zone are taken to be in `naive_zone`."""
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=naive_zone)
-        return dt.astimezone(timezone.utc)
-    return datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+        return dt.astimezone(UTC)
+    return datetime(dt.year, dt.month, dt.day, tzinfo=UTC)
 
 
 def _tzid(line) -> str | None:
@@ -130,7 +130,7 @@ def component_data(vevent, floating: str) -> dict:
 
     return {
         "title": str(vevent.summary.value)[:TITLE_MAX_LENGTH] if hasattr(vevent, "summary") else "",
-        "description": str(vevent.description.value) if hasattr(vevent, "description") else None,
+        "description": str(vevent.description.value) if hasattr(vevent, "description") else "",
         "location": str(vevent.location.value)[:TITLE_MAX_LENGTH] if hasattr(vevent, "location") else "",
         "start": start,
         "end": end,

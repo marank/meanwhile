@@ -16,11 +16,12 @@ import email
 import email.policy
 import imaplib
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from email.utils import getaddresses
 
 import icalendar
 from django.conf import settings
+from django.utils import timezone
 
 from core.models import Event, EventParticipant
 from core.models.base import EventStatus
@@ -28,7 +29,7 @@ from core.services import mail
 from core.services.ical import PARTSTAT, SCHEDULING, build_series_ical, new_calendar, to_ical
 from core.services.mail_texts import text
 from core.services.notifications import notify, wants_email
-from core.services.recurrence import make_aware
+from core.services.recurrence import as_utc
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ def cancel_ical(series: Event, participants: list[EventParticipant], sequence: i
         vevent.pop(name, None)
     vevent.add("status", "CANCELLED")
     vevent.add("sequence", sequence)
-    vevent.add("dtstamp", datetime.now(timezone.utc))
+    vevent.add("dtstamp", timezone.now())
     for participant in participants:
         vevent.add("attendee", icalendar.vCalAddress(f"mailto:{participant.email}"))
     cal = new_calendar("CANCEL")
@@ -219,7 +220,7 @@ def _reply(vevent, sender: str | None) -> list[str]:
     occurrence = None
     if rid is not None:
         value = rid.dt
-        occurrence = make_aware(value if isinstance(value, datetime) else datetime(value.year, value.month, value.day))
+        occurrence = as_utc(value if isinstance(value, datetime) else datetime(value.year, value.month, value.day))
     results = []
     for attendee in _as_list(vevent.get("ATTENDEE")):
         address = _address(attendee)

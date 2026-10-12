@@ -2,20 +2,18 @@
 Notification endpoints.
 """
 
-from datetime import datetime, timezone
 
-from ninja.errors import HttpError
-from ninja.security import django_auth
-
-from core.api import CSRFRouter
 from django.db.models import Q
+from django.utils import timezone
+from ninja import Router
+from ninja.errors import HttpError
 
 from core.models import EventParticipant, Notification
-from core.models.base import EventStatus
+from core.models.base import EventStatus, ParticipantStatus
 from core.realtime import broadcast
 from core.schemas import NotificationOut
 
-router = CSRFRouter()
+router = Router()
 
 APPROVAL_TYPES = {"approval_requested", "booking_approved", "booking_rejected", "booking_cancelled"}
 INVITATION_TYPES = {"participant_added"}
@@ -54,7 +52,7 @@ def _serialize(notification: Notification, responses: dict[str, str] | None = No
     }
 
 
-@router.get("/notifications", response=list[NotificationOut], auth=django_auth)
+@router.get("/notifications", response=list[NotificationOut])
 def list_notifications(request, limit: int = 50, group: str | None = None):
     query = Notification.objects.filter(user=request.user)
     if group is not None:
@@ -66,7 +64,7 @@ def list_notifications(request, limit: int = 50, group: str | None = None):
     return [_serialize(n, responses) for n in notifications]
 
 
-@router.get("/notifications/counts", auth=django_auth)
+@router.get("/notifications/counts")
 def counts(request):
     """The numbers the app shows as badges: unread notifications, and requests still waiting for this user
     (pending approvals and unanswered invitations)."""
@@ -80,7 +78,7 @@ def counts(request):
         .count()
     )
     invitations = (
-        EventParticipant.objects.filter(status="needs_action")
+        EventParticipant.objects.filter(status=ParticipantStatus.NEEDS_ACTION)
         .filter(Q(user=request.user) | Q(email__iexact=request.user.email))
         .exclude(event__creator=request.user)
         .count()
@@ -88,32 +86,26 @@ def counts(request):
     return {"unread": unread, "approvals": approvals, "invitations": invitations}
 
 
-@router.post("/notifications/read-all", auth=django_auth)
+@router.post("/notifications/read-all")
 def mark_all_read(request):
-    now = datetime.now(timezone.utc)
+    now = timezone.now()
     Notification.objects.filter(user=request.user, read_at__isnull=True).update(read_at=now)
     # The bulk update sends no signal; the user's other tabs update their count.
     broadcast.notifications_changed(request.user.id)
     return {"ok": True}
 
 
-@router.post("/notifications/{notification_id}/read", response=NotificationOut, auth=django_auth)
+@router.post("/notifications/{notification_id}/read", response=NotificationOut)
 def mark_read(request, notification_id: str):
-    try:
-        notification = Notification.objects.get(id=notification_id, user=request.user)
-    except Notification.DoesNotExist:
-        raise HttpError(404, "Notification not found")
-    notification.read_at = datetime.now(timezone.utc)
+    notification = Notification.objects.get(id=notification_id, user=request.user)
+    notification.read_at = timezone.now()
     notification.save()
     return _serialize(notification)
 
 
-@router.delete("/notifications/{notification_id}", auth=django_auth)
+@router.delete("/notifications/{notification_id}")
 def delete_notification(request, notification_id: str):
-    try:
-        notification = Notification.objects.get(id=notification_id, user=request.user)
-    except Notification.DoesNotExist:
-        raise HttpError(404, "Notification not found")
+    notification = Notification.objects.get(id=notification_id, user=request.user)
     if notification.type in UNDELETABLE_TYPES:
         raise HttpError(400, "This notification cannot be deleted")
     notification.delete()

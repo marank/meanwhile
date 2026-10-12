@@ -5,28 +5,36 @@ Radicale storage plugin backed by the Django ORM.
 import contextlib
 import errno
 import hashlib
-from contextvars import ContextVar
 import json
 import re
-from datetime import datetime, timedelta, timezone
-
-from django.db import connection, transaction
-from django.db.models import Max, Prefetch, Q
+from contextvars import ContextVar
+from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
+
+from django.db import transaction
+from django.db.models import Max, Prefetch, Q
+from django.utils import timezone
 from radicale import item as radicale_item
 from radicale import pathutils, storage
 
 from core.caldav.parsing import parse_series, to_utc
+from core.caldav.request import once_per_request
 from core.models import Calendar, Category, DeletedEvent, Event, EventParticipant, EventReminder, User
 from core.models.base import EventStatus, Role
-from core.services.bookings import booked_resources, can_modify_event, find_booking_conflicts
-from core.services.calendars import create_calendar
-from core.services.ical import event_ical_text
-from core.services.permissions import accessible_calendars, get_membership, has_at_least_role, sidebar_calendars
 from core.realtime import broadcast
 from core.services.activity import record_activity
+from core.services.bookings import booked_resources, find_booking_conflicts
+from core.services.calendars import create_calendar
+from core.services.ical import event_ical_text
 from core.services.notifications import notify
-from core.services.recurrence import format_exdate, is_series, make_aware, parse_exdates
+from core.services.permissions import (
+    accessible_calendars,
+    can_modify_event,
+    get_membership,
+    has_at_least_role,
+    sidebar_calendars,
+)
+from core.services.recurrence import format_exdate, is_series, parse_exdates
 from core.signals import DELETED_EVENT_RETENTION
 
 # CalDAV only knows the calendar, not who is asking, so it shares what everyone may see,
@@ -63,9 +71,9 @@ def _forbidden(message: str) -> Forbidden:
 
 def _http_datetime(dt: datetime | None) -> str:
     if dt is None:
-        return format_datetime(datetime.now(timezone.utc))
+        return format_datetime(timezone.now())
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return format_datetime(dt)
 
 
@@ -81,8 +89,8 @@ def _fields(event: Event) -> dict:
     return {
         "title": event.title,
         "description": event.description,
-        "start": make_aware(event.start),
-        "end": make_aware(event.end),
+        "start": event.start,
+        "end": event.end,
         "all_day": event.all_day,
         "rrule": event.rrule,
         "location": event.location,
@@ -90,12 +98,12 @@ def _fields(event: Event) -> dict:
     }
 
 
-def _href(event: Event) -> str:
-    return event.href or f"{event.uid}.ics"
-
-
 def _dav_name(calendar: Calendar) -> str:
     return calendar.dav_name or calendar.id
+
+
+def user_by_email(email: str) -> User | None:
+    return once_per_request(("user", email.lower()), lambda: User.objects.filter(email__iexact=email).first())
 
 
 def calendar_by_dav_name(calendars, name: str) -> Calendar | None:
@@ -117,6 +125,13 @@ class Collection(storage.BaseCollection):
         self._calendar = calendar
         self._user = user
         self._is_principal = is_principal
+        # Radicale asks for both several times per request (e.g. a PROPFIND lists all items three times).
+        self._state_cache: tuple[int, str] | None = None
+        self._items_cache: list[radicale_item.Item] | None = None
+
+    def _forget(self) -> None:
+        """After a write, the collection is read afresh."""
+        self._state_cache = self._items_cache = None
 
     @property
     def path(self) -> str:
@@ -128,6 +143,11 @@ class Collection(storage.BaseCollection):
 
     def _state(self) -> tuple[int, str]:
         """When the calendar last changed (in microseconds) and a digest of what clients see of it."""
+        if self._state_cache is None:
+            self._state_cache = self._compute_state()
+        return self._state_cache
+
+    def _compute_state(self) -> tuple[int, str]:
         digest = hashlib.sha256(json.dumps(self.get_meta(), sort_keys=True).encode())
         if self._calendar is None:
             return 0, digest.hexdigest()
@@ -192,12 +212,13 @@ class Collection(storage.BaseCollection):
             self._calendar.event_color = color
             self._calendar.dark_event_color = color
         self._calendar.save()
+        self._forget()
 
     @property
     def last_modified(self) -> str:
         if self._calendar:
             return _http_datetime(self._calendar.updated_at)
-        return _http_datetime(datetime.now(timezone.utc))
+        return _http_datetime(timezone.now())
 
     def sync(self, old_token: str = ""):
         changed_at, digest = self._state()
@@ -209,10 +230,10 @@ class Collection(storage.BaseCollection):
         # Radicale answers a ValueError with "invalid sync token", and the client syncs everything.
         try:
             since_micros = int(old_token.removeprefix(_SYNC_TOKEN_PREFIX).split("-", 1)[0])
-            since = datetime.fromtimestamp(since_micros / 1_000_000, timezone.utc)
+            since = datetime.fromtimestamp(since_micros / 1_000_000, UTC)
         except (ValueError, OverflowError, OSError) as exc:
             raise ValueError(f"Unknown sync token {old_token!r}") from exc
-        if since < datetime.now(timezone.utc) - DELETED_EVENT_RETENTION:
+        if since < timezone.now() - DELETED_EVENT_RETENTION:
             raise ValueError("Sync token is older than the record of deleted events")
         since -= _SYNC_OVERLAP
         # Events no longer shown (deleted, or bookings now pending, rejected or cancelled) are
@@ -233,19 +254,18 @@ class Collection(storage.BaseCollection):
     def _viewer(self) -> User | None:
         """The user the request runs for; each user's reminders are written as their alarms."""
         login = _acting_login.get()
-        if getattr(self, "_viewer_login", None) != login:
-            self._viewer_login = login
-            self._viewer_user = User.objects.filter(email__iexact=login).first() if login else None
-        return self._viewer_user
+        return user_by_email(login) if login else None
 
     def _events(self):
         """The calendar's series and single events, with what writing them needs."""
         viewer = self._viewer()
         return (
             Event.objects.filter(calendar=self._calendar, parent__isnull=True)
-            .select_related("calendar", "category", "resource", "location_resource", "creator")
+            .select_related("category", "resource", "location_resource", "creator")
             .prefetch_related(
-                Prefetch("overrides", queryset=Event.objects.select_related("category", "resource", "location_resource")),
+                Prefetch(
+                    "overrides", queryset=Event.objects.select_related("category", "resource", "location_resource")
+                ),
                 "participants__user",
                 "overrides__participants__user",
                 Prefetch(
@@ -257,9 +277,11 @@ class Collection(storage.BaseCollection):
         )
 
     def _item(self, event: Event) -> radicale_item.Item:
+        # One calendar object for all items, so that what is looked up of it is looked up once.
+        event.calendar = self._calendar
         return radicale_item.Item(
             text=event_ical_text(event, self._viewer()),
-            href=_href(event),
+            href=event.dav_href,
             last_modified=_http_datetime(event.updated_at),
             collection=self,
         )
@@ -272,14 +294,14 @@ class Collection(storage.BaseCollection):
         )
         if shared_only:
             events = events.filter(status__in=_SHARED_STATUSES)
-        return {_href(e): e for e in events}
+        return {e.dav_href: e for e in events}
 
     def get_all(self):
         if self._calendar is None:
             return []
-        events = self._events().filter(status__in=_SHARED_STATUSES)
-        for event in events:
-            yield self._item(event)
+        if self._items_cache is None:
+            self._items_cache = [self._item(e) for e in self._events().filter(status__in=_SHARED_STATUSES)]
+        return self._items_cache
 
     def get_multi(self, hrefs):
         # Radicale passes a generator, and the hrefs are read twice below.
@@ -295,9 +317,8 @@ class Collection(storage.BaseCollection):
 
     def _actor(self) -> tuple[User, str]:
         """The user writing to this calendar and their role; writes need at least the role "own"."""
-        login = _acting_login.get()
-        user = User.objects.filter(email__iexact=login, is_active=True).first() if login else None
-        membership = get_membership(self._calendar, user) if user else None
+        user = self._viewer()
+        membership = get_membership(self._calendar, user) if user is not None and user.is_active else None
         if membership is None or not has_at_least_role(membership, Role.OWN):
             raise _forbidden("No write access to this calendar")
         return user, membership.role
@@ -380,6 +401,7 @@ class Collection(storage.BaseCollection):
                     for start in sorted(starts):
                         record_activity(existing, str(actor.id), kind, {"occurrence": start.isoformat()})
 
+        self._forget()
         return self._item(Event.objects.get(pk=existing.pk)), old_item
 
     def _category(self, names: list[str]) -> Category | None:
@@ -408,7 +430,7 @@ class Collection(storage.BaseCollection):
 
         Returns the starts of the occurrences that were newly removed and those changed.
         """
-        current = {make_aware(o.recurrence_id): o for o in series.overrides.all()} if series.pk else {}
+        current = {o.recurrence_id: o for o in series.overrides.all()} if series.pk else {}
         old_exdates = parse_exdates(series.exdates)
         # Changes others may not see (e.g. a pending booking) are served as removed occurrences;
         # they come back as EXDATE and stay as they are.
@@ -423,12 +445,12 @@ class Collection(storage.BaseCollection):
                 override.delete()
 
         booked = booked_resources(series)
-        duration = make_aware(series.end) - make_aware(series.start)
+        duration = series.end - series.start
         changed = set()
         for rid, override_data in incoming.items():
             override = current.get(rid)
             before = (
-                (make_aware(override.start), make_aware(override.end), override.all_day)
+                (override.start, override.end, override.all_day)
                 if override
                 else (rid, rid + duration, series.all_day)
             )
@@ -511,6 +533,7 @@ class Collection(storage.BaseCollection):
         if not can_modify_event(event, str(actor.id), role):
             raise _forbidden(f"Event {href} may only be deleted by its creator or a user with full access")
         event.delete()
+        self._forget()
 
 
 class Storage(storage.BaseStorage):
@@ -520,22 +543,19 @@ class Storage(storage.BaseStorage):
         with acting_as(user):
             yield
 
-    def _user_by_email(self, email: str) -> User | None:
-        return User.objects.filter(email__iexact=email).first()
-
     def _collection_from_path(self, path: str) -> Collection | None:
         if not path or path == "/":
             return Collection(self.configuration, "/")
         parts = [p for p in path.split("/") if p]
         if len(parts) == 1:
-            user = self._user_by_email(parts[0])
+            user = user_by_email(parts[0])
             if user is None:
                 return None
             return Collection(self.configuration, path, user=user, is_principal=True)
         if len(parts) == 2:
             # Calendars are served under their owner and under every user who has access to them,
             # so each user's calendar home lists the calendars shared with them, too.
-            user = self._user_by_email(parts[0])
+            user = user_by_email(parts[0])
             if user is None:
                 return None
             calendar = calendar_by_dav_name(accessible_calendars(user), parts[1])
@@ -545,56 +565,53 @@ class Storage(storage.BaseStorage):
         return None
 
     def discover(self, path: str, depth: str = "0", child_context_manager=None, user_groups=None):
-        try:
-            path = pathutils.sanitize_path(path)
-            if not path or path == "/":
-                root = Collection(self.configuration, "/")
-                yield root
+        path = pathutils.sanitize_path(path)
+        if not path or path == "/":
+            root = Collection(self.configuration, "/")
+            yield root
+            if depth != "0":
+                owners = User.objects.filter(calendars_owned__isnull=False).distinct()
+                for user in owners:
+                    yield Collection(
+                        self.configuration,
+                        f"/{user.email}",
+                        user=user,
+                        is_principal=True,
+                    )
+            return
+
+        parts = [p for p in path.split("/") if p]
+        if len(parts) == 1:
+            coll = self._collection_from_path(path)
+            if coll is not None:
+                yield coll
+            if depth != "0" and coll is not None and coll.is_principal:
+                # The calendars of the sidebar; another public one is still found by its address.
+                for calendar in sidebar_calendars(coll._user).order_by("name"):
+                    yield Collection(
+                        self.configuration,
+                        f"/{coll._user.email}/{_dav_name(calendar)}",
+                        calendar=calendar,
+                    )
+            return
+
+        if len(parts) == 2:
+            coll = self._collection_from_path(path)
+            if coll is not None:
+                yield coll
                 if depth != "0":
-                    owners = User.objects.filter(calendars_owned__isnull=False).distinct()
-                    for user in owners:
-                        yield Collection(
-                            self.configuration,
-                            f"/{user.email}",
-                            user=user,
-                            is_principal=True,
-                        )
-                return
+                    for item in coll.get_all():
+                        yield item
+            return
 
-            parts = [p for p in path.split("/") if p]
-            if len(parts) == 1:
-                coll = self._collection_from_path(path)
-                if coll is not None:
-                    yield coll
-                if depth != "0" and coll is not None and coll.is_principal:
-                    # The calendars of the sidebar; another public one is still found by its address.
-                    for calendar in sidebar_calendars(coll._user).order_by("name"):
-                        yield Collection(
-                            self.configuration,
-                            f"/{coll._user.email}/{_dav_name(calendar)}",
-                            calendar=calendar,
-                        )
-                return
-
-            if len(parts) == 2:
-                coll = self._collection_from_path(path)
-                if coll is not None:
-                    yield coll
-                    if depth != "0":
-                        for item in coll.get_all():
-                            yield item
-                return
-
-            parent_path = "/" + "/".join(parts[:-1])
-            href = parts[-1]
-            parent = self._collection_from_path(parent_path)
-            if parent is None:
-                return
-            for _, item in parent.get_multi([href]):
-                if item is not None:
-                    yield item
-        finally:
-            connection.close()
+        parent_path = "/" + "/".join(parts[:-1])
+        href = parts[-1]
+        parent = self._collection_from_path(parent_path)
+        if parent is None:
+            return
+        for _, item in parent.get_multi([href]):
+            if item is not None:
+                yield item
 
     def create_collection(self, href: str, items=None, props=None):
         """Creates a calendar for a client (MKCALENDAR, or MKCOL from the Radicale web interface)."""
@@ -619,7 +636,7 @@ class Storage(storage.BaseStorage):
         calendar = create_calendar(
             owner,
             name=props.get("D:displayname") or parts[1],
-            description=props.get("C:calendar-description") or None,
+            description=props.get("C:calendar-description") or "",
             dav_name=parts[1],
         )
         return Collection(self.configuration, href, calendar=calendar)
@@ -646,7 +663,7 @@ class Storage(storage.BaseStorage):
             if target.force_all_day and (event.all_day is False or event.overrides.filter(all_day=False).exists()):
                 raise _forbidden(f"Calendar {target.id} only allows all-day events")
 
-        old_calendar_id, old_href = event.calendar_id, _href(event)
+        old_calendar_id, old_href = event.calendar_id, event.dav_href
         with transaction.atomic():
             replaced = to_collection._events_by_href([to_href], shared_only=False).get(to_href)
             if replaced is not None and replaced.pk != event.pk:
@@ -666,6 +683,8 @@ class Storage(storage.BaseStorage):
                 DeletedEvent.objects.create(calendar_id=old_calendar_id, href=old_href)
             # Saving tells the new calendar's readers; the old one's must hear it, too.
             broadcast.calendar_changed(old_calendar_id)
+        source._forget()
+        to_collection._forget()
 
     def verify(self) -> bool:
         return True

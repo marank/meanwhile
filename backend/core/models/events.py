@@ -5,17 +5,15 @@ Event, comment, activity, and notification models.
 import secrets
 
 from django.db import models
+from django.utils import timezone
 
-from core.models.base import EventStatus, new_uuid7, ParticipantStatus
+from core.models.base import EventStatus, ParticipantStatus, TimestampedModel, UUIDModel
 from core.models.calendars import Calendar
 from core.models.resources import Resource
 from core.models.users import User
 
 
-class Event(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class Event(UUIDModel, TimestampedModel):
     calendar = models.ForeignKey(
         Calendar, on_delete=models.CASCADE, related_name="events"
     )
@@ -23,7 +21,7 @@ class Event(models.Model):
         User, on_delete=models.CASCADE, related_name="created_events"
     )
     title = models.CharField(max_length=255, default="", blank=True)
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, default="")
     # Where the event takes place, as free text (an address, a link, ...). When a location resource
     # is booked, it is that resource's name.
     location = models.CharField(max_length=255, default="", blank=True)
@@ -34,7 +32,8 @@ class Event(models.Model):
     # local time and on the same local weekday in this zone; all-day events don't depend on it.
     timezone = models.CharField(max_length=64, default="UTC")
     show_recurrence_count = models.BooleanField(default=False)
-    rrule = models.TextField(blank=True, null=True)
+    # NULL: the event doesn't repeat by a rule (it may still have rdates).
+    rrule = models.TextField(blank=True, null=True)  # noqa: DJ001
     # Starts (UTC, ISO 8601) of occurrences removed from the series.
     exdates = models.JSONField(default=list, blank=True)
     # Starts (UTC, ISO 8601) of occurrences added to the series besides those of its rrule (RDATE).
@@ -45,9 +44,10 @@ class Event(models.Model):
     )
     recurrence_id = models.DateTimeField(blank=True, null=True)
     uid = models.CharField(max_length=255, db_index=True)
-    # Name a CalDAV client stored the event under; clients may pick it freely. Empty means "{uid}.ics".
-    href = models.CharField(max_length=255, blank=True, null=True)
-    raw_ical = models.TextField(blank=True, null=True)
+    # Name a CalDAV client stored the event under; clients may pick it freely. Empty means "{uid}.ics" (dav_href).
+    # NULL rather than "", which would collide in uq_event_calendar_href.
+    href = models.CharField(max_length=255, blank=True, null=True)  # noqa: DJ001
+    raw_ical = models.TextField(blank=True, default="")
     category = models.ForeignKey(
         "Category",
         on_delete=models.SET_NULL,
@@ -71,7 +71,7 @@ class Event(models.Model):
         null=True,
     )
     status = models.CharField(
-        max_length=20, choices=EventStatus.CHOICES, default=EventStatus.CONFIRMED
+        max_length=20, choices=EventStatus.choices, default=EventStatus.CONFIRMED
     )
     # Ids of the booked resources whose approval a pending event still waits for.
     awaiting_approval = models.JSONField(default=list, blank=True)
@@ -83,12 +83,10 @@ class Event(models.Model):
         null=True,
     )
     decided_at = models.DateTimeField(blank=True, null=True)
-    decision_note = models.TextField(blank=True, null=True)
+    decision_note = models.TextField(blank=True, default="")
     # iCalendar SEQUENCE: counts the changes participants were sent (iMIP), so their mail
     # programs replace older invitations.
     sequence = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "events"
@@ -107,6 +105,14 @@ class Event(models.Model):
             ),
         ]
 
+    def __str__(self) -> str:
+        return self.title or "Untitled event"
+
+    @property
+    def dav_href(self) -> str:
+        """The event's name in its CalDAV collection."""
+        return self.href or f"{self.uid}.ics"
+
     @property
     def creator_name(self) -> str | None:
         return self.creator.display_name if self.creator else None
@@ -114,9 +120,6 @@ class Event(models.Model):
     @property
     def creator_email(self) -> str | None:
         return self.creator.email if self.creator else None
-
-    def __str__(self) -> str:
-        return self.title or "Untitled event"
 
 
 class DeletedEvent(models.Model):
@@ -131,17 +134,17 @@ class DeletedEvent(models.Model):
         db_table = "deleted_events"
 
 
-class EventReminder(models.Model):
+class EventReminder(UUIDModel):
     """A reminder of one user before every occurrence of an event (of a series: of all of them)."""
 
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
     event = models.ForeignKey(
         Event, on_delete=models.CASCADE, related_name="reminders"
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
     minutes_before = models.PositiveIntegerField()
+    # When the reminder is next due (its next occurrence's start less minutes_before); None when no
+    # occurrence is left. "Now" has it worked out (again) by the next delivery (core.services.reminders).
+    next_due_at = models.DateTimeField(default=timezone.now, blank=True, null=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -175,10 +178,7 @@ def new_rsvp_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-class EventParticipant(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class EventParticipant(UUIDModel, TimestampedModel):
     event = models.ForeignKey(
         Event, on_delete=models.CASCADE, related_name="participants"
     )
@@ -192,13 +192,11 @@ class EventParticipant(models.Model):
     email = models.EmailField(max_length=255)
     status = models.CharField(
         max_length=20,
-        choices=ParticipantStatus.CHOICES,
+        choices=ParticipantStatus.choices,
         default=ParticipantStatus.NEEDS_ACTION,
     )
     # Lets the participant answer from the link in their invitation email, without an account.
     rsvp_token = models.CharField(max_length=64, unique=True, default=new_rsvp_token, editable=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "event_participants"
@@ -212,10 +210,7 @@ class EventParticipant(models.Model):
         ]
 
 
-class EventComment(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class EventComment(UUIDModel):
     event = models.ForeignKey(
         Event, on_delete=models.CASCADE, related_name="comments"
     )
@@ -229,10 +224,7 @@ class EventComment(models.Model):
         db_table = "event_comments"
 
 
-class EventActivity(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class EventActivity(UUIDModel):
     event = models.ForeignKey(
         Event, on_delete=models.CASCADE, related_name="activity"
     )
@@ -252,10 +244,7 @@ class EventActivity(models.Model):
         verbose_name_plural = "Event activities"
 
 
-class Notification(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class Notification(UUIDModel):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="notifications"
     )

@@ -5,7 +5,6 @@ Removing a member from a calendar also removes them as an approver, unless they 
 import pytest
 
 from core.models import CalendarApprover, CalendarGroup, ResourceApprover, UserGroup
-from core.tests.test_approval_workflow import world  # noqa: F401
 
 pytestmark = pytest.mark.django_db
 

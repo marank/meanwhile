@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from core.models import EventParticipant, ResourceApprover
-from core.tests.test_approval_workflow import BASE, Api, iso, world  # noqa: F401 (fixture)
+from core.tests.helpers import BASE, Api, iso
 
 pytestmark = pytest.mark.django_db
 

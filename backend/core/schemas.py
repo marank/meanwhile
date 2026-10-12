@@ -1,14 +1,16 @@
 """
-Django Ninja schemas mirroring the FastAPI API contract.
+Request and response schemas of the API. Ninja's Schema reads attributes, so models can be returned as they are.
 """
 
 from datetime import datetime
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ninja import Field, Schema
-from pydantic import AfterValidator, model_validator
+from pydantic import AfterValidator, BeforeValidator, model_validator
 
+from core.models.base import ParticipantStatus, Role
+from core.models.users import get_or_create_app_settings
 
 Weekday = Annotated[int, Field(ge=0, le=6)]
 Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
@@ -18,11 +20,14 @@ def _known_zone(name: str) -> str:
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
-        raise ValueError("Unknown time zone")
+        raise ValueError("Unknown time zone") from None
     return name
 
 
 TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
+
+# Text that clients may also send as null for "none"; it is stored as "".
+Text = Annotated[str, BeforeValidator(lambda value: "" if value is None else value)]
 
 
 # ---------------------------------------------------------------------------
@@ -31,14 +36,10 @@ TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
 
 
 class UserOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     email: str
     display_name: str
     is_admin: bool
-    is_staff: bool
-    is_superuser: bool
     is_active: bool
     time_format: str
     date_format: str
@@ -62,13 +63,13 @@ class EmailNotifications(Schema):
 
 
 class EmailNotificationsUpdate(Schema):
-    invitations: Optional[bool] = None
-    responses: Optional[bool] = None
-    approvals: Optional[bool] = None
-    decisions: Optional[bool] = None
-    comments: Optional[bool] = None
-    memberships: Optional[bool] = None
-    reminders: Optional[bool] = None
+    invitations: bool | None = None
+    responses: bool | None = None
+    approvals: bool | None = None
+    decisions: bool | None = None
+    comments: bool | None = None
+    memberships: bool | None = None
+    reminders: bool | None = None
 
 
 class ProfileOut(UserOut):
@@ -76,21 +77,54 @@ class ProfileOut(UserOut):
 
 
 class UserUpdate(Schema):
-    display_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    time_format: Optional[Literal["auto", "24h", "12h"]] = None
-    date_format: Optional[Literal["auto", "dmy", "mdy", "ymd"]] = None
-    timezone: Optional[TimeZoneName] = None
-    language: Optional[Literal["en", "de"]] = None
-    email_notifications: Optional[EmailNotificationsUpdate] = None
+    display_name: str | None = Field(None, min_length=1, max_length=255)
+    time_format: Literal["auto", "24h", "12h"] | None = None
+    date_format: Literal["auto", "dmy", "mdy", "ymd"] | None = None
+    timezone: TimeZoneName | None = None
+    language: Literal["en", "de"] | None = None
+    email_notifications: EmailNotificationsUpdate | None = None
 
 
-class OverviewSettingsOut(Schema):
-    model_config = {"from_attributes": True}
+class WeekLayoutOut(Schema):
+    """The week layout of a calendar or the overview; what isn't set there follows the app's defaults."""
 
     first_weekday: int
     show_weekends: bool
-    weekend_days: List[Weekday]
+    weekend_days: list[Weekday]
     show_week_numbers: bool
+
+    @staticmethod
+    def resolve_first_weekday(obj, context):
+        return _layout_value(obj, "first_weekday", context)
+
+    @staticmethod
+    def resolve_show_weekends(obj, context):
+        return _layout_value(obj, "show_weekends", context)
+
+    @staticmethod
+    def resolve_weekend_days(obj, context):
+        return _layout_value(obj, "weekend_days", context)
+
+    @staticmethod
+    def resolve_show_week_numbers(obj, context):
+        return _layout_value(obj, "show_week_numbers", context)
+
+
+def _layout_value(obj, field: str, context):
+    value = obj[field] if isinstance(obj, dict) else getattr(obj, field)
+    if value is not None:
+        return value
+    # Loaded once per request, however many calendars are listed.
+    request = (context or {}).get("request")
+    app_settings = getattr(request, "_app_settings", None)
+    if app_settings is None:
+        app_settings = get_or_create_app_settings()
+        if request is not None:
+            request._app_settings = app_settings
+    return getattr(app_settings, f"default_{field}")
+
+
+class OverviewSettingsOut(WeekLayoutOut):
     use_calendar_colors: bool
     base_color: str
     weekend_color: str
@@ -107,23 +141,23 @@ class OverviewSettingsOut(Schema):
 
 
 class OverviewSettingsUpdate(Schema):
-    first_weekday: Optional[int] = Field(None, ge=0, le=6)
-    show_weekends: Optional[bool] = None
-    weekend_days: Optional[List[Weekday]] = None
-    show_week_numbers: Optional[bool] = None
-    use_calendar_colors: Optional[bool] = None
-    base_color: Optional[Color] = None
-    weekend_color: Optional[Color] = None
-    today_color: Optional[Color] = None
-    event_color: Optional[Color] = None
-    border_color: Optional[Color] = None
-    outer_border_color: Optional[Color] = None
-    dark_base_color: Optional[Color] = None
-    dark_weekend_color: Optional[Color] = None
-    dark_today_color: Optional[Color] = None
-    dark_event_color: Optional[Color] = None
-    dark_border_color: Optional[Color] = None
-    dark_outer_border_color: Optional[Color] = None
+    first_weekday: int | None = Field(None, ge=0, le=6)
+    show_weekends: bool | None = None
+    weekend_days: list[Weekday] | None = None
+    show_week_numbers: bool | None = None
+    use_calendar_colors: bool | None = None
+    base_color: Color | None = None
+    weekend_color: Color | None = None
+    today_color: Color | None = None
+    event_color: Color | None = None
+    border_color: Color | None = None
+    outer_border_color: Color | None = None
+    dark_base_color: Color | None = None
+    dark_weekend_color: Color | None = None
+    dark_today_color: Color | None = None
+    dark_event_color: Color | None = None
+    dark_border_color: Color | None = None
+    dark_outer_border_color: Color | None = None
 
 
 class AppPasswordCreate(Schema):
@@ -131,11 +165,9 @@ class AppPasswordCreate(Schema):
 
 
 class AppPasswordOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     label: str
-    last_used_at: Optional[datetime] = None
+    last_used_at: datetime | None = None
     created_at: datetime
 
 
@@ -149,57 +181,49 @@ class SearchResult(Schema):
     id: str
     type: str
     label: str
-    subtitle: Optional[str] = None
-    meta: Optional[dict] = None
+    subtitle: str | None = None
+    meta: dict | None = None
 
 
 class GroupOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     name: str
-    description: Optional[str] = None
+    description: str = ""
     member_count: int = 0
 
 
 class GroupMemberOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     email: str
     display_name: str
 
 
 class GroupDetailOut(GroupOut):
-    members: List[GroupMemberOut] = []
+    members: list[GroupMemberOut] = []
 
 
 class GroupCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
-    member_ids: List[str] = []
+    description: Text = ""
+    member_ids: list[str] = []
 
 
 class GroupUpdate(Schema):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: Text = ""
     # Replaces the member list when given.
-    member_ids: Optional[List[str]] = None
+    member_ids: list[str] | None = None
 
 
 class AdminUserOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     email: str
     display_name: str
     is_admin: bool
-    is_staff: bool
-    is_superuser: bool
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    groups: List[GroupOut] = []
+    groups: list[GroupOut] = []
 
 
 class AdminUserCreate(Schema):
@@ -207,21 +231,17 @@ class AdminUserCreate(Schema):
     display_name: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=8)
     is_admin: bool = False
-    is_staff: bool = False
-    is_superuser: bool = False
     is_active: bool = True
-    group_ids: Optional[List[str]] = None
+    group_ids: list[str] | None = None
 
 
 class AdminUserUpdate(Schema):
-    email: Optional[str] = Field(None, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-    display_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    password: Optional[str] = Field(None, min_length=8)
-    is_admin: Optional[bool] = None
-    is_staff: Optional[bool] = None
-    is_superuser: Optional[bool] = None
-    is_active: Optional[bool] = None
-    group_ids: Optional[List[str]] = None
+    email: str | None = Field(None, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    display_name: str | None = Field(None, min_length=1, max_length=255)
+    password: str | None = Field(None, min_length=8)
+    is_admin: bool | None = None
+    is_active: bool | None = None
+    group_ids: list[str] | None = None
 
 
 class AdminPasswordResetOut(Schema):
@@ -229,26 +249,24 @@ class AdminPasswordResetOut(Schema):
 
 
 class AppSettingsOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: int
     app_name: str
-    logo_url: Optional[str] = None
-    favicon_url: Optional[str] = None
+    logo_url: str = ""
+    favicon_url: str = ""
     default_first_weekday: int
     default_show_weekends: bool
-    default_weekend_days: List[int]
+    default_weekend_days: list[int]
     default_show_week_numbers: bool
 
 
 class AppSettingsUpdate(Schema):
-    app_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    logo_url: Optional[str] = Field(None, max_length=1_000_000)
-    favicon_url: Optional[str] = Field(None, max_length=1_000_000)
-    default_first_weekday: Optional[int] = Field(None, ge=0, le=6)
-    default_show_weekends: Optional[bool] = None
-    default_weekend_days: Optional[List[int]] = None
-    default_show_week_numbers: Optional[bool] = None
+    app_name: str | None = Field(None, min_length=1, max_length=255)
+    logo_url: Text = Field("", max_length=1_000_000)
+    favicon_url: Text = Field("", max_length=1_000_000)
+    default_first_weekday: int | None = Field(None, ge=0, le=6)
+    default_show_weekends: bool | None = None
+    default_weekend_days: list[int] | None = None
+    default_show_week_numbers: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -258,22 +276,20 @@ class AppSettingsUpdate(Schema):
 
 class FolderCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     position: int = 0
 
 
 class FolderUpdate(Schema):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    parent_id: Optional[str] = None
-    position: Optional[int] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    parent_id: str | None = None
+    position: int | None = None
 
 
 class FolderOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     name: str
-    parent_id: Optional[str]
+    parent_id: str | None
     position: int
 
 
@@ -284,21 +300,19 @@ class FolderOut(Schema):
 
 class CalendarMemberCreate(Schema):
     user_id: str
-    role: str = "read"
+    role: Role = Role.READ
 
 
 class CalendarMemberUpdate(Schema):
-    role: Optional[str] = None
+    role: Role | None = None
 
 
 class CalendarMemberBatchOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     calendar_id: str
     user_id: str
     role: str
-    folder_id: Optional[str]
+    folder_id: str | None
     position: int
 
 
@@ -314,65 +328,59 @@ class CalendarMemberOut(CalendarMemberBatchOut):
 
 class CalendarCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
+    description: Text = ""
     force_all_day: bool = False
-    first_weekday: Optional[int] = Field(None, ge=0, le=6)
-    show_weekends: Optional[bool] = None
-    weekend_days: Optional[List[Weekday]] = None
-    show_week_numbers: Optional[bool] = None
+    first_weekday: int | None = Field(None, ge=0, le=6)
+    show_weekends: bool | None = None
+    weekend_days: list[Weekday] | None = None
+    show_week_numbers: bool | None = None
     # Colors left out start with the default preset.
-    base_color: Optional[Color] = None
-    weekend_color: Optional[Color] = None
-    today_color: Optional[Color] = None
-    event_color: Optional[Color] = None
-    border_color: Optional[Color] = None
-    outer_border_color: Optional[Color] = None
-    dark_base_color: Optional[Color] = None
-    dark_weekend_color: Optional[Color] = None
-    dark_today_color: Optional[Color] = None
-    dark_event_color: Optional[Color] = None
-    dark_border_color: Optional[Color] = None
-    dark_outer_border_color: Optional[Color] = None
+    base_color: Color | None = None
+    weekend_color: Color | None = None
+    today_color: Color | None = None
+    event_color: Color | None = None
+    border_color: Color | None = None
+    outer_border_color: Color | None = None
+    dark_base_color: Color | None = None
+    dark_weekend_color: Color | None = None
+    dark_today_color: Color | None = None
+    dark_event_color: Color | None = None
+    dark_border_color: Color | None = None
+    dark_outer_border_color: Color | None = None
 
 
 class CalendarUpdate(Schema):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    url_path: Optional[str] = Field(None, min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-    force_all_day: Optional[bool] = None
-    first_weekday: Optional[int] = Field(None, ge=0, le=6)
-    show_weekends: Optional[bool] = None
-    weekend_days: Optional[List[Weekday]] = None
-    show_week_numbers: Optional[bool] = None
-    base_color: Optional[Color] = None
-    weekend_color: Optional[Color] = None
-    today_color: Optional[Color] = None
-    event_color: Optional[Color] = None
-    border_color: Optional[Color] = None
-    outer_border_color: Optional[Color] = None
-    dark_base_color: Optional[Color] = None
-    dark_weekend_color: Optional[Color] = None
-    dark_today_color: Optional[Color] = None
-    dark_event_color: Optional[Color] = None
-    dark_border_color: Optional[Color] = None
-    dark_outer_border_color: Optional[Color] = None
-    is_public: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: Text = ""
+    url_path: str | None = Field(None, min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    force_all_day: bool | None = None
+    first_weekday: int | None = Field(None, ge=0, le=6)
+    show_weekends: bool | None = None
+    weekend_days: list[Weekday] | None = None
+    show_week_numbers: bool | None = None
+    base_color: Color | None = None
+    weekend_color: Color | None = None
+    today_color: Color | None = None
+    event_color: Color | None = None
+    border_color: Color | None = None
+    outer_border_color: Color | None = None
+    dark_base_color: Color | None = None
+    dark_weekend_color: Color | None = None
+    dark_today_color: Color | None = None
+    dark_event_color: Color | None = None
+    dark_border_color: Color | None = None
+    dark_outer_border_color: Color | None = None
+    is_public: bool | None = None
     # Never "manage": managing the calendar is only for people it was granted to.
-    public_role: Optional[Literal["read", "own", "full"]] = None
+    public_role: Literal["read", "own", "full"] | None = None
 
 
-class CalendarOut(Schema):
-    model_config = {"from_attributes": True}
-
+class CalendarOut(WeekLayoutOut):
     id: str
     name: str
-    description: Optional[str]
-    url_path: Optional[str]
+    description: str = ""
+    url_path: str | None
     force_all_day: bool
-    first_weekday: int
-    show_weekends: bool
-    weekend_days: List[Weekday]
-    show_week_numbers: bool
     base_color: str
     weekend_color: str
     today_color: str
@@ -390,7 +398,7 @@ class CalendarOut(Schema):
     owner_id: str
     created_at: datetime
     updated_at: datetime
-    my_membership: Optional[CalendarMemberOut] = None
+    my_membership: CalendarMemberOut | None = None
 
 
 class CalendarListOut(Schema):
@@ -405,7 +413,7 @@ class PublicCalendarOut(Schema):
 
     id: str
     name: str
-    description: Optional[str] = None
+    description: str = ""
     owner_name: str
     added: bool
 
@@ -427,8 +435,6 @@ class CalendarGroupLinkMember(Schema):
 
 
 class CalendarGroupLinkOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     group: CalendarGroupLinkGroupInfo
     role: str
@@ -442,7 +448,7 @@ class CalendarGroupLinkCreate(Schema):
 
 
 class CalendarGroupLinkUpdate(Schema):
-    role: Optional[Literal["read", "own", "full", "manage"]] = None
+    role: Literal["read", "own", "full", "manage"] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +459,7 @@ class CalendarGroupLinkUpdate(Schema):
 class ApproversIn(Schema):
     """The complete list of approvers; whoever is not in it is no approver any more."""
 
-    user_ids: List[str]
+    user_ids: list[str]
 
 
 class ApproverOut(Schema):
@@ -468,8 +474,8 @@ ResourceIconName = Annotated[str, Field(max_length=40, pattern=r"^[a-z0-9]+(-[a-
 
 class ResourceCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
-    color: Optional[str] = "#f59e0b"
+    description: Text = ""
+    color: str | None = "#f59e0b"
     icon: ResourceIconName = ""
     requires_approval: bool = False
     is_location: bool = False
@@ -477,28 +483,26 @@ class ResourceCreate(Schema):
 
 
 class ResourceUpdate(Schema):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    color: Optional[str] = None
-    icon: Optional[ResourceIconName] = None
-    requires_approval: Optional[bool] = None
-    is_location: Optional[bool] = None
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: Text = ""
+    color: str | None = None
+    icon: ResourceIconName | None = None
+    requires_approval: bool | None = None
+    is_location: bool | None = None
+    is_active: bool | None = None
 
 
 class ResourceOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     calendar_id: str
     name: str
-    description: Optional[str]
+    description: str = ""
     color: str
     icon: str
     requires_approval: bool
     is_location: bool
     is_active: bool
-    approvers: List[ApproverOut]
+    approvers: list[ApproverOut]
     created_at: datetime
     updated_at: datetime
 
@@ -513,23 +517,21 @@ class ResourceOut(Schema):
 
 class CategoryCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
+    description: Text = ""
     color: str = "#64748b"
 
 
 class CategoryUpdate(Schema):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    color: Optional[str] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: Text = ""
+    color: str | None = None
 
 
 class CategoryOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     calendar_id: str
     name: str
-    description: Optional[str]
+    description: str = ""
     color: str
     created_at: datetime
     updated_at: datetime
@@ -541,9 +543,9 @@ class CategoryOut(Schema):
 
 
 class EventParticipantInvite(Schema):
-    user_id: Optional[str] = None
-    email: Optional[str] = None
-    status: Optional[str] = "needs_action"
+    user_id: str | None = None
+    email: str | None = None
+    status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
     @model_validator(mode="after")
     def require_user_id_or_email(self) -> "EventParticipantInvite":
@@ -553,41 +555,41 @@ class EventParticipantInvite(Schema):
 
 
 class EventCreate(Schema):
-    title: Optional[str] = Field(default=None, max_length=255)
-    description: Optional[str] = None
-    location: Optional[str] = Field(default=None, max_length=255)
+    title: str | None = Field(default=None, max_length=255)
+    description: Text = ""
+    location: str | None = Field(default=None, max_length=255)
     # A resource marked as location to book; the location then is its name.
-    location_resource_id: Optional[str] = None
+    location_resource_id: str | None = None
     start: datetime
     end: datetime
     all_day: bool = False
-    timezone: Optional[TimeZoneName] = None
+    timezone: TimeZoneName | None = None
     show_recurrence_count: bool = False
-    rrule: Optional[str] = None
-    category_id: Optional[str] = None
-    resource_id: Optional[str] = None
-    participants: Optional[List[EventParticipantInvite]] = None
+    rrule: str | None = None
+    category_id: str | None = None
+    resource_id: str | None = None
+    participants: list[EventParticipantInvite] | None = None
 
 
 class EventUpdate(Schema):
-    title: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
-    location: Optional[str] = Field(None, max_length=255)
-    location_resource_id: Optional[str] = None
-    start: Optional[datetime] = None
-    end: Optional[datetime] = None
-    all_day: Optional[bool] = None
-    timezone: Optional[TimeZoneName] = None
-    show_recurrence_count: Optional[bool] = None
-    rrule: Optional[str] = None
-    category_id: Optional[str] = None
-    resource_id: Optional[str] = None
+    title: str | None = Field(None, max_length=255)
+    description: Text = ""
+    location: str | None = Field(None, max_length=255)
+    location_resource_id: str | None = None
+    start: datetime | None = None
+    end: datetime | None = None
+    all_day: bool | None = None
+    timezone: TimeZoneName | None = None
+    show_recurrence_count: bool | None = None
+    rrule: str | None = None
+    category_id: str | None = None
+    resource_id: str | None = None
 
 
 class EventParticipantCreate(Schema):
-    user_id: Optional[str] = None
-    email: Optional[str] = None
-    status: Optional[str] = "needs_action"
+    user_id: str | None = None
+    email: str | None = None
+    status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
     @model_validator(mode="after")
     def require_user_id_or_email(self) -> "EventParticipantCreate":
@@ -598,66 +600,62 @@ class EventParticipantCreate(Schema):
 
 class EventRemindersIn(Schema):
     # Minutes before each occurrence's start; 0 is at the start.
-    minutes: List[int]
+    minutes: list[int]
 
 
 class EventRemindersOut(Schema):
-    minutes: List[int]
+    minutes: list[int]
 
 
 class EventParticipantUpdate(Schema):
-    status: Optional[str] = None
+    status: ParticipantStatus
 
 
 class EventParticipantOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     event_id: str
-    user_id: Optional[str]
+    user_id: str | None
     email: str
-    display_name: Optional[str]
+    display_name: str | None
     status: str
     created_at: datetime
     updated_at: datetime
 
 
 class EventOut(Schema):
-    model_config = {"from_attributes": True}
-
     id: str
     calendar_id: str
     creator_id: str
-    creator_name: Optional[str] = None
-    creator_email: Optional[str] = None
+    creator_name: str | None = None
+    creator_email: str | None = None
     title: str
-    description: Optional[str]
+    description: str = ""
     location: str = ""
-    location_resource_id: Optional[str] = None
-    location_resource_name: Optional[str] = None
+    location_resource_id: str | None = None
+    location_resource_name: str | None = None
     start: datetime
     end: datetime
     all_day: bool
     timezone: str
     show_recurrence_count: bool
-    rrule: Optional[str]
+    rrule: str | None
     # Extra occurrence starts besides those of the rule (RDATE), e.g. from other clients.
-    rdates: List[datetime] = []
+    rdates: list[datetime] = []
     uid: str
     # Set when the event is a changed occurrence of the series parent_id.
-    parent_id: Optional[str] = None
-    recurrence_id: Optional[datetime] = None
-    category_id: Optional[str]
-    category_name: Optional[str]
-    category_color: Optional[str]
-    resource_id: Optional[str]
-    resource_name: Optional[str]
+    parent_id: str | None = None
+    recurrence_id: datetime | None = None
+    category_id: str | None
+    category_name: str | None
+    category_color: str | None
+    resource_id: str | None
+    resource_name: str | None
     status: str
     # Names of the booked resources a pending event still waits to have approved.
-    awaiting_approval: List[str] = []
-    decided_by: Optional[str]
-    decided_at: Optional[datetime]
-    decision_note: Optional[str]
+    awaiting_approval: list[str] = []
+    decided_by: str | None
+    decided_at: datetime | None
+    decision_note: str = ""
     created_at: datetime
     updated_at: datetime
     # Whether the current user may approve or reject this pending booking.
@@ -672,28 +670,28 @@ class OccurrenceOut(Schema):
     # Clients take the event colors from the calendar, so they follow color changes right away.
     calendar_id: str
     title: str
-    description: Optional[str]
+    description: str = ""
     start: datetime
     end: datetime
     all_day: bool
-    recurrence_count: Optional[int]
+    recurrence_count: int | None
     status: str
-    category_id: Optional[str]
-    category_name: Optional[str]
-    category_color: Optional[str]
-    resource_id: Optional[str]
-    resource_name: Optional[str]
+    category_id: str | None
+    category_name: str | None
+    category_color: str | None
+    resource_id: str | None
+    resource_name: str | None
     resource_icon: str = ""
     location: str = ""
-    location_resource_id: Optional[str] = None
+    location_resource_id: str | None = None
     location_resource_icon: str = ""
     creator_id: str
     can_edit: bool
     is_recurring: bool
     # For occurrences of a series: the series and the occurrence's original start, which
     # identify it in /events/{series_id}/occurrences/{recurrence_id}.
-    series_id: Optional[str] = None
-    recurrence_id: Optional[datetime] = None
+    series_id: str | None = None
+    recurrence_id: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -717,10 +715,10 @@ class CommentOut(Schema):
 class ActivityOut(Schema):
     id: str
     event_id: str
-    actor_id: Optional[str]
-    actor_name: Optional[str]
+    actor_id: str | None
+    actor_name: str | None
     action: str
-    details: Optional[dict]
+    details: dict | None
     created_at: datetime
 
 
@@ -732,17 +730,17 @@ class ActivityOut(Schema):
 class NotificationOut(Schema):
     id: str
     type: str
-    actor_id: Optional[str]
-    actor_name: Optional[str]
-    calendar_id: Optional[str]
-    event_id: Optional[str]
+    actor_id: str | None
+    actor_name: str | None
+    calendar_id: str | None
+    event_id: str | None
     title: str
-    data: Optional[dict]
-    read_at: Optional[datetime]
+    data: dict | None
+    read_at: datetime | None
     created_at: datetime
     # Current status of the linked event and, for invitations, the user's own answer.
-    event_status: Optional[str] = None
-    response_status: Optional[str] = None
+    event_status: str | None = None
+    response_status: str | None = None
     deletable: bool = True
 
 
@@ -756,11 +754,11 @@ class NotificationUpdate(Schema):
 
 
 class ApprovalAction(Schema):
-    note: Optional[str] = None
+    note: Text = ""
 
 
 class ApprovalOut(EventOut):
-    approver_pool: List[ApproverOut]
+    approver_pool: list[ApproverOut]
 
 
 # ---------------------------------------------------------------------------
@@ -785,16 +783,16 @@ class LayoutItem(Schema):
     id: str
     type: Literal["calendar", "folder"]
     position: int
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
 
 class LayoutItemsUpdate(Schema):
-    items: List[LayoutItem]
+    items: list[LayoutItem]
 
 
 class LayoutOut(Schema):
-    folders: List[FolderOut]
-    calendars: List[CalendarListOut]
+    folders: list[FolderOut]
+    calendars: list[CalendarListOut]
 
 
 # ---------------------------------------------------------------------------
@@ -804,7 +802,7 @@ class LayoutOut(Schema):
 
 class BookingConflict(Schema):
     message: str = "Resource booking conflict"
-    conflicts: List[dict]
+    conflicts: list[dict]
 
 
 class AvailabilityIn(Schema):
@@ -812,10 +810,10 @@ class AvailabilityIn(Schema):
 
     start: datetime
     end: datetime
-    user_ids: List[str] = []
-    resource_ids: List[str] = []
+    user_ids: list[str] = []
+    resource_ids: list[str] = []
     # An event being edited doesn't count as taking its own time.
-    exclude_event_id: Optional[str] = None
+    exclude_event_id: str | None = None
 
 
 class BusyPeriod(Schema):
@@ -828,12 +826,12 @@ class BusyPeriod(Schema):
 class AvailabilityEntry(Schema):
     id: str
     name: str
-    busy: List[BusyPeriod]
+    busy: list[BusyPeriod]
 
 
 class AvailabilityOut(Schema):
-    users: List[AvailabilityEntry]
-    resources: List[AvailabilityEntry]
+    users: list[AvailabilityEntry]
+    resources: list[AvailabilityEntry]
 
 
 # ---------------------------------------------------------------------------
@@ -848,8 +846,8 @@ class RsvpOut(Schema):
     all_day: bool
     timezone: str
     location: str
-    description: Optional[str] = None
-    rrule: Optional[str] = None
+    description: str = ""
+    rrule: str | None = None
     organizer_name: str
     email: str
     status: str

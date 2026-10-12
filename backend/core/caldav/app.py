@@ -6,10 +6,16 @@ from radicale import httputils
 from radicale.app import Application as RadicaleApplication
 from radicale.config import load as load_config
 
+from core.caldav.request import request_scope
 from core.caldav.storage import Forbidden
 
 
 class Application(RadicaleApplication):
+    def __call__(self, environ, start_response):
+        # Radicale builds the whole response before it returns it.
+        with request_scope():
+            return super().__call__(environ, start_response)
+
     # Radicale answers errors raised by the storage with 500, except for PUT; refused writes get 403.
     def do_DELETE(self, *args, **kwargs):
         try:

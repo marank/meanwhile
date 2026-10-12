@@ -1,0 +1,8 @@
+# Development image for docker-compose.dev.yml: the source is mounted at /app, node_modules is a volume.
+FROM node:24-alpine
+
+RUN npm install -g pnpm@10.28.0
+
+WORKDIR /app
+
+EXPOSE 5173

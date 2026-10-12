@@ -5,7 +5,7 @@ User and user-related models.
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
-from core.models.base import default_weekend_days, new_uuid7
+from core.models.base import TimestampedModel, UUIDModel, default_weekend_days
 
 
 class UserManager(BaseUserManager):
@@ -24,18 +24,16 @@ class UserManager(BaseUserManager):
         return user
 
     def create_user(self, email: str, password: str | None = None, **extra) -> "User":
-        extra.setdefault("is_staff", False)
         extra.setdefault("is_superuser", False)
         return self._create_user(email, password, **extra)
 
     def create_superuser(self, email: str, password: str | None = None, **extra) -> "User":
-        extra.setdefault("is_staff", True)
         extra.setdefault("is_superuser", True)
         extra.setdefault("is_admin", True)
         return self._create_user(email, password, **extra)
 
 
-class User(AbstractUser):
+class User(UUIDModel, TimestampedModel, AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     display_name = models.CharField(max_length=255)
@@ -57,12 +55,6 @@ class User(AbstractUser):
     language = models.CharField(max_length=8, blank=True, default="")
     # Which kinds of notifications also come by email, by kind; missing kinds use the defaults.
     email_notifications = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
 
     groups = models.ManyToManyField(
         "UserGroup",
@@ -82,15 +74,18 @@ class User(AbstractUser):
     def __str__(self) -> str:
         return self.display_name or self.email
 
+    def save(self, *args, **kwargs):
+        # One switch for the Django admin: superusers may sign in there (is_staff) and do everything.
+        # Staff without being superuser could only sign in, as no permissions are given out.
+        self.is_staff = self.is_superuser
+        if kwargs.get("update_fields") is not None and "is_superuser" in kwargs["update_fields"]:
+            kwargs["update_fields"] = {*kwargs["update_fields"], "is_staff"}
+        super().save(*args, **kwargs)
 
-class UserGroup(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+
+class UserGroup(UUIDModel, TimestampedModel):
     name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    description = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "user_groups"
@@ -102,8 +97,8 @@ class UserGroup(models.Model):
 class AppSettings(models.Model):
     id = models.IntegerField(primary_key=True, default=1)
     app_name = models.CharField(max_length=255, default="Calendar")
-    logo_url = models.TextField(blank=True, null=True)
-    favicon_url = models.TextField(blank=True, null=True)
+    logo_url = models.TextField(blank=True, default="")
+    favicon_url = models.TextField(blank=True, default="")
     default_first_weekday = models.IntegerField(default=0)
     default_show_weekends = models.BooleanField(default=True)
     default_weekend_days = models.JSONField(default=default_weekend_days)
@@ -114,10 +109,7 @@ class AppSettings(models.Model):
         db_table = "app_settings"
 
 
-class AppPassword(models.Model):
-    id = models.CharField(
-        primary_key=True, max_length=36, default=new_uuid7, editable=False
-    )
+class AppPassword(UUIDModel):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="app_passwords"
     )

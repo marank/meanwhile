@@ -17,7 +17,7 @@ A self-hosted calendar application with a Django backend and a Vue 3 frontend.
 
 - **Backend**: Python 3.12, Django 5.1, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI (daphne in development, uvicorn in production).
 - **Frontend**: Vue 3, Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS.
-- **Databases**: SQLite for development, PostgreSQL for deployment.
+- **Database**: PostgreSQL, in development too; it also holds the task queue (procrastinate).
 - **Package managers**: `uv` (backend), `pnpm` (frontend).
 
 ## Project structure
@@ -27,18 +27,80 @@ calendar/
   backend/            Django backend
   backend_fastapi/    Reference FastAPI implementation
   frontend/           Vue SPA
-  docker-compose.yml  PostgreSQL + backend setup
+  docker/             nginx, supervisord and entrypoint of the production image
+  Dockerfile          Production image (frontend + backend in one container)
+  docker-compose.yml  Production: PostgreSQL, Redis, app
+  docker-compose.dev.yml  Development stack with live reload
   BACKLOG.md          Feature backlog and known limitations
 ```
 
-## Backend development
+## Development with Docker
+
+The whole stack with live reload: PostgreSQL, Redis, Mailpit, the backend (`runserver`), the
+task queue's worker and the Vite dev server.
 
 ```bash
+cp .env.example .env     # once; ADMIN_EMAIL and ADMIN_PASSWORD give you a user to sign in with
+docker compose -f docker-compose.dev.yml up --build
+```
+
+The app is at http://localhost:5173, the backend at http://localhost:8000, the emails at
+http://localhost:8025. The source is mounted into the containers: `runserver` and the worker
+(through `watchfiles`) restart on changes to Python files, Vite updates the page right away.
+Migrations run on every start (service `migrate`), followed by `manage.py ensure_admin`. After changing dependencies (`uv.lock`,
+`pnpm-lock.yaml`), start it again with `--build`; the frontend installs its packages on start.
+
+Commands run in the backend's container:
+
+```bash
+docker compose -f docker-compose.dev.yml exec backend pytest
+docker compose -f docker-compose.dev.yml exec backend python manage.py fetch_imip --mailpit http://mailpit:8025
+```
+
+All setups read the `.env` of the project root (template: `.env.example`).
+`docker-compose.dev.yml` sets the database, Redis and Mailpit addresses itself, overriding it.
+
+## Backend development
+
+Without Docker for the app itself, only the services next to it:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres redis mailpit   # the default DATABASE_URL, Redis, Mailpit
+cp .env.example .env     # once, in the project root; for Redis and Mailpit see the comments there
 cd backend
 uv sync
 DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py migrate
 DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py runserver 0.0.0.0:8000
 ```
+
+In a second terminal, the worker of the task queue: it sends emails, delivers reminders and runs
+the other regular jobs (`core/tasks.py`).
+
+```bash
+DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py procrastinate worker
+```
+
+The tests need the PostgreSQL of `docker-compose.dev.yml`, too:
+
+```bash
+uv run pytest
+```
+
+### Superusers (Django admin)
+
+Superusers may sign in to the Django admin (`/admin/`) and do everything there. The app doesn't
+hand this out; the admin user of `ADMIN_EMAIL` is one, and others are made (or no longer) with:
+
+```bash
+uv run python manage.py set_superuser someone@example.com
+uv run python manage.py set_superuser someone@example.com --revoke
+```
+
+In the Docker setups: `docker compose exec app python manage.py set_superuser ...` (production),
+`docker compose -f docker-compose.dev.yml exec backend python manage.py set_superuser ...`
+(development).
+
+### System checks
 
 Run system checks:
 
@@ -69,7 +131,7 @@ pnpm format         # Prettier
 pnpm type-check     # vue-tsc
 ```
 
-The Vite dev proxy forwards `/api`, `/ics` and `/caldav` to `http://localhost:8000`.
+The Vite dev proxy forwards `/api`, `/ics`, `/caldav` and `/ws` to `http://localhost:8000` (`BACKEND_URL` changes it).
 
 ## Configuration
 
@@ -77,10 +139,12 @@ Backend settings are read from environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | SQLite file | e.g. `postgresql://calendar:calendar@localhost:5432/calendar` |
+| `DATABASE_URL` | `postgresql://calendar:calendar@localhost:5432/calendar` | PostgreSQL only (the one of `docker-compose.dev.yml` by default) |
 | `SECRET_KEY` | dev key | Change in production (>= 32 bytes). |
-| `ALLOW_REGISTRATION` | `true` | Set to `false` to disable new registrations. |
-| `ADMIN_EMAIL` | - | First registered user matching this email is promoted to admin. |
+| `ALLOW_REGISTRATION` | `true` in development, `false` otherwise | Whether anyone may sign up. Signed-in users can look each other up (by name and email) to share calendars, so only open it to people who may see each other. |
+| `ADMIN_EMAIL` | - | The admin user. `manage.py ensure_admin` (run on every start of the Docker setups) creates it or makes the existing user of that address admin; without it, a user registering with this address becomes admin. |
+| `ADMIN_PASSWORD` | - | Password of the admin user; needed to create it, set again when it differs (which signs the admin out). Empty: an existing admin keeps their password. |
+| `ADMIN_NAME` | - | Display name of the admin user. |
 | `CALDAV_PATH` | `/caldav` | URL prefix for the embedded CalDAV server. |
 | `REDIS_URL` | - | e.g. `redis://redis:6379/0`. Required with more than one server process, so that live updates reach every process's WebSockets. Without it they stay within one process (fine for development). |
 | `BEHIND_PROXY` | `false` | Trust the reverse proxy's `X-Forwarded-Proto`/`-Host`. Only when the backend is reachable through the proxy alone. |
@@ -93,7 +157,7 @@ Backend settings are read from environment variables:
 | `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | `false` | STARTTLS (usually port 587) / implicit TLS (usually 465). |
 | `DEFAULT_FROM_EMAIL` | `calendar@localhost` | Sender address of all emails. |
 | `IMIP_ADDRESS` | - | Mailbox that receives participants' answers to invitations; invitations name it as organizer. Empty: answers go to the organizer's own address. |
-| `IMIP_IMAP_HOST`, `IMIP_IMAP_PORT`, `IMIP_IMAP_USER`, `IMIP_IMAP_PASSWORD`, `IMIP_IMAP_SSL`, `IMIP_IMAP_FOLDER` | -, `993`, -, -, `true`, `INBOX` | IMAP access to that mailbox, for `fetch_imip`. |
+| `IMIP_IMAP_HOST`, `IMIP_IMAP_PORT`, `IMIP_IMAP_USER`, `IMIP_IMAP_PASSWORD`, `IMIP_IMAP_SSL`, `IMIP_IMAP_FOLDER` | -, `993`, -, -, `true`, `INBOX` | IMAP access to that mailbox; the worker reads it every five minutes. |
 
 ## Authentication
 
@@ -107,18 +171,17 @@ Every calendar a user can access appears in their calendar home, shared ones inc
 
 ## Reminders
 
-Users set their own reminders per event. Due reminders become in-app notifications. While the app is open, the server looks for due reminders every 30 seconds over the live connection (see below) and pops them up in all of the user's tabs. To also deliver them while nobody has the app open, run this every minute, e.g. from cron:
-
-```bash
-DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py send_reminders
-```
+Users set their own reminders per event. The worker looks for due reminders every 30 seconds and
+turns them into in-app notifications, which pop up in all of the user's open tabs (over the live
+connection, see below). `manage.py send_reminders` does the same once, by hand.
 
 ## Email and invitations
 
 Notifications can also come by email: approval requests, decisions on bookings, comments, calendar
 access, participants' answers and (off by default) reminders. Each user chooses which in
 *Account → Email notifications*. Emails are written in the user's language and show times in their
-zone; they go out after the request in a background thread, and failures are logged.
+zone. They are saved as jobs of the task queue along with the request's changes, and the worker sends
+them; while the mail server fails, it tries again for about two hours.
 
 Participants of an event are invited by email (iMIP, RFC 6047): the email carries the event as
 iTIP `REQUEST`, inline and as `invite.ics`, so Thunderbird, Outlook, Apple Mail, Gmail and others
@@ -130,7 +193,7 @@ invitations off get them in the app only.
 Participants answer either
 
 - in their mail program: it sends an iTIP `REPLY` to the organizer address. With `IMIP_ADDRESS`
-  set, that is the app's mailbox; run `fetch_imip` every few minutes to read it (IMAP). An answer
+  set, that is the app's mailbox, which the worker reads every five minutes (IMAP). An answer
   only counts when it comes from the participant's own address (or the one they named as `SENT-BY`).
   `process_imip FILE.eml` (or `-` for standard input, e.g. from a mail server's pipe) applies saved
   messages; or
@@ -148,9 +211,12 @@ uv run python manage.py fetch_imip
 [Mailpit](https://mailpit.axllent.org/) catches every email and shows it in the browser:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d   # SMTP on 1025, web UI on http://localhost:8025
-cp backend/.env.example backend/.env             # Mailpit is preset; a real SMTP/IMAP server is option B there
+docker compose -f docker-compose.dev.yml up -d mailpit   # SMTP on 1025, web UI on http://localhost:8025
 ```
+
+`docker-compose.dev.yml` sends the backend's emails there by itself. A backend run without Docker
+needs `EMAIL_HOST=localhost`, `EMAIL_PORT=1025`, `EMAIL_USE_TLS=false` and
+`IMIP_ADDRESS=calendar@localhost` in `.env`.
 
 Restart the backend, invite someone (any address) to an event and open the invitation in Mailpit;
 its links lead to the answer page of the Vite dev server. To test answers from mail programs,
@@ -182,7 +248,7 @@ The connection is kept alive with a heartbeat, reconnects with growing delays af
 (server restart, network change, sleep), and loads what it shows again after reconnecting, so
 nothing missed meanwhile is lost. Pages of other sites can't open it (the `Origin` is checked).
 
-Without a working WebSocket (a proxy that doesn't pass it on), the app falls back to fetching the unread count every minute; reminders then only arrive as notifications, so keep the `send_reminders` job running.
+Without a working WebSocket (a proxy that doesn't pass it on), the app falls back to fetching the unread count every minute; reminders then only arrive as notifications.
 
 In development nothing extra is needed: `manage.py runserver` serves WebSockets, and the Vite dev
 server passes `/ws` on.
@@ -190,16 +256,40 @@ server passes `/ws` on.
 ## Deployment with Docker
 
 ```bash
-docker compose up --build
+cp .env.example .env     # fill in; SECRET_KEY and POSTGRES_PASSWORD e.g. with `openssl rand -hex 32`
+docker compose up -d --build
 ```
 
-This starts PostgreSQL, Redis and the backend on port 8000 (uvicorn with `WEB_WORKERS` processes,
-default 4). Set `SECRET_KEY`, and `PUBLIC_URL` to the address users open (e.g.
-`https://calendar.example.com`; it becomes the trusted origin).
+This starts PostgreSQL, Redis and the `app` container, built by the `Dockerfile`:
 
-The backend expects a reverse proxy in front that terminates HTTPS, serves the built frontend
-(`frontend/dist`) and passes `/api`, `/ics`, `/caldav`, `/.well-known/caldav` and the WebSocket
-`/ws/` on. The proxy must forward WebSocket upgrades and the original host and scheme.
+- On every start, `docker/entrypoint.sh` applies the migrations first and creates or updates
+  the admin user of `ADMIN_EMAIL` (`manage.py ensure_admin`).
+- Then supervisord (`docker/supervisord.conf`) runs:
+  - nginx (`docker/nginx.conf`), which serves the built frontend and Django admin's static files
+    and passes `/api`, `/admin`, `/ics`, `/caldav`, `/.well-known/caldav` and the WebSocket `/ws/`
+    on;
+  - uvicorn, with `WEB_WORKERS` processes;
+  - the task queue's worker. It sends emails, delivers reminders, reads participants' answers
+    from the iMIP mailbox (with `IMIP_ADDRESS` and the IMAP settings) and cleans up. Jobs wait in
+    the database, so none is lost while it restarts.
+
+`.env` holds the domain, the secrets, the mail settings and a few optional values; see
+`.env.example`. `docker-compose.yml` derives `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` and
+`BASE_URL` from `DOMAIN` and sets the wiring itself: `ENVIRONMENT=production`, `DATABASE_URL`,
+`REDIS_URL` and `BEHIND_PROXY=true`.
+
+The container serves HTTP on `APP_BIND` (`127.0.0.1:8080` by default). Put a proxy in front that
+terminates HTTPS, passes everything on, including WebSocket upgrades, and sets
+`X-Forwarded-Proto`. Only that proxy should reach the port, because the app trusts its forwarded
+headers.
+
+Caddy (obtains the certificate itself):
+
+```caddy
+calendar.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
 
 nginx:
 
@@ -209,55 +299,17 @@ server {
     server_name calendar.example.com;
     # ssl_certificate ...; ssl_certificate_key ...;
 
-    root /srv/calendar/frontend/dist;
-    location / { try_files $uri /index.html; }
-
-    location ~ ^/(api|ics|caldav|\.well-known/caldav)(/|$) {
-        proxy_pass http://backend:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        client_max_body_size 10m;
-    }
-
-    location /ws/ {
-        proxy_pass http://backend:8000;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        # Longer than the app's heartbeat (25 s), so idle connections stay open.
+        client_max_body_size 10m;
+        # Longer than the app's heartbeat (25 s), so idle WebSockets stay open.
         proxy_read_timeout 120s;
-        proxy_send_timeout 120s;
     }
 }
 ```
-
-Caddy (obtains the certificate itself and passes WebSockets on as they are):
-
-```caddy
-calendar.example.com {
-    @backend path /api/* /ics/* /caldav /caldav/* /.well-known/caldav /ws/*
-    handle @backend {
-        reverse_proxy backend:8000
-    }
-    # Everything else is the app; unknown paths are its routes.
-    handle {
-        root * /srv/calendar/frontend/dist
-        try_files {path} /index.html
-        file_server
-    }
-}
-```
-
-Only the proxy should reach port 8000 (drop the `ports:` mapping of the backend when the proxy runs
-in the same Compose project); the backend trusts its forwarded headers.
-
-To deliver reminders while nobody has the app open, run `python manage.py send_reminders` every
-minute, e.g. from cron on the host via `docker compose exec backend`. With `IMIP_ADDRESS` and the
-IMAP settings, also run `python manage.py fetch_imip` every few minutes to read participants'
-answers to invitations.

@@ -3,8 +3,7 @@ Live updates over WebSockets, through the ASGI application the server runs.
 """
 
 import base64
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from channels.db import database_sync_to_async
@@ -14,6 +13,7 @@ from django.test import Client
 
 from config.asgi import application
 from core.models import Calendar, CalendarMember, Event, Notification, User
+from core.services.reminders import deliver_due_reminders
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
@@ -59,7 +59,7 @@ async def subscribe(communicator, *calendar_ids) -> list[str]:
 def create_event(calendar: Calendar, title: str = "Meeting") -> Event:
     event = Event.objects.create(
         calendar=calendar, creator=calendar.owner, title=title, uid=title,
-        start=datetime(2030, 1, 7, 9, tzinfo=timezone.utc), end=datetime(2030, 1, 7, 10, tzinfo=timezone.utc),
+        start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
     )
     return event
 
@@ -110,7 +110,7 @@ async def test_a_transaction_is_announced_once(team):
             for i in range(3):
                 Event.objects.create(
                     calendar=team["calendar"], creator=team["owner"], title=f"E{i}", uid=f"e{i}",
-                    start=datetime(2030, 1, 7, 9, tzinfo=timezone.utc), end=datetime(2030, 1, 7, 10, tzinfo=timezone.utc),
+                    start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
                 )
 
     await several()
@@ -130,7 +130,7 @@ async def test_changes_rolled_back_are_not_announced(team):
                 with transaction.atomic():
                     Event.objects.create(
                         calendar=team["calendar"], creator=team["owner"], title="Gone", uid="gone",
-                        start=datetime(2030, 1, 7, 9, tzinfo=timezone.utc), end=datetime(2030, 1, 7, 10, tzinfo=timezone.utc),
+                        start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
                     )
                     raise RuntimeError
             except RuntimeError:
@@ -138,7 +138,7 @@ async def test_changes_rolled_back_are_not_announced(team):
         # A later change still goes out.
         Event.objects.create(
             calendar=team["calendar"], creator=team["owner"], title="Kept", uid="kept",
-            start=datetime(2030, 1, 7, 9, tzinfo=timezone.utc), end=datetime(2030, 1, 7, 10, tzinfo=timezone.utc),
+            start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
         )
 
     await rolled_back()
@@ -291,7 +291,7 @@ def remind_in(team, minutes_from_now: int, before: int = 15) -> Event:
 
     from core.models import EventReminder
 
-    start = datetime.now(timezone.utc) + timedelta(minutes=minutes_from_now)
+    start = datetime.now(UTC) + timedelta(minutes=minutes_from_now)
     event = Event.objects.create(
         calendar=team["calendar"], creator=team["owner"], title="Soon", uid=f"soon-{minutes_from_now}",
         start=start, end=start + timedelta(hours=1),
@@ -308,25 +308,6 @@ async def receive_until(communicator, message_type: str, limit: int = 6) -> dict
     raise AssertionError(f"no {message_type} message")
 
 
-async def test_due_reminders_are_pushed_on_connecting(team):
-    await remind_in(team, 10)
-    communicator = socket(team["session"])
-    accepted, _ = await communicator.connect()
-    assert accepted
-    assert (await communicator.receive_json_from())["type"] == "hello"
-    message = await receive_until(communicator, "reminders.due")
-    assert [r["title"] for r in message["reminders"]] == ["Soon"]
-    assert message["reminders"][0]["minutes_before"] == 15
-    await communicator.disconnect()
-
-    # Handed out once: connecting again doesn't repeat it.
-    again = socket(team["session"])
-    await again.connect()
-    assert (await again.receive_json_from())["type"] == "hello"
-    assert await again.receive_nothing(timeout=0.5)
-    await again.disconnect()
-
-
 @database_sync_to_async
 def session_of(user: User) -> str:
     client = Client()
@@ -334,19 +315,23 @@ def session_of(user: User) -> str:
     return client.cookies["sessionid"].value
 
 
-async def test_reminders_reach_every_connection_of_the_user_and_nobody_else(team, monkeypatch):
-    import core.realtime.consumers as consumers
-
-    monkeypatch.setattr(consumers, "REMINDER_INTERVAL_SECONDS", 0.2)
+async def test_reminders_reach_every_connection_of_the_user_and_nobody_else(team):
     first, second = await connected(team), await connected(team)
     other_socket = socket(await session_of(team["other"]))
     await other_socket.connect()
     await other_socket.receive_json_from()
 
     await remind_in(team, 10)
-    # The loops find it within a moment; one delivers it, the group tells both connections.
-    assert [r["title"] for r in (await receive_until(first, "reminders.due"))["reminders"]] == ["Soon"]
-    assert [r["title"] for r in (await receive_until(second, "reminders.due"))["reminders"]] == ["Soon"]
+    # The regular job (core.tasks.deliver_reminders) hands them out; the user's group tells both connections.
+    assert len(await database_sync_to_async(deliver_due_reminders)()) == 1
+    for communicator in (first, second):
+        message = await receive_until(communicator, "reminders.due")
+        assert [r["title"] for r in message["reminders"]] == ["Soon"]
+        assert message["reminders"][0]["minutes_before"] == 15
     assert await other_socket.receive_nothing(timeout=0.5)
+
+    # Handed out once: the next run doesn't repeat it.
+    assert await database_sync_to_async(deliver_due_reminders)() == []
+    assert await first.receive_nothing(timeout=0.5)
     for communicator in (first, second, other_socket):
         await communicator.disconnect()

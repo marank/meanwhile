@@ -9,11 +9,10 @@ The user's layout: their folders, and where their calendars sit among them (the 
 """
 
 from django.db import transaction
+from ninja import Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
-from core.models import CalendarGroup, CalendarMember, CalendarSubscription, Folder
+from core.models import CalendarMember, Folder
 from core.realtime import broadcast
 from core.schemas import (
     FolderCreate,
@@ -22,9 +21,9 @@ from core.schemas import (
     LayoutItemsUpdate,
     LayoutOut,
 )
-from core.views.calendars import list_calendars
+from core.views.calendars import sidebar_calendars_of
 
-router = CSRFRouter()
+router = Router()
 
 
 def _folder_parents(user) -> dict[str, str | None]:
@@ -48,13 +47,13 @@ def _has_cycle(parents: dict[str, str | None]) -> bool:
     return False
 
 
-@router.get("/layout", response=LayoutOut, auth=django_auth)
+@router.get("/layout", response=LayoutOut)
 def get_layout(request):
     folders = Folder.objects.filter(user=request.user).order_by("position", "name")
-    return {"folders": list(folders), "calendars": list_calendars(request)}
+    return {"folders": list(folders), "calendars": sidebar_calendars_of(request.user)}
 
 
-@router.post("/layout/folders", response=FolderOut, auth=django_auth)
+@router.post("/layout/folders", response=FolderOut)
 def create_folder(request, payload: FolderCreate):
     _require_own_folder(_folder_parents(request.user), payload.parent_id)
     return Folder.objects.create(
@@ -62,7 +61,7 @@ def create_folder(request, payload: FolderCreate):
     )
 
 
-@router.patch("/layout/folders/{folder_id}", response=FolderOut, auth=django_auth)
+@router.patch("/layout/folders/{folder_id}", response=FolderOut)
 def update_folder(request, folder_id: str, payload: FolderUpdate):
     folder = Folder.objects.get(id=folder_id, user=request.user)
     data = payload.dict(exclude_unset=True)
@@ -78,13 +77,13 @@ def update_folder(request, folder_id: str, payload: FolderUpdate):
     return folder
 
 
-@router.delete("/layout/folders/{folder_id}", auth=django_auth)
+@router.delete("/layout/folders/{folder_id}")
 def delete_folder(request, folder_id: str):
     Folder.objects.filter(id=folder_id, user=request.user).delete()
     return {"ok": True}
 
 
-@router.patch("/layout/items", auth=django_auth)
+@router.patch("/layout/items")
 @transaction.atomic
 def update_layout_items(request, payload: LayoutItemsUpdate):
     """Sets parent folder and position of folders and calendars; ones that are gone meanwhile are skipped."""
@@ -101,16 +100,11 @@ def update_layout_items(request, payload: LayoutItemsUpdate):
         if item.type == "folder":
             Folder.objects.filter(id=item.id, user=user).update(position=item.position, parent_id=item.parent_id)
         else:
-            # Calendars are identified by their own id, as everywhere in the app. A membership holds where
-            # its calendar sits; without one (a public calendar added, one shared through a group) the
-            # user's CalendarSubscription does, made on the first move for a group's calendar.
-            place = {"position": item.position, "folder_id": item.parent_id}
-            if CalendarMember.objects.filter(calendar_id=item.id, user=user).update(**place):
-                continue
-            if CalendarSubscription.objects.filter(calendar_id=item.id, user=user).update(**place):
-                continue
-            if CalendarGroup.objects.filter(calendar_id=item.id, group__in=user.groups.all()).exists():
-                CalendarSubscription.objects.create(calendar_id=item.id, user=user, **place)
+            # Calendars are identified by their own id, as everywhere in the app; the user's membership of
+            # one (granted, from a group or added) holds where it sits.
+            CalendarMember.objects.filter(calendar_id=item.id, user=user).update(
+                position=item.position, folder_id=item.parent_id
+            )
     # The bulk updates send no signals; the user's other tabs show the new order.
     broadcast.calendars_changed([user.id])
     return {"ok": True}

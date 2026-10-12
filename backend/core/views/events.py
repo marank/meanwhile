@@ -6,13 +6,11 @@ from datetime import datetime
 
 from django.db import transaction
 from django.db.models import Q
-from ninja import Query
+from ninja import Query, Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
 from core.models import Calendar, Category, Event, EventParticipant, Resource, User
-from core.models.base import EventStatus, Role
+from core.models.base import EventStatus, ParticipantStatus, Role
 from core.schemas import (
     EventCreate,
     EventOut,
@@ -30,7 +28,6 @@ from core.services.bookings import (
     approvers_of,
     awaiting_resources,
     booked_resources,
-    can_modify_event,
     decidable_resources,
     find_booking_conflicts,
     is_in_approver_pool,
@@ -39,16 +36,19 @@ from core.services.bookings import (
 from core.services.itip import record_answer, send_cancel, send_request
 from core.services.notifications import notify
 from core.services.permissions import (
+    MembershipInfo,
+    can_modify_event,
+    get_member_calendar,
     get_membership,
     get_visible_event,
-    has_at_least_role,
+    memberships_of,
     participant_event_ids,
 )
 from core.services.recurrence import (
+    as_utc,
     expand_events,
     format_exdate,
     is_series,
-    make_aware,
     occurrence_index,
     parse_exdates,
     recurrence_count,
@@ -63,57 +63,41 @@ from core.services.series import (
     snapshot,
     split,
 )
+from core.views.common import serialize_event
 
-router = CSRFRouter()
+router = Router()
 
-
-PARTICIPANT_STATUSES = {"needs_action", "accepted", "declined", "tentative"}
 
 # Changes that participants are sent (the rest, e.g. the category, concern the calendar only).
 _SCHEDULED_FIELDS = {"title", "description", "location", "start", "end", "all_day", "rrule"}
 
-
-def _serialize_event(event: Event) -> dict:
-    return {
-        "id": event.id,
-        "calendar_id": str(event.calendar_id),
-        "creator_id": str(event.creator_id),
-        "creator_name": event.creator_name,
-        "creator_email": event.creator_email,
-        "title": event.title,
-        "description": event.description,
-        "location": event.location,
-        "location_resource_id": str(event.location_resource_id) if event.location_resource_id else None,
-        "location_resource_name": event.location_resource.name if event.location_resource else None,
-        "start": make_aware(event.start),
-        "end": make_aware(event.end),
-        "all_day": event.all_day,
-        "timezone": event.timezone,
-        "show_recurrence_count": event.show_recurrence_count,
-        "rrule": event.rrule,
-        "rdates": event.rdates or [],
-        "uid": event.uid,
-        "parent_id": str(event.parent_id) if event.parent_id else None,
-        "recurrence_id": make_aware(event.recurrence_id) if event.recurrence_id else None,
-        "category_id": str(event.category_id) if event.category_id else None,
-        "category_name": event.category.name if event.category else None,
-        "category_color": event.category.color if event.category else None,
-        "resource_id": str(event.resource_id) if event.resource_id else None,
-        "resource_name": event.resource.name if event.resource else None,
-        "status": event.status,
-        "awaiting_approval": [r.name for r in awaiting_resources(event)],
-        "decided_by": str(event.decided_by_id) if event.decided_by_id else None,
-        "decided_at": event.decided_at,
-        "decision_note": event.decision_note,
-        "created_at": event.created_at,
-        "updated_at": event.updated_at,
-    }
+# What the activity log records as changed by an edit, by name: the attribute that holds it.
+_TRACKED_FIELDS = {
+    "title": "title",
+    "description": "description",
+    "location": "location",
+    "start": "start",
+    "end": "end",
+    "all_day": "all_day",
+    "rrule": "rrule",
+    "category": "category_id",
+    "resource": "resource_id",
+    "location_resource": "location_resource_id",
+    "show_recurrence_count": "show_recurrence_count",
+}
 
 
-def _calendar_occurrences(user, calendar: Calendar, membership, range_start: datetime, range_end: datetime) -> list[OccurrenceOut]:
-    """Occurrences of one calendar in the range, as visible to `user`."""
+def _tracked_values(event: Event) -> dict:
+    return {field: getattr(event, attr) for field, attr in _TRACKED_FIELDS.items()}
+
+
+def _occurrences(
+    user, memberships: dict[str, MembershipInfo], range_start: datetime, range_end: datetime
+) -> list[OccurrenceOut]:
+    """Occurrences in the range of the calendars of `memberships` (the user's, by calendar id), by start,
+    as visible to the user."""
     events = Event.objects.filter(
-        Q(calendar=calendar),
+        Q(calendar_id__in=memberships),
         Q(start__lt=range_end),
         Q(rrule__isnull=False) | ~Q(rdates=[]) | Q(all_day=True) | Q(end__gt=range_start),
     ).select_related("calendar", "category", "resource", "location_resource")
@@ -128,9 +112,10 @@ def _calendar_occurrences(user, calendar: Calendar, membership, range_start: dat
             continue
         if event.status == EventStatus.PENDING and str(event.creator_id) != user_id and event.id not in invited_to:
             # Pending bookings are only shown to the requester, participants and approvers.
-            key = tuple(sorted(str(i) for i in event.awaiting_approval or []))
+            # The pool is the same for the same bookings of a calendar (its owner always decides).
+            key = (event.calendar_id, *sorted(str(i) for i in event.awaiting_approval or []))
             if key not in can_decide:
-                can_decide[key] = is_in_approver_pool(event, user_id=user_id)
+                can_decide[key] = is_in_approver_pool(event, user_id)
             if not can_decide[key]:
                 continue
         out.append(OccurrenceOut(
@@ -157,25 +142,26 @@ def _calendar_occurrences(user, calendar: Calendar, membership, range_start: dat
             location_resource_id=str(event.location_resource_id) if event.location_resource_id else None,
             location_resource_icon=event.location_resource.icon if event.location_resource else "",
             creator_id=str(event.creator_id),
-            can_edit=can_modify_event(event, user_id, membership.role),
+            can_edit=can_modify_event(event, user_id, memberships[event.calendar_id].role),
             is_recurring=is_series(event) or bool(event.parent_id),
             series_id=str(event.parent_id or event.id) if is_series(event) or event.parent_id else None,
             recurrence_id=(
-                make_aware(event.recurrence_id) if event.parent_id else occ_start if is_series(event) else None
+                as_utc(event.recurrence_id) if event.parent_id else occ_start if is_series(event) else None
             ),
         ))
+    out.sort(key=lambda o: o.start)
     return out
 
 
 def _parse_range(start: datetime, end: datetime) -> tuple[datetime, datetime]:
-    range_start = make_aware(start)
-    range_end = make_aware(end)
+    range_start = as_utc(start)
+    range_end = as_utc(end)
     if range_start >= range_end:
         raise HttpError(422, "end must be after start")
     return range_start, range_end
 
 
-@router.get("/events", response=list[OccurrenceOut], auth=django_auth)
+@router.get("/events", response=list[OccurrenceOut])
 def list_events_of_calendars(
     request,
     start: datetime,
@@ -184,40 +170,27 @@ def list_events_of_calendars(
 ):
     """Occurrences of several calendars at once; calendars the user can't read are skipped."""
     range_start, range_end = _parse_range(start, end)
-    out = []
-    for calendar in Calendar.objects.filter(id__in=calendar_ids):
-        membership = get_membership(calendar, request.user)
-        if membership is not None:
-            out.extend(_calendar_occurrences(request.user, calendar, membership, range_start, range_end))
-    out.sort(key=lambda x: x.start)
-    return out
+    memberships = memberships_of(request.user, Calendar.objects.filter(id__in=calendar_ids))
+    return _occurrences(request.user, memberships, range_start, range_end)
 
 
-@router.get("/calendars/{calendar_id}/events", response=list[OccurrenceOut], auth=django_auth)
+@router.get("/calendars/{calendar_id}/events", response=list[OccurrenceOut])
 def list_events(request, calendar_id: str, start: datetime, end: datetime):
-    calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
+    calendar, membership = get_member_calendar(calendar_id, request.user)
     range_start, range_end = _parse_range(start, end)
-    out = _calendar_occurrences(request.user, calendar, membership, range_start, range_end)
-    out.sort(key=lambda x: x.start)
-    return out
+    return _occurrences(request.user, {calendar.id: membership}, range_start, range_end)
 
 
-@router.post("/calendars/{calendar_id}/events", response=EventOut, auth=django_auth)
+@router.post("/calendars/{calendar_id}/events", response=EventOut)
 def create_event(request, calendar_id: str, payload: EventCreate):
-    calendar = Calendar.objects.get(id=calendar_id)
-    membership = get_membership(calendar, request.user)
-    if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
-    if not has_at_least_role(membership, Role.OWN):
-        raise HttpError(403, "You do not have permission to create events")
+    calendar, _ = get_member_calendar(
+        calendar_id, request.user, Role.OWN, "You do not have permission to create events"
+    )
     if calendar.force_all_day and not payload.all_day:
         raise HttpError(422, "This calendar only allows all-day events")
 
-    start = make_aware(payload.start)
-    end = make_aware(payload.end)
+    start = as_utc(payload.start)
+    end = as_utc(payload.end)
     if end < start or (end == start and not payload.all_day):
         raise HttpError(
             422,
@@ -270,13 +243,13 @@ def create_event(request, calendar_id: str, payload: EventCreate):
                 event_id=str(event.id),
             )
 
-    return EventOut.model_validate(_serialize_event(event))
+    return EventOut.model_validate(serialize_event(event))
 
 
-@router.get("/events/{event_id}", response=EventOut, auth=django_auth)
+@router.get("/events/{event_id}", response=EventOut)
 def get_event(request, event_id: str):
     event, _ = get_visible_event(event_id, request.user)
-    data = _serialize_event(event)
+    data = serialize_event(event)
     data["can_decide"] = event.status == EventStatus.PENDING and bool(
         decidable_resources(event, str(request.user.id))
     )
@@ -308,10 +281,7 @@ def _check_booking_conflicts(event: Event) -> None:
 
 
 def _modifiable_event(event_id: str, user: User) -> tuple[Event, object]:
-    try:
-        event = Event.objects.select_related("calendar").get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
+    event = Event.objects.select_related("calendar").get(id=event_id)
     membership = get_membership(event.calendar, user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
@@ -320,18 +290,18 @@ def _modifiable_event(event_id: str, user: User) -> tuple[Event, object]:
     return event, membership
 
 
-@router.patch("/events/{event_id}", response=EventOut, auth=django_auth)
+@router.patch("/events/{event_id}", response=EventOut)
 def update_event(request, event_id: str, payload: EventUpdate):
     event, _ = _modifiable_event(event_id, request.user)
     data = payload.dict(exclude_unset=True)
     if event.parent_id and data.get("rrule"):
         raise HttpError(422, "A changed occurrence of a series can't repeat itself")
     with transaction.atomic():
-        _apply_update(request, event, data)
-    return EventOut.model_validate(_serialize_event(event))
+        _apply_update(request.user, event, data)
+    return EventOut.model_validate(serialize_event(event))
 
 
-def _apply_update(request, event: Event, data: dict) -> None:
+def _apply_update(user: User, event: Event, data: dict) -> None:
     """Applies the fields in `data` to the event, with the checks and side effects of an edit."""
     calendar = event.calendar
     if calendar.force_all_day and data.get("all_day") is False:
@@ -343,22 +313,10 @@ def _apply_update(request, event: Event, data: dict) -> None:
 
     before = snapshot(event)
     old_status = event.status
-    old_values = {
-        "title": event.title,
-        "description": event.description,
-        "location": event.location,
-        "start": make_aware(event.start),
-        "end": make_aware(event.end),
-        "all_day": event.all_day,
-        "rrule": event.rrule,
-        "category": event.category_id,
-        "resource": event.resource_id,
-        "location_resource": event.location_resource_id,
-        "show_recurrence_count": event.show_recurrence_count,
-    }
+    old_values = _tracked_values(event)
 
-    start = make_aware(data["start"]) if "start" in data else make_aware(event.start)
-    end = make_aware(data["end"]) if "end" in data else make_aware(event.end)
+    start = as_utc(data["start"]) if "start" in data else event.start
+    end = as_utc(data["end"]) if "end" in data else event.end
     all_day = data["all_day"] if "all_day" in data else event.all_day
     if "start" in data or "end" in data or "all_day" in data:
         if end < start or (end == start and not all_day):
@@ -399,7 +357,7 @@ def _apply_update(request, event: Event, data: dict) -> None:
     if "start" in data:
         if event.rdates and not event.parent_id:
             # Moving the series moves its extra dates along.
-            delta = start - make_aware(event.start)
+            delta = start - event.start
             event.rdates = sorted(format_exdate(d + delta) for d in parse_exdates(event.rdates))
         event.start = start
     if "end" in data:
@@ -415,8 +373,8 @@ def _apply_update(request, event: Event, data: dict) -> None:
 
     # Compare values rather than the presence of keys: the event dialog resends every field.
     rescheduled = (
-        make_aware(event.start) != old_values["start"]
-        or make_aware(event.end) != old_values["end"]
+        event.start != old_values["start"]
+        or event.end != old_values["end"]
         or event.all_day != old_values["all_day"]
         or event.rrule != old_values["rrule"]
     )
@@ -431,33 +389,16 @@ def _apply_update(request, event: Event, data: dict) -> None:
 
     # New bookings, and all bookings at a new time, need approval again unless the user may
     # approve them; the others keep their state.
-    recheck = [r for r, changed in ((resource, resource_changed), (location_resource, location_changed)) if r and changed]
+    candidates = ((resource, resource_changed), (location_resource, location_changed))
+    recheck = [r for r, changed in candidates if r and changed]
     active = event.status in {EventStatus.APPROVED, EventStatus.CONFIRMED, EventStatus.PENDING}
     if rescheduled and active:
         recheck = booked_resources(event)
     if resource_changed or location_changed or (rescheduled and active):
-        update_booking_status(event, request.user, recheck)
+        update_booking_status(event, user, recheck)
     _check_booking_conflicts(event)
 
-    changed = []
-    for field, attr in (
-        ("title", "title"),
-        ("description", "description"),
-        ("location", "location"),
-        ("start", "start"),
-        ("end", "end"),
-        ("all_day", "all_day"),
-        ("rrule", "rrule"),
-        ("category", "category_id"),
-        ("resource", "resource_id"),
-        ("location_resource", "location_resource_id"),
-        ("show_recurrence_count", "show_recurrence_count"),
-    ):
-        value = getattr(event, attr)
-        if attr in ("start", "end"):
-            value = make_aware(value)
-        if value != old_values[field]:
-            changed.append(field)
+    changed = [field for field, value in _tracked_values(event).items() if value != old_values[field]]
 
     event.save()
     if rescheduled and not event.parent_id:
@@ -470,12 +411,12 @@ def _apply_update(request, event: Event, data: dict) -> None:
         details = {"fields": changed}
         if status_reset:
             details["status"] = "pending"
-        record_activity(event, str(request.user.id), "updated", details)
+        record_activity(event, str(user.id), "updated", details)
     if status_reset:
         notify(
             [str(a.id) for a in approvers_of(awaiting_resources(event))] + [str(calendar.owner_id)],
             "approval_requested",
-            str(request.user.id),
+            str(user.id),
             event.title,
             calendar_id=str(calendar.id),
             event_id=str(event.id),
@@ -484,14 +425,15 @@ def _apply_update(request, event: Event, data: dict) -> None:
         send_request(event, update=True)
 
 
-@router.delete("/events/{event_id}", auth=django_auth)
+@router.delete("/events/{event_id}")
 def delete_event(request, event_id: str):
     event, _ = _modifiable_event(event_id, request.user)
     with transaction.atomic():
         if event.parent_id:
             # Deleting a changed occurrence removes it from the series instead of restoring it.
             remove_occurrence(event.parent, event.recurrence_id)
-            record_activity(event.parent, str(request.user.id), "occurrence_deleted", _occurrence_details(event.recurrence_id))
+            details = _occurrence_details(event.recurrence_id)
+            record_activity(event.parent, str(request.user.id), "occurrence_deleted", details)
             send_request(event.parent, update=True)
         else:
             send_cancel(event)
@@ -500,7 +442,7 @@ def delete_event(request, event_id: str):
 
 
 def _occurrence_details(start: datetime) -> dict:
-    return {"occurrence": make_aware(start).isoformat()}
+    return {"occurrence": as_utc(start).isoformat()}
 
 
 def _series_occurrence(event_id: str, user: User, recurrence_id: datetime) -> Event:
@@ -512,7 +454,7 @@ def _series_occurrence(event_id: str, user: User, recurrence_id: datetime) -> Ev
     return series
 
 
-@router.patch("/events/{event_id}/occurrences/{recurrence_id}", response=EventOut, auth=django_auth)
+@router.patch("/events/{event_id}/occurrences/{recurrence_id}", response=EventOut)
 def update_occurrence(
     request, event_id: str, recurrence_id: datetime, payload: EventUpdate, scope: OccurrenceScope = "this"
 ):
@@ -521,36 +463,36 @@ def update_occurrence(
     `recurrence_id` is the original start of the occurrence; start and end in the payload are
     the occurrence's new times. Returns the event that was changed.
     """
-    rid = make_aware(recurrence_id)
+    rid = as_utc(recurrence_id)
     series = _series_occurrence(event_id, request.user, rid)
     data = payload.dict(exclude_unset=True)
     with transaction.atomic():
         if scope == "this":
             override = override_for(series, rid)
-            _apply_update(request, override, data)
+            _apply_update(request.user, override, data)
             record_activity(series, str(request.user.id), "occurrence_changed", _occurrence_details(rid))
-            return EventOut.model_validate(_serialize_event(override))
+            return EventOut.model_validate(serialize_event(override))
         if scope == "following" and occurrence_index(series, rid) > 0:
             following = split(series, rid)
             record_activity(following, str(request.user.id), "created")
             record_activity(series, str(request.user.id), "series_ended", _occurrence_details(rid))
             send_request(series, update=True)
-            _apply_update(request, following, data)
-            return EventOut.model_validate(_serialize_event(following))
+            _apply_update(request.user, following, data)
+            return EventOut.model_validate(serialize_event(following))
         # The whole series: the occurrence's new times move the series by as much.
-        occurrence_end = rid + (make_aware(series.end) - make_aware(series.start))
+        occurrence_end = rid + (series.end - series.start)
         if "start" in data:
-            data["start"] = make_aware(series.start) + (make_aware(data["start"]) - rid)
+            data["start"] = series.start + (as_utc(data["start"]) - rid)
         if "end" in data:
-            data["end"] = make_aware(series.end) + (make_aware(data["end"]) - occurrence_end)
-        _apply_update(request, series, data)
-        return EventOut.model_validate(_serialize_event(series))
+            data["end"] = series.end + (as_utc(data["end"]) - occurrence_end)
+        _apply_update(request.user, series, data)
+        return EventOut.model_validate(serialize_event(series))
 
 
-@router.delete("/events/{event_id}/occurrences/{recurrence_id}", auth=django_auth)
+@router.delete("/events/{event_id}/occurrences/{recurrence_id}")
 def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: OccurrenceScope = "this"):
     """Removes one occurrence of a series ("this"), it and the later ones ("following"), or all."""
-    rid = make_aware(recurrence_id)
+    rid = as_utc(recurrence_id)
     series = _series_occurrence(event_id, request.user, rid)
     with transaction.atomic():
         if scope == "all" or (scope == "following" and occurrence_index(series, rid) == 0):
@@ -567,14 +509,14 @@ def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: Oc
     return {"ok": True}
 
 
-@router.get("/events/{event_id}/reminders", response=EventRemindersOut, auth=django_auth)
+@router.get("/events/{event_id}/reminders", response=EventRemindersOut)
 def get_reminders(request, event_id: str):
     """The current user's own reminders for the event (of a series: for all its occurrences)."""
     event, _ = get_visible_event(event_id, request.user)
     return {"minutes": reminder_minutes(event, request.user)}
 
 
-@router.put("/events/{event_id}/reminders", response=EventRemindersOut, auth=django_auth)
+@router.put("/events/{event_id}/reminders", response=EventRemindersOut)
 def put_reminders(request, event_id: str, payload: EventRemindersIn):
     # Everyone who sees an event may be reminded of it, read-only members included; it concerns only them.
     event, _ = get_visible_event(event_id, request.user)
@@ -600,20 +542,15 @@ def _serialize_participant(participant: EventParticipant) -> dict:
 
 
 def _participant_event(event_id: str, user: User):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
+    event = Event.objects.get(id=event_id)
     membership = get_membership(event.calendar, user)
-    if membership is None or not has_at_least_role(membership, Role.READ):
+    if membership is None:
         raise HttpError(403, "You cannot view this event")
     return event, membership
 
 
 def _create_participant(event: Event, current_user: User, data):
-    participant_status = data.status or "needs_action"
-    if participant_status not in PARTICIPANT_STATUSES:
-        raise HttpError(422, "Invalid participant status")
+    participant_status = data.status or ParticipantStatus.NEEDS_ACTION
     if data.user_id is not None:
         user = User.objects.filter(id=data.user_id).first()
         if user is None:
@@ -648,14 +585,14 @@ def _create_participant(event: Event, current_user: User, data):
     return participant
 
 
-@router.get("/events/{event_id}/participants", response=list[EventParticipantOut], auth=django_auth)
+@router.get("/events/{event_id}/participants", response=list[EventParticipantOut])
 def list_event_participants(request, event_id: str):
     event, _ = _participant_event(event_id, request.user)
     participants = EventParticipant.objects.filter(event=event).select_related("user").order_by("created_at")
     return [_serialize_participant(p) for p in participants]
 
 
-@router.post("/events/{event_id}/participants", response=EventParticipantOut, auth=django_auth)
+@router.post("/events/{event_id}/participants", response=EventParticipantOut)
 def add_event_participant(request, event_id: str, payload: EventParticipantCreate):
     event, membership = _participant_event(event_id, request.user)
     if not can_modify_event(event, str(request.user.id), membership.role):
@@ -666,38 +603,28 @@ def add_event_participant(request, event_id: str, payload: EventParticipantCreat
     return _serialize_participant(participant)
 
 
-@router.patch("/events/{event_id}/participants/me", response=EventParticipantOut, auth=django_auth)
+@router.patch("/events/{event_id}/participants/me", response=EventParticipantOut)
 def update_my_participation(request, event_id: str, payload: EventParticipantUpdate):
     """Answers an invitation: sets the status of the current user's own participation."""
     try:
         participant = EventParticipant.objects.select_related("user").get(event_id=event_id, user=request.user)
     except EventParticipant.DoesNotExist:
-        raise HttpError(404, "You are not a participant of this event")
-    if payload.status is None or payload.status not in PARTICIPANT_STATUSES:
-        raise HttpError(422, "Invalid participant status")
+        raise HttpError(404, "You are not a participant of this event") from None
     with transaction.atomic():
         record_answer(participant, payload.status)
     return _serialize_participant(participant)
 
 
-@router.patch("/events/{event_id}/participants/{participant_id}", response=EventParticipantOut, auth=django_auth)
+@router.patch("/events/{event_id}/participants/{participant_id}", response=EventParticipantOut)
 def update_event_participant(request, event_id: str, participant_id: str, payload: EventParticipantUpdate):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
-    try:
-        participant = EventParticipant.objects.get(id=participant_id, event=event)
-    except EventParticipant.DoesNotExist:
-        raise HttpError(404, "Participant not found")
+    event = Event.objects.get(id=event_id)
+    participant = EventParticipant.objects.get(id=participant_id, event=event)
     membership = get_membership(event.calendar, request.user)
     can_modify = membership is not None and can_modify_event(event, str(request.user.id), membership.role)
-    if not (can_modify or str(participant.user_id) == str(request.user.id)):
+    if not (can_modify or participant.user_id == request.user.id):
         raise HttpError(403, "You cannot update this participant")
-    if payload.status is None or payload.status not in PARTICIPANT_STATUSES:
-        raise HttpError(422, "Invalid participant status")
     with transaction.atomic():
-        if str(participant.user_id) == str(request.user.id):
+        if participant.user_id == request.user.id:
             record_answer(participant, payload.status)
         else:
             participant.status = payload.status
@@ -705,23 +632,17 @@ def update_event_participant(request, event_id: str, participant_id: str, payloa
     return _serialize_participant(participant)
 
 
-@router.delete("/events/{event_id}/participants/{participant_id}", auth=django_auth)
+@router.delete("/events/{event_id}/participants/{participant_id}")
 def delete_event_participant(request, event_id: str, participant_id: str):
-    try:
-        event = Event.objects.get(id=event_id)
-    except Event.DoesNotExist:
-        raise HttpError(404, "Event not found")
-    try:
-        participant = EventParticipant.objects.get(id=participant_id, event=event)
-    except EventParticipant.DoesNotExist:
-        raise HttpError(404, "Participant not found")
+    event = Event.objects.get(id=event_id)
+    participant = EventParticipant.objects.get(id=participant_id, event=event)
     membership = get_membership(event.calendar, request.user)
     can_modify = membership is not None and can_modify_event(event, str(request.user.id), membership.role)
-    if not (can_modify or str(participant.user_id) == str(request.user.id)):
+    if not (can_modify or participant.user_id == request.user.id):
         raise HttpError(403, "You cannot remove this participant")
     with transaction.atomic():
         # Taken off the event by someone else; taken off one occurrence, they still come to the others.
-        if str(participant.user_id) != str(request.user.id) and not event.parent_id:
+        if participant.user_id != request.user.id and not event.parent_id:
             send_cancel(event, [participant])
         participant.delete()
     return {"ok": True}

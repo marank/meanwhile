@@ -15,7 +15,7 @@ from django.test import Client
 
 from core.models import EventParticipant, Notification
 from core.services.itip import process_email, process_itip
-from core.tests.test_approval_workflow import BASE, iso, world  # noqa: F401
+from core.tests.helpers import BASE, iso
 
 pytestmark = pytest.mark.django_db
 

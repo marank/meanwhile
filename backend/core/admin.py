@@ -33,18 +33,18 @@ class CustomUserChangeForm(UserChangeForm):
 class CustomUserAdmin(UserAdmin):
     form = CustomUserChangeForm
     model = models.User
-    list_display = ("email", "display_name", "is_admin", "is_staff", "is_superuser", "is_active", "last_login")
-    list_filter = ("is_admin", "is_staff", "is_superuser", "is_active", "groups")
+    list_display = ("email", "display_name", "is_admin", "is_superuser", "is_active", "last_login")
+    list_filter = ("is_admin", "is_superuser", "is_active", "groups")
     search_fields = ("email", "display_name", "first_name", "last_name")
     ordering = ("email",)
-    filter_horizontal = ("groups", "user_permissions")
+    filter_horizontal = ("groups",)
     readonly_fields = ("last_login", "date_joined", "created_at", "updated_at")
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         (_("Personal info"), {"fields": ("display_name", "first_name", "last_name")}),
         (
             _("Permissions"),
-            {"fields": ("is_admin", "is_staff", "is_superuser", "is_active", "groups", "user_permissions")},
+            {"fields": ("is_admin", "is_superuser", "is_active", "groups")},
         ),
         (_("Preferences"), {"fields": ("language", "timezone", "time_format", "date_format", "email_notifications")}),
         (_("Important dates"), {"fields": ("last_login", "date_joined", "created_at", "updated_at")}),
@@ -54,7 +54,10 @@ class CustomUserAdmin(UserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "display_name", "password1", "password2", "is_admin", "is_staff", "is_superuser", "is_active"),
+                "fields": (
+                    "email", "display_name", "password1", "password2",
+                    "is_admin", "is_superuser", "is_active",
+                ),
             },
         ),
     )
@@ -82,7 +85,12 @@ class AppSettingsAdmin(admin.ModelAdmin):
         (_("Branding"), {"fields": ("app_name", "logo_url", "favicon_url")}),
         (
             _("Calendar defaults"),
-            {"fields": ("default_first_weekday", "default_show_weekends", "default_weekend_days", "default_show_week_numbers")},
+            {
+                "fields": (
+                    "default_first_weekday", "default_show_weekends",
+                    "default_weekend_days", "default_show_week_numbers",
+                )
+            },
         ),
         (None, {"fields": ("updated_at",)}),
     )
@@ -117,7 +125,9 @@ class CalendarMemberInline(admin.TabularInline):
     model = models.CalendarMember
     extra = 0
     autocomplete_fields = ("user",)
-    fields = ("user", "role")
+    # Memberships from a group or a public calendar are kept by the app and have no role of their own.
+    fields = ("user", "source", "role")
+    readonly_fields = ("source",)
 
 
 class CalendarGroupInline(admin.TabularInline):
@@ -160,9 +170,9 @@ class CalendarAdmin(admin.ModelAdmin):
 
 @admin.register(models.CalendarMember)
 class CalendarMemberAdmin(admin.ModelAdmin):
-    list_display = ("calendar", "user", "role", "folder")
+    list_display = ("calendar", "user", "source", "role", "folder")
     list_select_related = ("calendar", "user", "folder")
-    list_filter = ("role",)
+    list_filter = ("source", "role")
     search_fields = ("calendar__name", "user__email", "user__display_name")
     autocomplete_fields = ("calendar", "user", "folder")
 

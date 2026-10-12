@@ -2,18 +2,20 @@
 Each user's reminders before events, delivered as notifications.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
-from core.models import Event, Notification, User
+from core.models import Event, EventReminder, Notification, User
 from core.services.reminders import deliver_due_reminders
-from core.tests.test_approval_workflow import iso, world  # noqa: F401
+from core.tests.helpers import iso
 
 pytestmark = pytest.mark.django_db
 
-NOW = datetime(2030, 1, 7, 8, 50, tzinfo=timezone.utc)
-NINE = datetime(2030, 1, 7, 9, 0, tzinfo=timezone.utc)
+NOW = datetime(2030, 1, 7, 8, 50, tzinfo=UTC)
+NINE = datetime(2030, 1, 7, 9, 0, tzinfo=UTC)
 
 
 def create(world, **fields):
@@ -57,11 +59,11 @@ def test_due_reminders_are_delivered_once(world):
     assert len(reminders_of(world)) == 2
 
 
-def test_missed_reminders_go_out_shortly_after_the_start_only(world):
+@pytest.mark.parametrize("found_after_the_start, delivered", [(timedelta(minutes=10), 1), (timedelta(hours=1), 0)])
+def test_missed_reminders_go_out_shortly_after_the_start_only(world, found_after_the_start, delivered):
     event = create(world)
     remind(world, event, [15])
-    assert deliver_due_reminders(now=NINE + timedelta(hours=1)) == []
-    assert len(deliver_due_reminders(now=NINE + timedelta(minutes=10))) == 1
+    assert len(deliver_due_reminders(now=NINE + found_after_the_start)) == delivered
 
 
 def test_every_occurrence_of_a_series_is_reminded_of(world):
@@ -83,12 +85,19 @@ def test_changed_occurrences_are_reminded_of_at_their_new_time(world):
     assert [d["event_id"] for d in delivered] == [override["id"]]
 
 
+def set_status(event: dict, status: str) -> None:
+    row = Event.objects.get(id=event["id"])
+    row.status = status
+    row.save()
+
+
 def test_cancelled_and_unreachable_events_are_not_reminded_of(world):
     event = create(world)
     remind(world, event, [15])
-    Event.objects.filter(id=event["id"]).update(status="cancelled")
+    set_status(event, "cancelled")
     assert deliver_due_reminders(now=NOW) == []
-    Event.objects.filter(id=event["id"]).update(status="confirmed")
+    # Changed back (saved, as the app does), the event is reminded of again.
+    set_status(event, "confirmed")
     remind(world, event, [15], "other")
     world["api"]["owner"].delete(f"/calendars/{world['cal']['id']}/members/{world['users']['other'].id}")
     deliver_due_reminders(now=NOW)
@@ -98,12 +107,12 @@ def test_cancelled_and_unreachable_events_are_not_reminded_of(world):
 
 def test_all_day_events_are_reminded_of_in_the_users_zone(world):
     User.objects.filter(id=world["users"]["owner"].id).update(timezone="Europe/Berlin")
-    day = datetime(2030, 1, 8, tzinfo=timezone.utc)
+    day = datetime(2030, 1, 8, tzinfo=UTC)
     event = create(world, start=iso(day), end=iso(day), all_day=True)
     # The day before at 09:00 in Berlin, which is 08:00 UTC.
     remind(world, event, [15 * 60])
-    assert deliver_due_reminders(now=datetime(2030, 1, 7, 7, 59, tzinfo=timezone.utc)) == []
-    assert len(deliver_due_reminders(now=datetime(2030, 1, 7, 8, 0, tzinfo=timezone.utc))) == 1
+    assert deliver_due_reminders(now=datetime(2030, 1, 7, 7, 59, tzinfo=UTC)) == []
+    assert len(deliver_due_reminders(now=datetime(2030, 1, 7, 8, 0, tzinfo=UTC))) == 1
 
 
 def test_setting_a_reminder_does_not_notify(world):
@@ -111,3 +120,37 @@ def test_setting_a_reminder_does_not_notify(world):
     remind(world, event, [15])
     body = world["api"]["owner"].get("/notifications/counts").json()
     assert body["unread"] == 0
+
+
+def test_a_delivery_works_out_when_the_reminder_is_next_due(world):
+    event = create(world, rrule="FREQ=YEARLY;INTERVAL=2")
+    remind(world, event, [15])
+    reminder = EventReminder.objects.get(event_id=event["id"])
+    assert len(deliver_due_reminders(now=NOW)) == 1
+    reminder.refresh_from_db()
+    assert reminder.next_due_at == NINE.replace(year=2032) - timedelta(minutes=15)
+
+    # Moving the series has it worked out again by the next delivery.
+    world["api"]["owner"].patch(f"/events/{event['id']}", {"start": iso(NINE + timedelta(hours=1)),
+                                                            "end": iso(NINE + timedelta(hours=2))})
+    reminder.refresh_from_db()
+    assert reminder.next_due_at <= NOW
+    deliver_due_reminders(now=NOW)
+    reminder.refresh_from_db()
+    assert reminder.next_due_at == NINE.replace(hour=10) - timedelta(minutes=15)
+
+
+def test_reminders_not_due_cost_nothing(world):
+    def run_queries() -> int:
+        with CaptureQueriesContext(connection) as captured:
+            deliver_due_reminders(now=NOW)
+        return len(captured)
+
+    for _ in range(3):
+        remind(world, create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))), [15])
+    deliver_due_reminders(now=NOW)  # works out when each is due: in a month
+    few = run_queries()
+    for _ in range(20):
+        remind(world, create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))), [15])
+    deliver_due_reminders(now=NOW)
+    assert run_queries() == few

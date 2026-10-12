@@ -6,6 +6,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
 import WeekLayoutFields from '@/components/WeekLayoutFields.vue'
 import { useAction } from '@/composables/useAction'
+import { changedValues } from '@/services/changes'
 import { pickColorFields, type CalendarColorFields } from '@/services/calendarColors'
 import CalendarColorSettings from './CalendarColorSettings.vue'
 import { useCalendarStore } from '@/stores/calendars'
@@ -33,9 +34,10 @@ const form = ref({
 })
 
 function save() {
+  const data = changedValues<Calendar>({ ...colorForm.value, ...form.value }, props.calendar)
   return run(
     async () => {
-      emit('updated', await calendarStore.updateCalendar(props.calendar.id, { ...colorForm.value, ...form.value }))
+      if (Object.keys(data).length) emit('updated', await calendarStore.updateCalendar(props.calendar.id, data))
     },
     { success: t('app.calendarSettingsSaved'), failure: t('app.saveFailed') },
   )

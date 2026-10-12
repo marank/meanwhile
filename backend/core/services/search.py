@@ -4,9 +4,9 @@ Global search across users, groups, resources and categories.
 
 from django.db.models import Q
 
+from core.models.base import MembershipSource
 from core.models.resources import Category, Resource
 from core.models.users import User, UserGroup
-
 
 MAX_LIMIT = 20
 
@@ -30,7 +30,8 @@ def search_users(q: str, limit: int = MAX_LIMIT):
 
 def search_calendar_members(calendar_id: str, q: str, limit: int = MAX_LIMIT):
     q = q.strip()
-    users = User.objects.filter(memberships__calendar_id=calendar_id)
+    # Granted members (those approvers are picked from), not those with the calendar from a group or added.
+    users = User.objects.filter(memberships__calendar_id=calendar_id, memberships__source=MembershipSource.DIRECT)
     if q:
         users = users.filter(Q(email__icontains=q) | Q(display_name__icontains=q))
     users = users.order_by("display_name", "email").values("id", "display_name", "email")[:limit]

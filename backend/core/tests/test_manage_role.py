@@ -5,7 +5,7 @@ The manage role: everything the owner may in a calendar, except deleting it and 
 import pytest
 
 from core.models import CalendarGroup, UserGroup
-from core.tests.test_approval_workflow import make_user, world  # noqa: F401
+from core.tests.helpers import make_user
 
 pytestmark = pytest.mark.django_db
 

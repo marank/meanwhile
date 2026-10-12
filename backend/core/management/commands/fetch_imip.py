@@ -1,6 +1,6 @@
 """
-Reads participants' answers to invitations (iTIP REPLY) from the iMIP mailbox; run it every few
-minutes (cron, systemd timer). In development, `--mailpit` reads them from Mailpit instead.
+Reads participants' answers to invitations (iTIP REPLY) from the iMIP mailbox, as the worker does
+every five minutes (core.tasks). In development, `--mailpit` reads them from Mailpit instead.
 """
 
 import json
@@ -50,7 +50,7 @@ class Command(BaseCommand):
         try:
             results = fetch_mailpit(options["mailpit"]) if options["mailpit"] else fetch_mailbox()
         except RuntimeError as exc:
-            raise CommandError(str(exc))
+            raise CommandError(str(exc)) from exc
         for line in results:
             self.stdout.write(line)
         self.stdout.write(f"{len(results)} answer(s) processed")

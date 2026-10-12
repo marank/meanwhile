@@ -10,7 +10,7 @@ from radicale import item as radicale_item
 from core.caldav.rights import Rights
 from core.caldav.storage import Collection, acting_as
 from core.models import Calendar, CalendarGroup, Event, UserGroup
-from core.tests.test_approval_workflow import BASE, add_default_approver, world  # noqa: F401
+from core.tests.helpers import BASE
 
 pytestmark = pytest.mark.django_db
 

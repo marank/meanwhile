@@ -3,17 +3,16 @@ Event comments and activity endpoints.
 """
 
 
+from ninja import Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
 from core.models import EventActivity, EventComment
 from core.models.base import Role
 from core.schemas import ActivityOut, CommentCreate, CommentOut
 from core.services.notifications import notify
 from core.services.permissions import get_membership, get_visible_event, has_at_least_role
 
-router = CSRFRouter()
+router = Router()
 
 
 def _serialize_comment(comment: EventComment) -> dict:
@@ -27,14 +26,14 @@ def _serialize_comment(comment: EventComment) -> dict:
     }
 
 
-@router.get("/events/{event_id}/comments", response=list[CommentOut], auth=django_auth)
+@router.get("/events/{event_id}/comments", response=list[CommentOut])
 def list_comments(request, event_id: str):
     event, _ = get_visible_event(event_id, request.user)
     comments = EventComment.objects.filter(event=event).order_by("created_at")
     return [_serialize_comment(c) for c in comments]
 
 
-@router.post("/events/{event_id}/comments", response=CommentOut, auth=django_auth)
+@router.post("/events/{event_id}/comments", response=CommentOut)
 def create_comment(request, event_id: str, payload: CommentCreate):
     event, membership = get_visible_event(event_id, request.user)
     if not has_at_least_role(membership, Role.OWN):
@@ -64,20 +63,18 @@ def create_comment(request, event_id: str, payload: CommentCreate):
     return _serialize_comment(comment)
 
 
-@router.delete("/events/{event_id}/comments/{comment_id}", auth=django_auth)
+@router.delete("/events/{event_id}/comments/{comment_id}")
 def delete_comment(request, event_id: str, comment_id: str):
-    try:
-        comment = EventComment.objects.get(id=comment_id, event_id=event_id)
-    except EventComment.DoesNotExist:
-        raise HttpError(404, "Comment not found")
+    comment = EventComment.objects.get(id=comment_id, event_id=event_id)
     membership = get_membership(comment.event.calendar, request.user)
-    if comment.author_id != request.user.id and not has_at_least_role(membership, Role.FULL):
+    may_moderate = membership is not None and has_at_least_role(membership, Role.FULL)
+    if comment.author_id != request.user.id and not may_moderate:
         raise HttpError(403, "You do not have permission to delete this comment")
     comment.delete()
     return {"ok": True}
 
 
-@router.get("/events/{event_id}/activity", response=list[ActivityOut], auth=django_auth)
+@router.get("/events/{event_id}/activity", response=list[ActivityOut])
 def list_activity(request, event_id: str):
     event, _ = get_visible_event(event_id, request.user)
     entries = EventActivity.objects.filter(event=event).order_by("created_at")

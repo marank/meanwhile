@@ -5,6 +5,9 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 
+// The backend behind the dev proxy; BACKEND_URL in docker-compose.dev.yml.
+const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:8000'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue(), tailwindcss(), vueDevTools()],
@@ -16,24 +19,24 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/ics': {
-        target: 'http://localhost:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/.well-known/caldav': {
-        target: 'http://localhost:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       '/caldav': {
-        target: 'http://localhost:8000',
+        target: backendUrl,
         changeOrigin: true,
       },
       // Live updates; the dev server passes the WebSocket upgrade on.
       '/ws': {
-        target: 'http://localhost:8000',
+        target: backendUrl,
         changeOrigin: true,
         ws: true,
       },

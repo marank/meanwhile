@@ -5,8 +5,8 @@ Public calendars show up in a sidebar only once the user added them there.
 import pytest
 
 from core.models import Folder
+from core.realtime import broadcast
 from core.services.permissions import sidebar_calendars
-from core.tests.test_approval_workflow import world  # noqa: F401
 
 pytestmark = pytest.mark.django_db
 
@@ -68,3 +68,16 @@ def test_a_calendar_made_private_leaves_the_sidebar(world, public):
     world["api"]["owner"].patch(f"/calendars/{public}", {"is_public": False})
     assert public not in listed(world)
     assert offered(world) == {}
+
+
+@pytest.mark.parametrize("remove", ["unsubscribe", "make private"])
+def test_whoever_loses_an_added_calendar_hears_of_it(world, public, monkeypatch, remove):
+    outsider = world["users"]["outsider"]
+    world["api"]["outsider"].put(f"/calendars/{public}/subscription", {})
+    told = []
+    monkeypatch.setattr(broadcast, "calendars_changed", lambda user_ids: told.extend(user_ids))
+    if remove == "unsubscribe":
+        world["api"]["outsider"].delete(f"/calendars/{public}/subscription")
+    else:
+        world["api"]["owner"].patch(f"/calendars/{public}", {"is_public": False})
+    assert outsider.id in told

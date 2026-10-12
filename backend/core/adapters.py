@@ -2,9 +2,8 @@
 Custom django-allauth account adapter.
 """
 
-from django.conf import settings as django_settings
-
 from allauth.account.adapter import DefaultAccountAdapter
+from django.conf import settings as django_settings
 
 from core.models import User
 
@@ -27,7 +26,6 @@ class AccountAdapter(DefaultAccountAdapter):
         admin_email = (getattr(django_settings, "ADMIN_EMAIL", "") or "").lower()
         if is_first or (admin_email and email == admin_email):
             user.is_admin = True
-            user.is_staff = True
             user.is_superuser = True
 
         if commit:

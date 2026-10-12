@@ -5,16 +5,20 @@ CalDAV driven through the mounted Radicale app, the way real clients talk to it.
 import base64
 import io
 import re
+from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote
-from datetime import datetime, timedelta, timezone
 from wsgiref.util import setup_testing_defaults
 
 import pytest
+from django.contrib.auth.hashers import make_password
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from config.wsgi import application
-from core.models import Calendar, CalendarMember, Event, User
+from core.caldav import auth
+from core.models import AppPassword, Calendar, CalendarMember, Event, User
 
-# The plugins close the database connection after every request, which a test transaction can't survive.
+# The CalDAV app tidies up the database connection after every request, which a test transaction can't survive.
 pytestmark = pytest.mark.django_db(transaction=True)
 
 PASSWORD = "secret-pw"
@@ -145,10 +149,6 @@ def test_deactivated_users_cannot_log_in(team):
 
 
 def test_app_passwords_replace_the_account_password(team):
-    from django.contrib.auth.hashers import make_password
-
-    from core.models import AppPassword
-
     user = team["users"]["read"]
     AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
     assert login(user.email, "app-pw")
@@ -235,7 +235,7 @@ def test_events_from_the_app_are_found_by_uid(team):
     owner = team["users"]["owner"]
     Event.objects.create(
         calendar=team["calendar"], creator=owner, title="From the app", uid="app-event",
-        start=datetime(2030, 10, 7, 9, tzinfo=timezone.utc), end=datetime(2030, 10, 7, 10, tzinfo=timezone.utc),
+        start=datetime(2030, 10, 7, 9, tzinfo=UTC), end=datetime(2030, 10, 7, 10, tzinfo=UTC),
     )
     status, content, _ = dav("GET", team["path"] + "app-event.ics", owner)
     assert status == 200 and "SUMMARY:From the app" in content
@@ -257,7 +257,7 @@ def test_sync_reports_changes_and_deletions(team):
     for name in ("keep", "edit", "drop"):
         put(team, f"{name}.ics")
     # Changes from the last half minute are reported again in case they committed late.
-    Event.objects.update(updated_at=datetime.now(timezone.utc) - timedelta(minutes=5))
+    Event.objects.update(updated_at=datetime.now(UTC) - timedelta(minutes=5))
     _, content = sync_collection(path, owner)
     token = sync_token(content)
 
@@ -344,7 +344,7 @@ def test_series_with_exceptions_round_trip(team, master_last):
     assert series.rrule == "FREQ=DAILY;COUNT=5"
     assert series.exdates == ["2030-10-08T07:00:00+00:00"]
     override = series.overrides.get()
-    assert override.recurrence_id == datetime(2030, 10, 9, 7, tzinfo=timezone.utc)
+    assert override.recurrence_id == datetime(2030, 10, 9, 7, tzinfo=UTC)
     assert override.title == "Daily (moved)"
 
     assert occurrences_in_app(team) == [
@@ -372,7 +372,7 @@ def test_all_day_events_keep_their_length(team):
     )
     assert put(team, "allday.ics", text=text) == 201
     event = Event.objects.get(uid="allday")
-    assert event.all_day and event.start == event.end == datetime(2030, 10, 7, tzinfo=timezone.utc)
+    assert event.all_day and event.start == event.end == datetime(2030, 10, 7, tzinfo=UTC)
     content = dav("GET", team["path"] + "allday.ics", team["users"]["owner"])[1]
     assert "DTSTART;VALUE=DATE:20301007" in content and "DTEND;VALUE=DATE:20301008" in content
 
@@ -380,7 +380,7 @@ def test_all_day_events_keep_their_length(team):
 def test_duration_sets_the_end(team):
     text = ics("dur").replace("DTEND:20301007T100000Z", "DURATION:PT2H30M")
     assert put(team, "dur.ics", text=text) == 201
-    assert Event.objects.get(uid="dur").end == datetime(2030, 10, 7, 11, 30, tzinfo=timezone.utc)
+    assert Event.objects.get(uid="dur").end == datetime(2030, 10, 7, 11, 30, tzinfo=UTC)
     content = dav("GET", team["path"] + "dur.ics", team["users"]["owner"])[1]
     assert "DURATION" not in content and "DTEND:20301007T113000Z" in content
 
@@ -409,7 +409,7 @@ def test_caldav_shows_the_current_booking_status(team):
     owner = team["users"]["owner"]
     event = Event.objects.create(
         calendar=team["calendar"], creator=owner, title="Room", uid="booking", status="pending",
-        start=datetime(2030, 10, 7, 9, tzinfo=timezone.utc), end=datetime(2030, 10, 7, 10, tzinfo=timezone.utc),
+        start=datetime(2030, 10, 7, 9, tzinfo=UTC), end=datetime(2030, 10, 7, 10, tzinfo=UTC),
     )
     event.raw_ical = serialize_event_ical(event)
     event.save()
@@ -445,7 +445,7 @@ def test_occurrences_changed_in_the_app_reach_clients(team):
 
     owner, path = team["users"]["owner"], team["path"]
     put(team, "daily.ics", text=series_ics("daily", with_override=False))
-    Event.objects.update(updated_at=datetime.now(timezone.utc) - timedelta(minutes=5))
+    Event.objects.update(updated_at=datetime.now(UTC) - timedelta(minutes=5))
     token = sync_token(sync_collection(path, owner)[1])
 
     client = Client()
@@ -480,7 +480,7 @@ def other_calendar(team):
 def test_move_renames_an_event(team):
     owner, path = team["users"]["owner"], team["path"]
     put(team, "old.ics")
-    Event.objects.update(updated_at=datetime.now(timezone.utc) - timedelta(minutes=5))
+    Event.objects.update(updated_at=datetime.now(UTC) - timedelta(minutes=5))
     token = sync_token(sync_collection(path, owner)[1])
 
     assert move(team, path + "old.ics", path + "new.ics") == 201
@@ -630,7 +630,7 @@ def test_floating_times_are_read_in_the_writers_zone(team):
     text = vevent_ics("float", "DTSTART:20300701T090000\r\nDTEND:20300701T100000\r\nSUMMARY:Floating\r\n")
     assert put(team, "float.ics", text=text) == 201
     event = Event.objects.get(uid="float")
-    assert event.start == datetime(2030, 7, 1, 7, tzinfo=timezone.utc)
+    assert event.start == datetime(2030, 7, 1, 7, tzinfo=UTC)
     assert event.timezone == "Europe/Berlin"
 
 
@@ -737,3 +737,57 @@ def test_location_and_booked_place(team):
     assert put(team, "loc.ics", text=text) == 204
     event.refresh_from_db()
     assert (event.location, event.location_resource_id) == ("Room 1", room.id)
+
+
+# --- Cost ----------------------------------------------------------------------------------------
+# A request costs the same however many events a calendar has, and a password is checked once.
+
+COST_START = datetime(2030, 1, 7, 9, tzinfo=UTC)
+
+
+def add_events(team, numbers: range) -> None:
+    for i in numbers:
+        start = COST_START + timedelta(hours=i)
+        Event.objects.create(
+            calendar=team["calendar"], creator=team["users"]["owner"], uid=f"event-{i}",
+            title=f"E{i}", start=start, end=start + timedelta(minutes=30),
+        )
+
+
+def propfind_queries(team) -> int:
+    with CaptureQueriesContext(connection) as queries:
+        status, _, _ = dav("PROPFIND", team["path"], team["users"]["owner"], DEPTH="1")
+    assert status == 207
+    return len(queries)
+
+
+def test_listing_a_calendar_costs_the_same_for_more_events(team):
+    add_events(team, range(5))
+    few = propfind_queries(team)
+    add_events(team, range(5, 55))
+    assert propfind_queries(team) == few
+
+
+def test_a_password_is_checked_once_and_a_deleted_app_password_stops_working(team, monkeypatch):
+    user = team["users"]["owner"]
+    app_password = AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
+    checks = []
+    original = auth.check_password
+    monkeypatch.setattr(auth, "check_password", lambda *args: checks.append(1) or original(*args))
+
+    for _ in range(3):
+        assert dav("PROPFIND", team["path"], user, password="app-pw", DEPTH="0")[0] == 207
+    assert len(checks) == 1
+    assert dav("PROPFIND", team["path"], user, password="wrong", DEPTH="0")[0] == 401
+
+    app_password.delete()
+    assert dav("PROPFIND", team["path"], user, password="app-pw", DEPTH="0")[0] == 401
+
+
+def test_failed_logins_are_limited_like_the_web_login(team):
+    user, path = team["users"]["owner"], team["path"]
+    for _ in range(auth.MAX_FAILED_LOGINS):
+        assert dav("PROPFIND", path, user, password="guess", DEPTH="0")[0] == 401
+    # Now even the right password is refused for a while; other logins are not affected.
+    assert dav("PROPFIND", path, user, DEPTH="0")[0] == 401
+    assert dav("PROPFIND", f"/caldav/{team['users']['own'].email}/", team["users"]["own"], DEPTH="0")[0] == 207

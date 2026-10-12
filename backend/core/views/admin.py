@@ -5,10 +5,9 @@ Admin endpoints for users and global settings.
 import secrets
 
 from django.db.models import Prefetch
+from ninja import Router
 from ninja.errors import HttpError
-from ninja.security import django_auth
 
-from core.api import CSRFRouter
 from core.models import User, UserGroup, get_or_create_app_settings
 from core.schemas import (
     AdminPasswordResetOut,
@@ -21,7 +20,7 @@ from core.schemas import (
 )
 from core.views.common import require_admin
 
-router = CSRFRouter()
+router = Router()
 
 
 def _serialize_user(user: User) -> dict:
@@ -30,8 +29,6 @@ def _serialize_user(user: User) -> dict:
         "email": user.email,
         "display_name": user.display_name,
         "is_admin": user.is_admin,
-        "is_staff": user.is_staff,
-        "is_superuser": user.is_superuser,
         "is_active": user.is_active,
         "created_at": user.created_at,
         "updated_at": user.updated_at,
@@ -39,13 +36,13 @@ def _serialize_user(user: User) -> dict:
     }
 
 
-@router.get("/admin/settings", response=AppSettingsOut, auth=django_auth)
+@router.get("/admin/settings", response=AppSettingsOut)
 def admin_settings(request):
     require_admin(request)
     return get_or_create_app_settings()
 
 
-@router.patch("/admin/settings", response=AppSettingsOut, auth=django_auth)
+@router.patch("/admin/settings", response=AppSettingsOut)
 def admin_settings_update(request, payload: AppSettingsUpdate):
     require_admin(request)
     settings_obj = get_or_create_app_settings()
@@ -55,22 +52,20 @@ def admin_settings_update(request, payload: AppSettingsUpdate):
     return settings_obj
 
 
-@router.get("/admin/users", response=list[AdminUserOut], auth=django_auth)
+@router.get("/admin/users", response=list[AdminUserOut])
 def admin_users(request):
     require_admin(request)
     users = User.objects.prefetch_related(Prefetch("groups", queryset=UserGroup.objects.all())).order_by("email")
     return [_serialize_user(u) for u in users]
 
 
-@router.post("/admin/users", response=AdminUserOut, auth=django_auth)
+@router.post("/admin/users", response=AdminUserOut)
 def admin_create_user(request, payload: AdminUserCreate):
     require_admin(request)
     user = User(
         email=payload.email,
         display_name=payload.display_name,
         is_admin=payload.is_admin,
-        is_staff=payload.is_staff,
-        is_superuser=payload.is_superuser,
         is_active=payload.is_active,
     )
     user.set_password(payload.password)
@@ -80,21 +75,21 @@ def admin_create_user(request, payload: AdminUserCreate):
     return _serialize_user(user)
 
 
-@router.get("/admin/users/{user_id}", response=AdminUserOut, auth=django_auth)
+@router.get("/admin/users/{user_id}", response=AdminUserOut)
 def admin_get_user(request, user_id: str):
     require_admin(request)
     user = User.objects.prefetch_related("groups").get(id=user_id)
     return _serialize_user(user)
 
 
-@router.patch("/admin/users/{user_id}", response=AdminUserOut, auth=django_auth)
+@router.patch("/admin/users/{user_id}", response=AdminUserOut)
 def admin_update_user(request, user_id: str, payload: AdminUserUpdate):
     require_admin(request)
     user = User.objects.prefetch_related("groups").get(id=user_id)
     data = payload.dict(exclude_unset=True)
 
-    is_self = str(user.id) == str(request.user.id)
-    protected = {"is_admin", "is_staff", "is_superuser", "is_active"}
+    is_self = user.id == request.user.id
+    protected = {"is_admin", "is_active"}
     if is_self:
         for flag in protected:
             if data.get(flag) is False:
@@ -112,7 +107,7 @@ def admin_update_user(request, user_id: str, payload: AdminUserUpdate):
     return _serialize_user(user)
 
 
-@router.delete("/admin/users/{user_id}", auth=django_auth)
+@router.delete("/admin/users/{user_id}")
 def admin_delete_user(request, user_id: str):
     require_admin(request)
     if str(request.user.id) == user_id:
@@ -124,7 +119,6 @@ def admin_delete_user(request, user_id: str):
 @router.post(
     "/admin/users/{user_id}/reset-password",
     response=AdminPasswordResetOut,
-    auth=django_auth,
 )
 def admin_reset_password(request, user_id: str):
     require_admin(request)

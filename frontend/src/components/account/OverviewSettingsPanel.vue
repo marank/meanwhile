@@ -8,6 +8,7 @@ import SettingsToggle from '@/components/SettingsToggle.vue'
 import WeekLayoutFields from '@/components/WeekLayoutFields.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { changedValues } from '@/services/changes'
 import { pickColorFields, type CalendarColorFields } from '@/services/calendarColors'
 import { useOverviewStore } from '@/stores/overview'
 
@@ -36,8 +37,11 @@ const { loading } = useLoader(async () => {
 
 function save() {
   if (!colorForm.value || !form.value) return
-  const data = { ...colorForm.value, ...form.value }
-  return run(() => overview.update(data), { success: t('app.overviewSettingsSaved'), failure: t('app.saveFailed') })
+  const data = changedValues<OverviewSettings>({ ...colorForm.value, ...form.value }, overview.settings!)
+  return run(() => (Object.keys(data).length ? overview.update(data) : Promise.resolve()), {
+    success: t('app.overviewSettingsSaved'),
+    failure: t('app.saveFailed'),
+  })
 }
 </script>
 

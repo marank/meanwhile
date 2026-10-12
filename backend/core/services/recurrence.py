@@ -2,7 +2,7 @@
 Recurrence expansion and conflict detection.
 """
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from itertools import islice
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -12,10 +12,11 @@ from icalendar.timezone.windows_to_olson import WINDOWS_TO_OLSON
 from core.models.events import Event
 
 
-def make_aware(dt: datetime) -> datetime:
+def as_utc(dt: datetime) -> datetime:
+    """The date-time in UTC; one without a zone is taken to be in UTC already."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def zone(name: str | None):
@@ -23,7 +24,7 @@ def zone(name: str | None):
     try:
         return ZoneInfo(name or "UTC")
     except (ZoneInfoNotFoundError, ValueError):
-        return timezone.utc
+        return UTC
 
 
 def iana_zone_name(tzid: str | None) -> str | None:
@@ -66,7 +67,7 @@ def _parse_until(value: str) -> date | datetime:
     if "T" not in value:
         return datetime.strptime(value[:8], "%Y%m%d").date()
     parsed = datetime.strptime(value.rstrip("Z")[:15], "%Y%m%dT%H%M%S")
-    return parsed.replace(tzinfo=timezone.utc) if value.endswith("Z") else parsed
+    return parsed.replace(tzinfo=UTC) if value.endswith("Z") else parsed
 
 
 def normalized_rrule(event: Event) -> str | None:
@@ -84,7 +85,7 @@ def normalized_rrule(event: Event) -> str | None:
         return format_rrule(parts)
     if event.all_day:
         if isinstance(until, datetime):
-            until = (until.astimezone(timezone.utc) if until.tzinfo else until).date()
+            until = (until.astimezone(UTC) if until.tzinfo else until).date()
         parts["UNTIL"] = until.strftime("%Y%m%d")
     else:
         event_zone = zone(event.timezone)
@@ -93,7 +94,7 @@ def normalized_rrule(event: Event) -> str | None:
             until = datetime.combine(until, time(23, 59, 59), tzinfo=event_zone)
         elif until.tzinfo is None:
             until = until.replace(tzinfo=event_zone)
-        parts["UNTIL"] = until.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        parts["UNTIL"] = until.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
     return format_rrule(parts)
 
 
@@ -105,14 +106,17 @@ class _UtcRule:
 
     def between(self, after: datetime, before: datetime, inc: bool = False):
         naive = self._rule.between(
-            after.astimezone(timezone.utc).replace(tzinfo=None),
-            before.astimezone(timezone.utc).replace(tzinfo=None),
+            after.astimezone(UTC).replace(tzinfo=None),
+            before.astimezone(UTC).replace(tzinfo=None),
             inc=inc,
         )
-        return [dt.replace(tzinfo=timezone.utc) for dt in naive]
+        return [dt.replace(tzinfo=UTC) for dt in naive]
 
     def __iter__(self):
-        return (dt.replace(tzinfo=timezone.utc) for dt in self._rule)
+        return (dt.replace(tzinfo=UTC) for dt in self._rule)
+
+    def xafter(self, after: datetime):
+        return (dt.replace(tzinfo=UTC) for dt in self._rule.xafter(after.astimezone(UTC).replace(tzinfo=None)))
 
 
 def _rule(event: Event, event_start: datetime):
@@ -120,7 +124,7 @@ def _rule(event: Event, event_start: datetime):
     # midnight in UTC and daylight saving changes. All-day events are dates and repeat in UTC.
     if event.all_day:
         def local(dt: datetime) -> datetime:
-            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+            return dt.astimezone(UTC).replace(tzinfo=None)
     else:
         event_zone = zone(event.timezone)
 
@@ -143,14 +147,14 @@ def parse_exdates(values) -> set[datetime]:
     result = set()
     for value in values or []:
         try:
-            result.add(make_aware(datetime.fromisoformat(value)))
+            result.add(as_utc(datetime.fromisoformat(value)))
         except (TypeError, ValueError):
             continue
     return result
 
 
 def format_exdate(dt: datetime) -> str:
-    return make_aware(dt).isoformat()
+    return as_utc(dt).isoformat()
 
 
 def exception_starts(event: Event) -> set[datetime]:
@@ -158,7 +162,7 @@ def exception_starts(event: Event) -> set[datetime]:
     starts = parse_exdates(event.exdates)
     if event.pk:
         starts.update(
-            make_aware(rid)
+            rid
             for rid in Event.objects.filter(parent_id=event.pk).values_list("recurrence_id", flat=True)
             if rid is not None
         )
@@ -177,8 +181,8 @@ def expand_event(
     Occurrences that were removed or replaced by an override are left out; `exclude` passes
     their starts in when they are already known.
     """
-    event_start = make_aware(event.start)
-    event_end = make_aware(event.end) + (
+    event_start = as_utc(event.start)
+    event_end = as_utc(event.end) + (
         timedelta(days=1) if event.all_day else timedelta()
     )
     duration = event_end - event_start
@@ -193,7 +197,7 @@ def expand_event(
     starts = rule.between(range_start - duration, range_end, inc=True)
     occurrences = []
     for start in starts[:max_occurrences]:
-        occ_start = make_aware(start)
+        occ_start = as_utc(start)
         occ_end = occ_start + duration
         if occ_end > range_start and occ_start not in exclude:
             occurrences.append((occ_start, occ_end))
@@ -204,30 +208,42 @@ def occurrence_index(event: Event, start: datetime) -> int | None:
     """Position of the occurrence starting at `start` in the series (0 is the first), or None
     if the series has no occurrence then. Removed and overridden occurrences count."""
     if not is_series(event):
-        return 0 if make_aware(event.start) == make_aware(start) else None
-    event_start = make_aware(event.start)
-    start = make_aware(start)
-    starts = _rule(event, event_start).between(event_start, start, inc=True)
-    if not starts or make_aware(starts[-1]) != start:
+        return 0 if event.start == start else None
+    starts = _rule(event, event.start).between(event.start, start, inc=True)
+    if not starts or starts[-1] != start:
         return None
     return len(starts) - 1
 
 
+def occurrence_starts(event: Event, after: datetime, exclude: set[datetime] | None = None):
+    """The starts of the event's occurrences after `after`, in order (endless for an endless series).
+
+    Like expand_event, without the removed and replaced ones; `exclude` passes their starts in.
+    """
+    if not is_series(event):
+        if event.start > after:
+            yield event.start
+        return
+    if exclude is None:
+        exclude = exception_starts(event)
+    for start in _rule(event, event.start).xafter(after):
+        start = as_utc(start)
+        if start not in exclude:
+            yield start
+
+
 def nth_occurrence(event: Event, index: int) -> datetime | None:
     if not is_series(event):
-        return make_aware(event.start) if index == 0 else None
-    found = next(islice(iter(_rule(event, make_aware(event.start))), index, None), None)
-    return make_aware(found) if found is not None else None
+        return as_utc(event.start) if index == 0 else None
+    found = next(islice(iter(_rule(event, event.start)), index, None), None)
+    return as_utc(found) if found is not None else None
 
 
 def recurrence_count(event: Event, occurrence_start: datetime) -> int:
     if not is_series(event):
         return 0
-    event_start = make_aware(event.start)
-    rule = _rule(event, event_start)
-    return max(
-        0, len(rule.between(event_start, make_aware(occurrence_start), inc=True)) - 1
-    )
+    rule = _rule(event, event.start)
+    return max(0, len(rule.between(event.start, occurrence_start, inc=True)) - 1)
 
 
 def expand_events(events, range_start: datetime, range_end: datetime):
@@ -237,7 +253,7 @@ def expand_events(events, range_start: datetime, range_end: datetime):
     overridden: dict[str, set[datetime]] = {}
     for parent_id, rid in Event.objects.filter(parent_id__in=series_ids).values_list("parent_id", "recurrence_id"):
         if rid is not None:
-            overridden.setdefault(parent_id, set()).add(make_aware(rid))
+            overridden.setdefault(parent_id, set()).add(rid)
     result = []
     for event in events:
         exclude = parse_exdates(event.exdates) | overridden.get(event.pk, set()) if is_series(event) else set()
@@ -247,15 +263,14 @@ def expand_events(events, range_start: datetime, range_end: datetime):
 
 
 def find_conflicts(candidate: Event, existing_events, horizon_end: datetime):
-    range_start = make_aware(candidate.start)
-    range_end = make_aware(horizon_end)
+    range_start, range_end = candidate.start, horizon_end
     candidate_starts = expand_event(candidate, range_start, range_end)
     if not candidate_starts:
         return []
 
     conflicting = []
     for existing in existing_events:
-        if str(existing.id) == str(candidate.id):
+        if existing.id == candidate.id:
             continue
         existing_starts = expand_event(existing, range_start, range_end)
         if _series_overlap(candidate_starts, existing_starts):

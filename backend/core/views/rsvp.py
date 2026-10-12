@@ -4,16 +4,16 @@ key, so no account or session is needed.
 """
 
 from django.db import transaction
+from ninja import Router
 from ninja.errors import HttpError
 
-from core.api import CSRFRouter
 from core.models import EventParticipant
 from core.models.base import EventStatus
 from core.schemas import RsvpAnswer, RsvpOut
 from core.services.itip import record_answer, series_of
-from core.services.recurrence import make_aware
+from core.services.recurrence import as_utc
 
-router = CSRFRouter()
+router = Router()
 
 _GONE = {EventStatus.REJECTED, EventStatus.CANCELLED}
 
@@ -35,8 +35,8 @@ def _serialize(participant: EventParticipant) -> RsvpOut:
     organizer = series.creator
     return RsvpOut(
         title=event.title,
-        start=make_aware(event.start),
-        end=make_aware(event.end),
+        start=as_utc(event.start),
+        end=as_utc(event.end),
         all_day=event.all_day,
         timezone=event.timezone,
         location=event.location,
@@ -49,12 +49,12 @@ def _serialize(participant: EventParticipant) -> RsvpOut:
     )
 
 
-@router.get("/rsvp/{token}", response=RsvpOut)
+@router.get("/rsvp/{token}", response=RsvpOut, auth=None)
 def get_invitation(request, token: str):
     return _serialize(_participant(token))
 
 
-@router.post("/rsvp/{token}", response=RsvpOut)
+@router.post("/rsvp/{token}", response=RsvpOut, auth=None)
 def answer_invitation(request, token: str, payload: RsvpAnswer):
     participant = _participant(token)
     if participant.event.status in _GONE:

@@ -3,18 +3,18 @@ iCalendar serialization.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import icalendar
 from django.conf import settings
+from django.utils import timezone
 from icalendar import Calendar as ICalCalendar
 from icalendar import Event as ICalEvent
 
 from core.models.base import EventStatus
 from core.models.events import Event, EventParticipant
 from core.models.users import User
-from core.services.recurrence import is_series, make_aware, normalized_rrule, parse_exdates, zone
-
+from core.services.recurrence import as_utc, is_series, normalized_rrule, parse_exdates, zone
 
 PRODID = "-//Calendar App//EN"
 
@@ -81,7 +81,7 @@ def _raw_components(event: Event) -> dict:
         key = None
         if rid is not None:
             value = rid.dt
-            key = make_aware(value if isinstance(value, datetime) else datetime(value.year, value.month, value.day))
+            key = as_utc(value if isinstance(value, datetime) else datetime(value.year, value.month, value.day))
         components.setdefault(key, component)
     return components
 
@@ -89,8 +89,8 @@ def _raw_components(event: Event) -> dict:
 def _ical_time(event: Event, value: datetime):
     """A start as written in iCalendar: a date for all-day events, local time with TZID otherwise."""
     if event.all_day:
-        return make_aware(value).date()
-    return make_aware(value).astimezone(zone(event.timezone))
+        return as_utc(value).date()
+    return value.astimezone(zone(event.timezone))
 
 
 def _raw_texts(raw: ICalEvent | None, name: str) -> list[str]:
@@ -190,8 +190,8 @@ def build_event_ical(
         vevent.add("description", event.description)
     if event.all_day:
         # Stored ends are inclusive; iCalendar's DTEND is the day after.
-        vevent.add("dtstart", make_aware(event.start).date())
-        vevent.add("dtend", make_aware(event.end).date() + timedelta(days=1))
+        vevent.add("dtstart", as_utc(event.start).date())
+        vevent.add("dtend", as_utc(event.end).date() + timedelta(days=1))
     else:
         # Local times with TZID, so clients repeat the series in the zone it was planned in.
         vevent.add("dtstart", _ical_time(event, event.start))
@@ -199,7 +199,7 @@ def build_event_ical(
     if event.recurrence_id is not None:
         series = event.parent
         vevent.add("recurrence-id", _ical_time(series, event.recurrence_id))
-    vevent.add("dtstamp", event.updated_at or datetime.now(timezone.utc))
+    vevent.add("dtstamp", event.updated_at or timezone.now())
     # Changes sent to participants count up; a client's own count is kept if it is higher.
     sequence = max((event.parent if event.parent_id else event).sequence, _raw_sequence(raw))
     if sequence or (raw is not None and "SEQUENCE" in raw):
@@ -255,14 +255,16 @@ def build_series_ical(event: Event, shared_only: bool = True, audience: Audience
     else:
         visible = [o for o in overrides if not shared_only or o.status in SHARED_STATUSES]
     exdates = parse_exdates(event.exdates)
-    exdates.update(make_aware(o.recurrence_id) for o in overrides if o not in visible)
-    components = [build_event_ical(event, raw.get(None), exdates, audience=audience, category_names=names, organizer=organizer)]
+    exdates.update(as_utc(o.recurrence_id) for o in overrides if o not in visible)
+    components = [
+        build_event_ical(event, raw.get(None), exdates, audience=audience, category_names=names, organizer=organizer)
+    ]
     for override in sorted(visible, key=lambda o: o.recurrence_id):
         override.parent = event
         components.append(
             build_event_ical(
                 override,
-                raw.get(make_aware(override.recurrence_id)),
+                raw.get(override.recurrence_id),
                 uid=event.uid,
                 audience=audience,
                 category_names=names,
@@ -322,6 +324,7 @@ def build_calendar_feed(calendar, events) -> str:
     for event in events:
         if event.parent_id or event.status not in SHARED_STATUSES:
             continue
+        event.calendar = calendar  # one object for all events, so that its categories are looked up once
         for component in build_series_ical(event):
             cal.add_component(component)
 

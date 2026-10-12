@@ -5,7 +5,7 @@ Where calendars and folders sit in the user's sidebar.
 import pytest
 from django.test import Client
 
-from core.models import CalendarGroup, CalendarMember, CalendarSubscription, Folder, User, UserGroup
+from core.models import CalendarGroup, CalendarMember, Folder, User, UserGroup
 from core.services.calendars import create_calendar
 
 pytestmark = pytest.mark.django_db
@@ -58,7 +58,7 @@ def test_calendars_shared_through_a_group_are_moved_too(user_client):
 
     reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 0})
     assert listed(client)[calendar.id]["folder_id"] is None
-    assert CalendarSubscription.objects.filter(calendar=calendar, user=user).count() == 1
+    assert CalendarMember.objects.get(calendar=calendar, user=user).source == "group"
 
 
 def test_calendars_without_access_get_no_place(user_client):
