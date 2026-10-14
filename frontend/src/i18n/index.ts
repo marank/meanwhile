@@ -11,7 +11,7 @@ declare module 'vue-i18n' {
 
 export type Locale = 'en' | 'de'
 
-const LOCALE_KEY = 'calendar-locale'
+const LOCALE_KEY = 'locale'
 
 function initialLocale(): Locale {
   const stored = readStorage(LOCALE_KEY)

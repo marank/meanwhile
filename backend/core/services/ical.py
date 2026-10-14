@@ -16,7 +16,7 @@ from core.models.events import Event, EventParticipant
 from core.models.users import User
 from core.services.recurrence import as_utc, is_series, normalized_rrule, parse_exdates, zone
 
-PRODID = "-//Calendar App//EN"
+PRODID = "-//Meanwhile//EN"
 
 # What others see of a calendar (feed, CalDAV): pending, rejected and cancelled bookings stay out.
 SHARED_STATUSES = {EventStatus.CONFIRMED, EventStatus.APPROVED}

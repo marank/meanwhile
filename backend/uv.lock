@@ -158,73 +158,6 @@ wheels = [
 ]
 
 [[package]]
-name = "calendar-backend"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "a2wsgi" },
-    { name = "argon2-cffi" },
-    { name = "channels" },
-    { name = "channels-redis" },
-    { name = "daphne" },
-    { name = "dj-database-url" },
-    { name = "django" },
-    { name = "django-allauth" },
-    { name = "django-cors-headers" },
-    { name = "django-ninja" },
-    { name = "email-validator" },
-    { name = "icalendar" },
-    { name = "procrastinate", extra = ["django"] },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "python-dateutil" },
-    { name = "python-dotenv" },
-    { name = "radicale" },
-    { name = "uuid-utils" },
-    { name = "uvicorn", extra = ["standard"] },
-    { name = "vobject" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-django" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "a2wsgi", specifier = ">=1.10,<2" },
-    { name = "argon2-cffi", specifier = ">=23.1,<24.0" },
-    { name = "channels", specifier = ">=4.2,<5" },
-    { name = "channels-redis", specifier = ">=4.2,<5" },
-    { name = "daphne", specifier = ">=4.1,<5" },
-    { name = "dj-database-url", specifier = ">=2.3,<3.0" },
-    { name = "django", specifier = ">=5.1,<5.2" },
-    { name = "django-allauth", specifier = ">=65.0,<66.0" },
-    { name = "django-cors-headers", specifier = ">=4.6,<5.0" },
-    { name = "django-ninja", specifier = ">=1.3,<2.0" },
-    { name = "email-validator", specifier = ">=2.2,<3.0" },
-    { name = "icalendar", specifier = ">=5.0,<7.0" },
-    { name = "procrastinate", extras = ["django"], specifier = ">=3,<4" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4.0" },
-    { name = "python-dateutil", specifier = ">=2.9,<3.0" },
-    { name = "python-dotenv", specifier = ">=1.0,<2.0" },
-    { name = "radicale", specifier = ">=3.4,<4.0" },
-    { name = "uuid-utils", specifier = ">=0.10,<1.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
-    { name = "vobject", specifier = ">=0.9.7,<1.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3,<9.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24,<1" },
-    { name = "pytest-django", specifier = ">=4.9,<5.0" },
-    { name = "ruff", specifier = ">=0.14,<1" },
-]
-
-[[package]]
 name = "cbor2"
 version = "5.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -877,6 +810,73 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/2a/f6/210563eef148773ef835d21c0fa1e8a43c5b10fceb1f63d5d650635b81da/libpass-1.9.3.tar.gz", hash = "sha256:7830b9323d9ba96a841ad698a8dec1d43a2b0b7f1c855c76772e7972c1c6d959", size = 692901, upload-time = "2025-10-09T14:26:28.363Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/a6/ff00d926a9f4ece9e0732bcea1c3e8e9280390f48cec53f237e21f220082/libpass-1.9.3-py3-none-any.whl", hash = "sha256:3cbeb14d22086660e92c30d787ea981973d67394e81c8c870e1a83cfe1c84353", size = 307118, upload-time = "2025-10-09T14:26:25.551Z" },
+]
+
+[[package]]
+name = "meanwhile-backend"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "a2wsgi" },
+    { name = "argon2-cffi" },
+    { name = "channels" },
+    { name = "channels-redis" },
+    { name = "daphne" },
+    { name = "dj-database-url" },
+    { name = "django" },
+    { name = "django-allauth" },
+    { name = "django-cors-headers" },
+    { name = "django-ninja" },
+    { name = "email-validator" },
+    { name = "icalendar" },
+    { name = "procrastinate", extra = ["django"] },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "python-dateutil" },
+    { name = "python-dotenv" },
+    { name = "radicale" },
+    { name = "uuid-utils" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "vobject" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-django" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "a2wsgi", specifier = ">=1.10,<2" },
+    { name = "argon2-cffi", specifier = ">=23.1,<24.0" },
+    { name = "channels", specifier = ">=4.2,<5" },
+    { name = "channels-redis", specifier = ">=4.2,<5" },
+    { name = "daphne", specifier = ">=4.1,<5" },
+    { name = "dj-database-url", specifier = ">=2.3,<3.0" },
+    { name = "django", specifier = ">=5.1,<5.2" },
+    { name = "django-allauth", specifier = ">=65.0,<66.0" },
+    { name = "django-cors-headers", specifier = ">=4.6,<5.0" },
+    { name = "django-ninja", specifier = ">=1.3,<2.0" },
+    { name = "email-validator", specifier = ">=2.2,<3.0" },
+    { name = "icalendar", specifier = ">=5.0,<7.0" },
+    { name = "procrastinate", extras = ["django"], specifier = ">=3,<4" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4.0" },
+    { name = "python-dateutil", specifier = ">=2.9,<3.0" },
+    { name = "python-dotenv", specifier = ">=1.0,<2.0" },
+    { name = "radicale", specifier = ">=3.4,<4.0" },
+    { name = "uuid-utils", specifier = ">=0.10,<1.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
+    { name = "vobject", specifier = ">=0.9.7,<1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3,<9.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24,<1" },
+    { name = "pytest-django", specifier = ">=4.9,<5.0" },
+    { name = "ruff", specifier = ">=0.14,<1" },
 ]
 
 [[package]]

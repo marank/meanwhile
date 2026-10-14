@@ -9,8 +9,8 @@ from django.utils.translation import gettext_lazy as _
 
 from core import models
 
-admin.site.site_header = "Calendar"
-admin.site.site_title = "Calendar"
+admin.site.site_header = "Meanwhile"
+admin.site.site_title = "Meanwhile"
 admin.site.index_title = "Administration"
 
 LIGHT_COLORS = ("base_color", "weekend_color", "today_color", "event_color", "border_color", "outer_border_color")

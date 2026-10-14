@@ -17,6 +17,8 @@ export default defineConfig({
     },
   },
   server: {
+    port: 6326,
+    strictPort: true,
     proxy: {
       '/api': {
         target: backendUrl,

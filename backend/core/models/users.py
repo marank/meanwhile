@@ -96,7 +96,7 @@ class UserGroup(UUIDModel, TimestampedModel):
 
 class AppSettings(models.Model):
     id = models.IntegerField(primary_key=True, default=1)
-    app_name = models.CharField(max_length=255, default="Calendar")
+    app_name = models.CharField(max_length=255, default="Meanwhile")
     logo_url = models.TextField(blank=True, default="")
     favicon_url = models.TextField(blank=True, default="")
     default_first_weekday = models.IntegerField(default=0)

@@ -21,7 +21,7 @@ import { hasRole } from '@/services/roles'
 import * as api from '@/api'
 import type { CalendarListItem, Folder } from '@/api'
 
-const SIDEBAR_WIDTH_KEY = 'calendar_sidebar_width'
+const SIDEBAR_WIDTH_KEY = 'sidebar-width'
 const MIN_WIDTH = 180
 const MAX_WIDTH = 500
 const DEFAULT_WIDTH = 256

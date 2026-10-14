@@ -17,7 +17,7 @@ from core.services.reminders import deliver_due_reminders
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
-ORIGIN = b"http://localhost:5173"
+ORIGIN = b"http://localhost:6326"
 
 
 @pytest.fixture

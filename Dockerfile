@@ -38,8 +38,8 @@ COPY backend/ ./
 RUN python manage.py collectstatic --no-input
 
 COPY --from=frontend /frontend/dist /srv/frontend
-COPY docker/nginx.conf /etc/nginx/conf.d/calendar.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/calendar.conf
+COPY docker/nginx.conf /etc/nginx/conf.d/app.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/app.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 EXPOSE 80

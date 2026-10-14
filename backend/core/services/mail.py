@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def app_name() -> str:
-    return get_or_create_app_settings().app_name or "Calendar"
+    return get_or_create_app_settings().app_name or "Meanwhile"
 
 
 def sender(name: str | None = None, app: str | None = None) -> str:

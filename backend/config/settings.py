@@ -110,7 +110,7 @@ ASGI_APPLICATION = "config.asgi.application"
 # ---------------------------------------------------------------------------
 
 # PostgreSQL only (the task queue, procrastinate, lives in it); by default the one of docker-compose.dev.yml.
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://calendar:calendar@localhost:5432/calendar")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://meanwhile:meanwhile@localhost:5432/meanwhile")
 DATABASES = {
     "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)
 }
@@ -179,12 +179,12 @@ SESSION_SAVE_EVERY_REQUEST = True
 
 CSRF_TRUSTED_ORIGINS = _list_env(
     "CSRF_TRUSTED_ORIGINS",
-    ["http://localhost:5173", "http://localhost:4173"],
+    ["http://localhost:6326", "http://localhost:4173"],
 )
 
 CORS_ALLOWED_ORIGINS = _list_env(
     "CORS_ORIGINS",
-    ["http://localhost:5173", "http://localhost:4173"],
+    ["http://localhost:6326", "http://localhost:4173"],
 )
 CORS_ALLOW_CREDENTIALS = True
 
@@ -273,13 +273,13 @@ elif ENVIRONMENT == "development":
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "calendar@localhost")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "meanwhile@localhost")
 # Emails go out as jobs of the task queue (core.tasks), retried while the mail server fails;
 # without, right after the request (tests do so).
 EMAIL_SEND_IN_BACKGROUND = _bool_env("EMAIL_SEND_IN_BACKGROUND", True)
 
 # Address of the app for links in emails; BASE_URL, or in development the Vite dev server.
-APP_URL = (BASE_URL or ("http://localhost:5173" if ENVIRONMENT == "development" else "")).rstrip("/")
+APP_URL = (BASE_URL or ("http://localhost:6326" if ENVIRONMENT == "development" else "")).rstrip("/")
 
 # iMIP: invitations name this mailbox as organizer, so participants' mail programs send their
 # answers (iTIP REPLY) there; `fetch_imip` reads them. Empty: the organizer's own address.

@@ -1,6 +1,6 @@
 # Frontend
 
-Vue 3 single-page app for the calendar. See the [project README](../README.md) for setup and the backend.
+Vue 3 single-page app of Meanwhile. See the [project README](../README.md) for setup and the backend.
 
 ## Scripts
 

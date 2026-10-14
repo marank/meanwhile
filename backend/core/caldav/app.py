@@ -38,6 +38,6 @@ def create_application() -> Application:
             "rights": {"type": "core.caldav.rights"},
             "storage": {"type": "core.caldav.storage"},
         },
-        source="calendar-app-inline",
+        source="meanwhile-inline",
     )
     return Application(config)

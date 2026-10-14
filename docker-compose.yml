@@ -1,20 +1,20 @@
 # Production: `docker compose up -d --build`, configured through .env (template: .env.example).
 # The app container serves the frontend and the backend on APP_BIND over HTTP; HTTPS is
 # terminated in front of it (see README, "Deployment with Docker").
-name: calendar
+name: meanwhile
 
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: calendar
-      POSTGRES_USER: calendar
+      POSTGRES_DB: meanwhile
+      POSTGRES_USER: meanwhile
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar -d calendar"]
+      test: ["CMD-SHELL", "pg_isready -U meanwhile -d meanwhile"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -28,13 +28,13 @@ services:
   # nginx (frontend, proxy), uvicorn and the task queue's worker under supervisord (Dockerfile).
   app:
     build: .
-    image: calendar-app
+    image: meanwhile-app
     restart: unless-stopped
     env_file: .env
     # Derived from .env or fixed by this setup; the rest comes from .env.
     environment:
       ENVIRONMENT: production
-      DATABASE_URL: postgresql://calendar:${POSTGRES_PASSWORD}@db:5432/calendar
+      DATABASE_URL: postgresql://meanwhile:${POSTGRES_PASSWORD}@db:5432/meanwhile
       REDIS_URL: redis://redis:6379/0
       BEHIND_PROXY: "true"
       ALLOWED_HOSTS: ${DOMAIN:?set in .env}
@@ -43,7 +43,7 @@ services:
       # The frontend comes from the same origin.
       CORS_ORIGINS: ""
     ports:
-      - "${APP_BIND:-127.0.0.1:8080}:80"
+      - "${APP_BIND:-127.0.0.1:6326}:80"
     depends_on:
       db:
         condition: service_healthy

@@ -5,7 +5,7 @@ import * as api from '@/api'
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<api.AppSettings | null>(null)
 
-  const appName = computed(() => settings.value?.app_name || 'Calendar')
+  const appName = computed(() => settings.value?.app_name || 'Meanwhile')
   const logoUrl = computed(() => settings.value?.logo_url ?? null)
   const faviconUrl = computed(() => settings.value?.favicon_url ?? null)
 

@@ -1,6 +1,6 @@
-# Calendar
+# Meanwhile
 
-A self-hosted calendar application with a Django backend and a Vue 3 frontend.
+Meanwhile is a self-hosted calendar application with a Django backend and a Vue 3 frontend.
 
 ## Features
 
@@ -44,7 +44,7 @@ cp .env.example .env     # once; ADMIN_EMAIL and ADMIN_PASSWORD give you a user 
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-The app is at http://localhost:5173, the backend at http://localhost:8000, the emails at
+The app is at http://localhost:6326, the backend at http://localhost:8000, the emails at
 http://localhost:8025. The source is mounted into the containers: `runserver` and the worker
 (through `watchfiles`) restart on changes to Python files, Vite updates the page right away.
 Migrations run on every start (service `migrate`), followed by `manage.py ensure_admin`. After changing dependencies (`uv.lock`,
@@ -139,7 +139,7 @@ Backend settings are read from environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://calendar:calendar@localhost:5432/calendar` | PostgreSQL only (the one of `docker-compose.dev.yml` by default) |
+| `DATABASE_URL` | `postgresql://meanwhile:meanwhile@localhost:5432/meanwhile` | PostgreSQL only (the one of `docker-compose.dev.yml` by default) |
 | `SECRET_KEY` | dev key | Change in production (>= 32 bytes). |
 | `ALLOW_REGISTRATION` | `true` in development, `false` otherwise | Whether anyone may sign up. Signed-in users can look each other up (by name and email) to share calendars, so only open it to people who may see each other. |
 | `ADMIN_EMAIL` | - | The admin user. `manage.py ensure_admin` (run on every start of the Docker setups) creates it or makes the existing user of that address admin; without it, a user registering with this address becomes admin. |
@@ -149,13 +149,13 @@ Backend settings are read from environment variables:
 | `REDIS_URL` | - | e.g. `redis://redis:6379/0`. Required with more than one server process, so that live updates reach every process's WebSockets. Without it they stay within one process (fine for development). |
 | `BEHIND_PROXY` | `false` | Trust the reverse proxy's `X-Forwarded-Proto`/`-Host`. Only when the backend is reachable through the proxy alone. |
 | `SECURE_COOKIES` | `true` outside development | Session and CSRF cookies over HTTPS only. |
-| `CSRF_TRUSTED_ORIGINS` | Vite dev servers | The public origin(s), e.g. `https://calendar.example.com`. |
+| `CSRF_TRUSTED_ORIGINS` | Vite dev servers | The public origin(s), e.g. `https://meanwhile.example.com`. |
 | `WEBSOCKET_PATH` | `/ws/` | Path of the live update WebSocket. |
-| `BASE_URL` | - | Public address of the app, e.g. `https://calendar.example.com`; used for feed URLs and links in emails (in development, links point to the Vite dev server). |
+| `BASE_URL` | - | Public address of the app, e.g. `https://meanwhile.example.com`; used for feed URLs and links in emails (in development, links point to the Vite dev server). |
 | `EMAIL_HOST`, `EMAIL_PORT` | -, `587` | SMTP server. Without it, emails are printed to the console in development and not sent otherwise. |
 | `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | - | SMTP login. |
 | `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | `false` | STARTTLS (usually port 587) / implicit TLS (usually 465). |
-| `DEFAULT_FROM_EMAIL` | `calendar@localhost` | Sender address of all emails. |
+| `DEFAULT_FROM_EMAIL` | `meanwhile@localhost` | Sender address of all emails. |
 | `IMIP_ADDRESS` | - | Mailbox that receives participants' answers to invitations; invitations name it as organizer. Empty: answers go to the organizer's own address. |
 | `IMIP_IMAP_HOST`, `IMIP_IMAP_PORT`, `IMIP_IMAP_USER`, `IMIP_IMAP_PASSWORD`, `IMIP_IMAP_SSL`, `IMIP_IMAP_FOLDER` | -, `993`, -, -, `true`, `INBOX` | IMAP access to that mailbox; the worker reads it every five minutes. |
 
@@ -216,7 +216,7 @@ docker compose -f docker-compose.dev.yml up -d mailpit   # SMTP on 1025, web UI 
 
 `docker-compose.dev.yml` sends the backend's emails there by itself. A backend run without Docker
 needs `EMAIL_HOST=localhost`, `EMAIL_PORT=1025`, `EMAIL_USE_TLS=false` and
-`IMIP_ADDRESS=calendar@localhost` in `.env`.
+`IMIP_ADDRESS=meanwhile@localhost` in `.env`.
 
 Restart the backend, invite someone (any address) to an event and open the invitation in Mailpit;
 its links lead to the answer page of the Vite dev server. To test answers from mail programs,
@@ -278,7 +278,7 @@ This starts PostgreSQL, Redis and the `app` container, built by the `Dockerfile`
 `BASE_URL` from `DOMAIN` and sets the wiring itself: `ENVIRONMENT=production`, `DATABASE_URL`,
 `REDIS_URL` and `BEHIND_PROXY=true`.
 
-The container serves HTTP on `APP_BIND` (`127.0.0.1:8080` by default). Put a proxy in front that
+The container serves HTTP on `APP_BIND` (`127.0.0.1:6326` by default). Put a proxy in front that
 terminates HTTPS, passes everything on, including WebSocket upgrades, and sets
 `X-Forwarded-Proto`. Only that proxy should reach the port, because the app trusts its forwarded
 headers.
@@ -286,8 +286,8 @@ headers.
 Caddy (obtains the certificate itself):
 
 ```caddy
-calendar.example.com {
-    reverse_proxy 127.0.0.1:8080
+meanwhile.example.com {
+    reverse_proxy 127.0.0.1:6326
 }
 ```
 
@@ -296,11 +296,11 @@ nginx:
 ```nginx
 server {
     listen 443 ssl;
-    server_name calendar.example.com;
+    server_name meanwhile.example.com;
     # ssl_certificate ...; ssl_certificate_key ...;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:6326;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

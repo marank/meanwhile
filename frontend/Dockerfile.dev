@@ -5,4 +5,4 @@ RUN npm install -g pnpm@10.28.0
 
 WORKDIR /app
 
-EXPOSE 5173
+EXPOSE 6326

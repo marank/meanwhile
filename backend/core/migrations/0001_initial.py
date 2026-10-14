@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
             name='AppSettings',
             fields=[
                 ('id', models.IntegerField(default=1, primary_key=True, serialize=False)),
-                ('app_name', models.CharField(default='Calendar', max_length=255)),
+                ('app_name', models.CharField(default='Meanwhile', max_length=255)),
                 ('logo_url', models.TextField(blank=True, null=True)),
                 ('favicon_url', models.TextField(blank=True, null=True)),
                 ('default_first_weekday', models.IntegerField(default=0)),

@@ -104,10 +104,10 @@ def test_participants_given_with_a_new_event_are_invited(world):
 
 
 def test_invitations_name_the_imip_mailbox_as_organizer(world, settings):
-    settings.IMIP_ADDRESS = "calendar@app.test"
+    settings.IMIP_ADDRESS = "meanwhile@app.test"
     invite(world, create(world))
     _, vevent = itip(to(GUEST)[0])
-    assert str(vevent["ORGANIZER"]) == "mailto:calendar@app.test"
+    assert str(vevent["ORGANIZER"]) == "mailto:meanwhile@app.test"
     assert vevent["ORGANIZER"].params["CN"] == "Owner"
 
 
@@ -264,14 +264,14 @@ def test_refresh_sends_the_event_again(world):
 
 
 def test_dev_reply_command_answers_like_a_mail_program(world, settings, tmp_path):
-    settings.IMIP_ADDRESS = "calendar@app.test"
+    settings.IMIP_ADDRESS = "meanwhile@app.test"
     event = create(world)
     invite(world, event)
     out = StringIO()
     call_command("imip_reply", event["id"], GUEST, "declined", "--process", stdout=out)
     assert status_of(event) == "declined"
     call_command("imip_reply", event["id"], GUEST, "accepted", stdout=out)
-    sent = to("calendar@app.test")[-1]
+    sent = to("meanwhile@app.test")[-1]
     assert sent.from_email == GUEST
     assert status_of(event) == "declined"  # only once read from the mailbox
     eml = tmp_path / "reply.eml"

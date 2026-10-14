@@ -4,7 +4,7 @@ import { readStorage, writeStorage } from '@/services/storage'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'calendar-theme'
+const STORAGE_KEY = 'theme'
 
 export const useThemeStore = defineStore('theme', () => {
   const media = window.matchMedia('(prefers-color-scheme: dark)')
