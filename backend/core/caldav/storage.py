@@ -107,8 +107,8 @@ def user_by_email(email: str) -> User | None:
 
 
 def calendar_by_dav_name(calendars, name: str) -> Calendar | None:
-    """The calendar a path segment names: the client's name for it, or its id."""
-    return calendars.filter(Q(id=name) | Q(dav_name=name)).first()
+    """The calendar a path segment names: its id, else the client's name for it."""
+    return calendars.filter(id=name).first() or calendars.filter(dav_name=name).first()
 
 
 class Collection(storage.BaseCollection):
@@ -492,7 +492,9 @@ class Collection(storage.BaseCollection):
         for email, status in wanted.items():
             participant = current.get(email)
             if participant is not None:
-                if participant.status != status:
+                # A participant's answer is theirs: a client that sends the event back with an old
+                # PARTSTAT (it hadn't seen the answer yet) doesn't undo it.
+                if participant.status != status and email == actor.email.lower():
                     participant.status = status
                     participant.save()
                 continue
@@ -631,7 +633,8 @@ class Storage(storage.BaseStorage):
         owner = User.objects.filter(email__iexact=_acting_login.get(), is_active=True).first()
         if owner is None or owner.email.lower() != parts[0].lower():
             raise _forbidden("Calendars are created in your own calendar home only")
-        if Calendar.objects.filter(dav_name=parts[1]).exists():
+        # Nor may the name be another calendar's id, which names that calendar in every path.
+        if Calendar.objects.filter(Q(dav_name=parts[1]) | Q(id=parts[1])).exists():
             raise pathutils.CollidingPathError(href)
         calendar = create_calendar(
             owner,

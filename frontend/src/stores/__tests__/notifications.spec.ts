@@ -74,6 +74,34 @@ describe('notifications store', () => {
     await vi.waitFor(() => expect(store.unreadCount).toBe(3))
   })
 
+  it("reloads the page's list on live updates only while the page is shown", async () => {
+    const store = useNotificationsStore()
+    vi.mocked(api.listNotifications).mockResolvedValue([notification('n')])
+    store.setListShown(true)
+    await store.load()
+    receive('notifications.changed')
+    await vi.waitFor(() => expect(api.listNotifications).toHaveBeenCalledTimes(2))
+
+    store.setListShown(false)
+    vi.mocked(api.listNotifications).mockClear()
+    receive('notifications.changed')
+    receive('reconnected')
+    await vi.waitFor(() => expect(api.getNotificationCounts).toHaveBeenCalledTimes(4))
+    expect(api.listNotifications).not.toHaveBeenCalled()
+  })
+
+  it("loads the dropdown's list unfiltered, apart from the page's tab", async () => {
+    const store = useNotificationsStore()
+    vi.mocked(api.listNotifications)
+      .mockResolvedValueOnce([notification('approval')])
+      .mockResolvedValueOnce([notification('approval'), notification('other')])
+    await store.setGroup('approvals')
+    await store.loadRecent()
+    expect(api.listNotifications).toHaveBeenLastCalledWith()
+    expect(store.items.map((n) => n.id)).toEqual(['approval'])
+    expect(store.recent.map((n) => n.id)).toEqual(['approval', 'other'])
+  })
+
   describe('fallback polling', () => {
     beforeEach(() => {
       vi.useFakeTimers()

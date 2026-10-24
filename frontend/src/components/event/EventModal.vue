@@ -188,7 +188,13 @@ const tabs = computed(() =>
 
 const myRole = computed(() => calendar.value?.my_membership?.role ?? null)
 const isCalendarEditor = computed(() => hasRole(myRole.value, 'full'))
-const canModify = computed(() => !event.value || isCalendarEditor.value || event.value.creator_id === auth.user?.id)
+// As the backend decides: with "own" access only one's own events, with less ("read") none.
+const canModify = computed(
+  () =>
+    !event.value ||
+    isCalendarEditor.value ||
+    (hasRole(myRole.value, 'own') && event.value.creator_id === auth.user?.id),
+)
 const forceAllDay = computed(() => !!calendar.value?.force_all_day)
 // Only bookings (events with a resource) go through approval, so only they show a status.
 const bookingStatus = computed(() => {

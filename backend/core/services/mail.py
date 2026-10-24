@@ -27,9 +27,16 @@ def app_name() -> str:
     return get_or_create_app_settings().app_name or "Meanwhile"
 
 
+def one_line(value: str) -> str:
+    """Text for a header: event titles and names from CalDAV clients may span lines, which headers
+    can't (Django raises BadHeaderError)."""
+    return " ".join(value.split())
+
+
 def sender(name: str | None = None, app: str | None = None) -> str:
     """The From address: the app's address, under the name of whoever acts, if anyone."""
-    app = app or app_name()
+    app = one_line(app or app_name())
+    name = one_line(name) if name else None
     return formataddr((f"{name} ({app})" if name else app, settings.DEFAULT_FROM_EMAIL))
 
 
@@ -152,7 +159,7 @@ def build_message(
     html.append(f'<p style="margin-top:24px;color:#9ca3af;font-size:12px">{escape(footer)}</p>')
 
     message = EmailMultiAlternatives(
-        subject=subject,
+        subject=one_line(subject),
         body="\n\n".join(plain) + "\n",
         from_email=sender(from_name, app),
         to=[to],

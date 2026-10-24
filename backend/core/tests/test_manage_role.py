@@ -81,3 +81,18 @@ def test_only_managers_change_how_resources_are_approved(world, manager):
 
     assert manager.patch(url, {"requires_approval": False}).status_code == 200
     assert manager.put(f"{url}/approvers", {"user_ids": [str(world["users"]["approver"].id)]}).status_code == 200
+
+
+def test_demoted_creators_no_longer_change_their_events(world):
+    cal = world["cal"]["id"]
+    booker = world["api"]["booker"]
+    res = world["book"](booker, None)
+    assert res.status_code == 200, res.content
+    event_id = res.json()["id"]
+    assert booker.patch(f"/events/{event_id}", {"title": "Mine"}).status_code == 200
+
+    owner = world["api"]["owner"]
+    assert owner.patch(f"/calendars/{cal}/members/{world['users']['booker'].id}", {"role": "read"}).status_code == 200
+    assert booker.patch(f"/events/{event_id}", {"title": "Still mine?"}).status_code == 403
+    assert booker.delete(f"/events/{event_id}").status_code == 403
+    assert booker.post(f"/events/{event_id}/cancel").status_code == 403

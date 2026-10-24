@@ -4,13 +4,13 @@ Approval workflow endpoints.
 
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
 
-from core.models import Event
-from core.models.base import EventStatus, Role
+from core.models import CalendarApprover, Event, ResourceApprover
+from core.models.base import EventStatus
 from core.schemas import ApprovalAction, ApprovalOut, ApproverOut
 from core.services.activity import record_activity
 from core.services.bookings import (
@@ -23,7 +23,7 @@ from core.services.bookings import (
 )
 from core.services.itip import send_cancel, send_request
 from core.services.notifications import notify
-from core.services.permissions import get_membership, has_at_least_role
+from core.services.permissions import can_modify_event, get_membership
 from core.views.common import serialize_event
 
 router = Router()
@@ -60,7 +60,16 @@ def list_pending_approvals(request):
             | Q(location_resource__approvers__user=user)
             | Q(calendar__approvers__user=user)
         )
-        .select_related("calendar", "category", "resource", "location_resource")
+        .select_related("calendar", "category", "creator", "resource", "location_resource")
+        # Who may decide on each booking, for all events at once (bookings.get_resource_approvers).
+        .prefetch_related(
+            Prefetch("resource__approvers", queryset=ResourceApprover.objects.select_related("user")),
+            Prefetch("location_resource__approvers", queryset=ResourceApprover.objects.select_related("user")),
+            Prefetch("resource__calendar__approvers", queryset=CalendarApprover.objects.select_related("user")),
+            Prefetch(
+                "location_resource__calendar__approvers", queryset=CalendarApprover.objects.select_related("user")
+            ),
+        )
         .distinct()
     )
     result = []
@@ -73,7 +82,8 @@ def list_pending_approvals(request):
 @router.post("/events/{event_id}/approve", response=ApprovalOut)
 @transaction.atomic
 def approve_event(request, event_id: str, payload: ApprovalAction):
-    event = Event.objects.get(id=event_id)
+    # Locked, so approvers deciding at once each see the others' decisions (awaiting_approval).
+    event = Event.objects.select_for_update().get(id=event_id)
     if event.status != EventStatus.PENDING:
         raise HttpError(400, "Event is not pending")
     membership = get_membership(event.calendar, request.user)
@@ -150,7 +160,7 @@ def _decide_changed_occurrences(series: Event, previous_status: str, decided_ids
 @router.post("/events/{event_id}/reject", response=ApprovalOut)
 @transaction.atomic
 def reject_event(request, event_id: str, payload: ApprovalAction):
-    event = Event.objects.get(id=event_id)
+    event = Event.objects.select_for_update().get(id=event_id)
     if event.status != EventStatus.PENDING:
         raise HttpError(400, "Event is not pending")
     if get_membership(event.calendar, request.user) is None:
@@ -188,11 +198,11 @@ def reject_event(request, event_id: str, payload: ApprovalAction):
 @router.post("/events/{event_id}/cancel", response=ApprovalOut)
 @transaction.atomic
 def cancel_event(request, event_id: str):
-    event = Event.objects.get(id=event_id)
+    event = Event.objects.select_for_update().get(id=event_id)
     membership = get_membership(event.calendar, request.user)
     if membership is None:
         raise HttpError(403, "Not a member of this calendar")
-    if event.creator_id != request.user.id and not has_at_least_role(membership, Role.FULL):
+    if not can_modify_event(event, request.user.id, membership.role):
         raise HttpError(403, "You cannot cancel this event")
 
     had_booking = (

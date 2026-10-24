@@ -14,6 +14,7 @@ from core.models import (
     CalendarApprover,
     CalendarGroup,
     CalendarMember,
+    FeedToken,
     ResourceApprover,
     User,
     UserGroup,
@@ -328,20 +329,27 @@ def remove_member(request, calendar_id: str, user_id: str):
 # ---------------------------------------------------------------------------
 
 
+# Each member has a feed URL of their own, which stops working when they lose access to the calendar
+# (views.feed); a shared one would keep working for whoever once had it.
+
+
 @router.get("/calendars/{calendar_id}/feed-url", response=FeedUrlOut)
 def get_feed_url(request, calendar_id: str):
     calendar, _ = get_member_calendar(calendar_id, request.user)
-    return {"feed_url": _make_feed_url(request, calendar.feed_token)}
+    feed, _ = FeedToken.objects.get_or_create(
+        calendar=calendar, user=request.user, defaults={"token": secrets.token_urlsafe(32)}
+    )
+    return {"feed_url": _make_feed_url(request, feed.token)}
 
 
 @router.post("/calendars/{calendar_id}/feed-token/rotate", response=FeedTokenRotateOut)
 def rotate_feed_token(request, calendar_id: str):
-    calendar, _ = get_member_calendar(
-        calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can rotate the feed token"
+    """A new feed URL for the user, e.g. after they shared theirs by mistake."""
+    calendar, _ = get_member_calendar(calendar_id, request.user)
+    feed, _ = FeedToken.objects.update_or_create(
+        calendar=calendar, user=request.user, defaults={"token": secrets.token_urlsafe(32)}
     )
-    calendar.feed_token = secrets.token_urlsafe(32)
-    calendar.save()
-    return {"feed_url": _make_feed_url(request, calendar.feed_token)}
+    return {"feed_url": _make_feed_url(request, feed.token)}
 
 
 # ---------------------------------------------------------------------------

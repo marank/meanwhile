@@ -59,3 +59,22 @@ def test_staff_alone_is_not_kept():
 
     user.refresh_from_db()
     assert not user.is_staff
+
+
+def test_app_admins_leave_superusers_alone(admin_api):
+    boss = make_user("boss")
+    boss.is_superuser = True
+    boss.save()
+    assert admin_api.patch(f"/admin/users/{boss.id}", {"password": "taken-over-1"}).status_code == 403
+    assert admin_api.patch(f"/admin/users/{boss.id}", {"email": "mine@example.test"}).status_code == 403
+    assert admin_api.post(f"/admin/users/{boss.id}/reset-password").status_code == 403
+    assert admin_api.delete(f"/admin/users/{boss.id}").status_code == 403
+    boss.refresh_from_db()
+    assert boss.email == "boss@example.test" and not boss.check_password("taken-over-1")
+
+    # A superuser may.
+    root = make_user("root")
+    root.is_superuser = True
+    root.is_admin = True
+    root.save()
+    assert Api(root).post(f"/admin/users/{boss.id}/reset-password").status_code == 200

@@ -11,18 +11,22 @@ import { toast } from '@/services/toast'
 const FALLBACK_POLL_INTERVAL_MS = 60_000
 
 export const useNotificationsStore = defineStore('notifications', () => {
+  /** The notifications page's list, of the selected tab. */
   const items = ref<api.AppNotification[]>([])
+  /** The navbar dropdown's list: the latest ones, whatever the page's tab. */
+  const recent = ref<api.AppNotification[]>([])
   const unreadCount = ref(0)
   const group = ref<api.NotificationGroup | null>(null)
   const openCounts = ref({ approvals: 0, invitations: 0 })
   let loadVersion = 0
+  let recentVersion = 0
   let timer: number | undefined
-  /** Whether a list is shown (the notifications page); live updates then reload it, too. */
-  let listLoaded = false
+  // Whether the page's list and the dropdown are shown; live updates then reload them, too.
+  let listShown = false
+  let recentShown = false
 
   /** Loads the current tab; when loads overlap (fast tab switches), only the latest one is applied. */
   async function load() {
-    listLoaded = true
     const version = ++loadVersion
     const [list, counts] = await Promise.all([
       api.listNotifications(group.value ?? undefined),
@@ -31,6 +35,25 @@ export const useNotificationsStore = defineStore('notifications', () => {
     if (version !== loadVersion) return
     items.value = list
     applyCounts(counts)
+  }
+
+  /** Loads the dropdown's list: all tabs, regardless of the one selected on the page. */
+  async function loadRecent() {
+    const version = ++recentVersion
+    const [list, counts] = await Promise.all([api.listNotifications(), api.getNotificationCounts()])
+    if (version !== recentVersion) return
+    recent.value = list
+    applyCounts(counts)
+  }
+
+  /** The notifications page tells while it is shown, so that live updates reload its list. */
+  function setListShown(shown: boolean) {
+    listShown = shown
+  }
+
+  /** Likewise the navbar dropdown. */
+  function setRecentShown(shown: boolean) {
+    recentShown = shown
   }
 
   function applyCounts(counts: { unread: number; approvals: number; invitations: number }) {
@@ -53,8 +76,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   async function markRead(id: string) {
     const updated = await api.markNotificationRead(id)
-    const item = items.value.find((n) => n.id === id)
-    if (item) item.read_at = updated.read_at
+    for (const item of [...items.value, ...recent.value]) if (item.id === id) item.read_at = updated.read_at
     await refreshCount()
   }
 
@@ -62,12 +84,14 @@ export const useNotificationsStore = defineStore('notifications', () => {
     await api.markAllNotificationsRead()
     const now = new Date().toISOString()
     items.value = items.value.map((n) => ({ ...n, read_at: n.read_at ?? now }))
+    recent.value = recent.value.map((n) => ({ ...n, read_at: n.read_at ?? now }))
     unreadCount.value = 0
   }
 
   async function remove(id: string) {
     await api.deleteNotification(id)
     items.value = items.value.filter((n) => n.id !== id)
+    recent.value = recent.value.filter((n) => n.id !== id)
     await refreshCount()
   }
 
@@ -100,8 +124,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   // Live updates: new notifications and ones read in another tab show at once.
   function onLiveUpdate() {
-    if (listLoaded) void load().catch(() => {})
-    else void refreshCount()
+    if (listShown) void load().catch(() => {})
+    if (recentShown) void loadRecent().catch(() => {})
+    if (!listShown && !recentShown) void refreshCount()
   }
 
   // The server pushes reminders that came due; they pop up wherever one is in the app.
@@ -118,9 +143,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   function reset() {
     stopPolling()
-    listLoaded = false
+    listShown = recentShown = false
     loadVersion++
+    recentVersion++
     items.value = []
+    recent.value = []
     unreadCount.value = 0
     group.value = null
     openCounts.value = { approvals: 0, invitations: 0 }
@@ -128,10 +155,14 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   return {
     items,
+    recent,
     unreadCount,
     group,
     openCounts,
     load,
+    loadRecent,
+    setListShown,
+    setRecentShown,
     setGroup,
     refreshCount,
     markRead,

@@ -23,6 +23,13 @@ from core.views.common import require_admin
 router = Router()
 
 
+def _require_may_change(request, user: User) -> None:
+    """App admins aren't superusers (Django admin, every table): only superusers change those,
+    so an app admin can't take one over by its email or password."""
+    if user.is_superuser and not request.user.is_superuser:
+        raise HttpError(403, "Only superusers can change superusers")
+
+
 def _serialize_user(user: User) -> dict:
     return {
         "id": user.id,
@@ -86,6 +93,7 @@ def admin_get_user(request, user_id: str):
 def admin_update_user(request, user_id: str, payload: AdminUserUpdate):
     require_admin(request)
     user = User.objects.prefetch_related("groups").get(id=user_id)
+    _require_may_change(request, user)
     data = payload.dict(exclude_unset=True)
 
     is_self = user.id == request.user.id
@@ -112,7 +120,10 @@ def admin_delete_user(request, user_id: str):
     require_admin(request)
     if str(request.user.id) == user_id:
         raise HttpError(403, "Cannot delete yourself")
-    User.objects.filter(id=user_id).delete()
+    user = User.objects.filter(id=user_id).first()
+    if user is not None:
+        _require_may_change(request, user)
+        user.delete()
     return {"ok": True}
 
 
@@ -123,6 +134,7 @@ def admin_delete_user(request, user_id: str):
 def admin_reset_password(request, user_id: str):
     require_admin(request)
     user = User.objects.get(id=user_id)
+    _require_may_change(request, user)
     new_password = secrets.token_urlsafe(16)
     user.set_password(new_password)
     user.save()

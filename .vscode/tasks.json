@@ -11,14 +11,14 @@
     {
       "label": "Backend: run migrations",
       "type": "shell",
-      "command": "cd ${workspaceFolder}/backend && DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py migrate",
+      "command": "cd ${workspaceFolder}/backend && ENVIRONMENT=development DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py migrate",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Backend: run dev server",
       "type": "shell",
-      "command": "cd ${workspaceFolder}/backend && DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py runserver 0.0.0.0:8000",
+      "command": "cd ${workspaceFolder}/backend && ENVIRONMENT=development DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py runserver 0.0.0.0:8000",
       "group": "build",
       "isBackground": true,
       "problemMatcher": []
@@ -26,7 +26,7 @@
     {
       "label": "Backend: run checks",
       "type": "shell",
-      "command": "cd ${workspaceFolder}/backend && DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py check",
+      "command": "cd ${workspaceFolder}/backend && ENVIRONMENT=development DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py check",
       "group": "test",
       "problemMatcher": []
     },

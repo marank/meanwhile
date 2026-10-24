@@ -4,6 +4,7 @@ from core.models.calendars import (
     CalendarApprover,
     CalendarGroup,
     CalendarMember,
+    FeedToken,
     OverviewSettings,
 )
 from core.models.events import (
@@ -37,6 +38,7 @@ __all__ = [
     "CalendarMember",
     "CalendarGroup",
     "CalendarApprover",
+    "FeedToken",
     "OverviewSettings",
     "Resource",
     "ResourceApprover",

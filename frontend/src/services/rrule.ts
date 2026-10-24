@@ -155,7 +155,8 @@ function patternParts(rule: RecurrenceRule): string[] {
 export function buildRrule(rule: RecurrenceRule | null): string | null {
   if (!rule) return null
   const parts = patternParts(rule)
-  if (rule.end === 'until' && rule.until) parts.push(`UNTIL=${rule.until.replaceAll('-', '')}T235959Z`)
+  // A date-only UNTIL, which the server reads as through that day in the event's zone.
+  if (rule.end === 'until' && rule.until) parts.push(`UNTIL=${rule.until.replaceAll('-', '')}`)
   else if (rule.end === 'count') parts.push(`COUNT=${Math.max(1, Math.floor(rule.count) || 1)}`)
   return parts.join(';')
 }

@@ -141,7 +141,7 @@ const de: MessageSchema = {
     copyUrl: 'URL kopieren',
     urlCopied: 'URL kopiert.',
     feedUrl: 'Feed-URL',
-    feedUrlHelp: 'Abonniere eine schreibgeschützte Version dieses Kalenders. Behandle diese private URL vertraulich.',
+    feedUrlHelp: 'Abonniere eine schreibgeschützte Version dieses Kalenders. Diese URL gehört nur dir und funktioniert nicht mehr, sobald du keinen Zugriff auf den Kalender mehr hast; behandle sie vertraulich.',
     caldavUrl: 'CalDAV-URL',
     caldavUrlHelp:
       'Verwende diese Adresse, um den Kalender mit einer CalDAV-kompatiblen App zu verbinden und zu synchronisieren.',
@@ -233,7 +233,7 @@ const de: MessageSchema = {
     removeApproverText: 'Dieser Benutzer kann Anfragen für diesen Kalender nicht mehr genehmigen.',
     approverRemoved: 'Genehmiger entfernt.',
     rotateFeedTitle: 'Feed-Token neu erzeugen?',
-    rotateFeedText: 'Bestehende Feed-Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr.',
+    rotateFeedText: 'Deine Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr. Andere Mitglieder behalten ihre eigenen URLs.',
     feedRotated: 'Feed-Token neu erzeugt.',
     menu: 'Menü',
     appearance: 'Darstellung',

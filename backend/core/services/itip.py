@@ -21,6 +21,7 @@ from email.utils import getaddresses
 
 import icalendar
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from core.models import Event, EventParticipant
@@ -191,6 +192,8 @@ def record_answer(participant: EventParticipant, status: str, name: str | None =
                 other.status = status
                 other.save()
     series = series_of(event)
+    # A change of the event for CalDAV clients (ETag, sync token), so the organizer's sees the answer.
+    Event.objects.filter(Q(id=series.id) | Q(parent=series)).update(updated_at=timezone.now())
     who = participant.user
     notify(
         [str(series.creator_id)],
@@ -303,13 +306,17 @@ def process_email(raw: bytes, trust_sender: bool = False) -> list[str]:
     return results or ["no iTIP message found"]
 
 
+IMAP_TIMEOUT = 30  # seconds
+
+
 def fetch_mailbox() -> list[str]:
     """Applies the unread messages in the iMIP mailbox (IMAP) and marks them read."""
     if not settings.IMIP_IMAP_HOST:
         raise RuntimeError("IMIP_IMAP_HOST is not set")
     connect = imaplib.IMAP4_SSL if settings.IMIP_IMAP_SSL else imaplib.IMAP4
     results = []
-    with connect(settings.IMIP_IMAP_HOST, settings.IMIP_IMAP_PORT) as imap:
+    # With a timeout: a server that stops answering would hold up the worker, and every job with it.
+    with connect(settings.IMIP_IMAP_HOST, settings.IMIP_IMAP_PORT, timeout=IMAP_TIMEOUT) as imap:
         imap.login(settings.IMIP_IMAP_USER, settings.IMIP_IMAP_PASSWORD)
         imap.select(settings.IMIP_IMAP_FOLDER)
         _, found = imap.search(None, "UNSEEN")

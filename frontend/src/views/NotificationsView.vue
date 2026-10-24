@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Bell, Calendar, Check, Mail, X } from 'lucide-vue-next'
 import EventModal from '@/components/event/EventModal.vue'
@@ -35,6 +35,9 @@ const emptyText = computed(() => {
   return t('notifications.empty')
 })
 
+// While the page is shown, live updates reload its list (otherwise just the counts).
+onMounted(() => notifications.setListShown(true))
+onBeforeUnmount(() => notifications.setListShown(false))
 const { loading: initialLoading } = useLoader(notifications.load)
 
 async function selectTab(id: Tab) {

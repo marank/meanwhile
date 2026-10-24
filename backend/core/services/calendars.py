@@ -2,7 +2,6 @@
 Creating calendars.
 """
 
-import secrets
 
 from core.models import Calendar, CalendarMember, User
 from core.models.base import Role
@@ -34,7 +33,6 @@ def create_calendar(
         show_week_numbers=show_week_numbers,
         **{field: colors.get(field) or DEFAULT_COLORS[field] for field in COLOR_FIELDS},
         owner=owner,
-        feed_token=secrets.token_urlsafe(32),
         dav_name=dav_name,
     )
     CalendarMember.objects.create(calendar=calendar, user=owner, role=Role.OWNER, folder_id=None, position=0)

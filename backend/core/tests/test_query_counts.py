@@ -48,3 +48,20 @@ def test_listing_costs_the_same_for_more_calendars():
     few = queries(api, "/calendars"), queries(api, events_url())
     add_calendars(10)
     assert (queries(api, "/calendars"), queries(api, events_url())) == few
+
+
+def test_listing_approvals_costs_the_same_for_more_bookings(world):
+    room = world["resource"]("Room", approver_ids=[str(world["users"]["resapprover"].id)])
+    projector = world["resource"]("Projector")
+    api = world["api"]["owner"]
+
+    def book(n: int, offset: int) -> None:
+        for i in range(n):
+            for resource in (room, projector):
+                res = world["book"](world["api"]["booker"], resource["id"], start=BASE.replace(day=1 + offset + i))
+                assert res.status_code == 200, res.content
+
+    book(2, 0)
+    few = queries(api, "/approvals")
+    book(8, 2)
+    assert queries(api, "/approvals") == few

@@ -24,9 +24,9 @@ ORIGIN = b"http://localhost:6326"
 def team():
     owner = User.objects.create_user(email="owner@example.test", password="pw", display_name="Owner")
     other = User.objects.create_user(email="other@example.test", password="pw", display_name="Other")
-    calendar = Calendar.objects.create(name="Team", owner=owner, feed_token="t1")
+    calendar = Calendar.objects.create(name="Team", owner=owner)
     CalendarMember.objects.create(calendar=calendar, user=owner, role="owner")
-    private = Calendar.objects.create(name="Private", owner=other, feed_token="t2")
+    private = Calendar.objects.create(name="Private", owner=other)
     CalendarMember.objects.create(calendar=private, user=other, role="owner")
     client = Client()
     client.force_login(owner)

@@ -9,9 +9,10 @@ from django.http import HttpResponse
 from django.utils.cache import get_conditional_response
 from django.utils.http import http_date
 
-from core.models import Calendar, Category, DeletedEvent, Event, Resource
+from core.models import Calendar, Category, DeletedEvent, Event, FeedToken, Resource
 from core.models.base import EventStatus
 from core.services.ical import build_calendar_feed
+from core.services.permissions import get_membership
 
 
 def _feed_version(calendar: Calendar) -> tuple[str, int]:
@@ -34,10 +35,11 @@ def _feed_version(calendar: Calendar) -> tuple[str, int]:
 
 
 def calendar_feed(request, feed_token: str) -> HttpResponse:
-    try:
-        calendar = Calendar.objects.get(feed_token=feed_token)
-    except Calendar.DoesNotExist:
+    feed = FeedToken.objects.select_related("calendar", "user").filter(token=feed_token).first()
+    # The URL is the user's: it works only while they may still read the calendar.
+    if feed is None or not feed.user.is_active or get_membership(feed.calendar, feed.user) is None:
         return HttpResponse("Calendar not found", status=404, content_type="text/plain")
+    calendar = feed.calendar
 
     # Subscribers ask again with If-None-Match / If-Modified-Since and get 304 while nothing changed,
     # which is answered before the feed is built.

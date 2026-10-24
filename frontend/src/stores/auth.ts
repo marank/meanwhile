@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import * as api from '@/api'
 import { i18n } from '@/i18n'
 import { browserTimeZone } from '@/services/datetime'
@@ -21,6 +21,28 @@ export const useAuthStore = defineStore('auth', () => {
     () => user.value?.id ?? null,
     (id) => (id ? realtime.start() : realtime.stop()),
   )
+
+  // The live connection was refused for want of a session, and it doesn't retry by itself. Ask the API whether
+  // the session is really gone: if it is, the request fails with 401 and the unauthorized handler signs out;
+  // otherwise connect again, though not more than once a minute should the socket keep refusing.
+  let lastRestart = 0
+  const stopListening = realtime.on('unauthenticated', async () => {
+    if (!user.value) return
+    try {
+      const current = await api.me()
+      if (user.value?.id === current.id) user.value = current
+    } catch (error) {
+      if (error instanceof api.ApiError && error.status === 401) return
+      // e.g. offline: connecting again keeps retrying until the network is back
+    }
+    const wait = Math.max(0, lastRestart + 60_000 - Date.now())
+    setTimeout(() => {
+      if (!user.value) return
+      lastRestart = Date.now()
+      realtime.start()
+    }, wait)
+  })
+  onScopeDispose(stopListening)
 
   // The server reads times that calendar apps send without a zone in the user's zone, and
   // writes emails in the user's language, so it learns both whenever they differ.

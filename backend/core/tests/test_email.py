@@ -13,7 +13,7 @@ from django.core.mail import EmailMessage
 from django.core.management import call_command
 from django.test import Client
 
-from core.models import EventParticipant, Notification
+from core.models import Event, EventParticipant, Notification
 from core.services.itip import process_email, process_itip
 from core.tests.helpers import BASE, iso
 
@@ -337,3 +337,18 @@ def test_email_reminders_are_off_unless_chosen(world):
     deliver_due_reminders(now=BASE + timedelta(days=1) - timedelta(minutes=10))
     [message] = to("owner@example.test")
     assert message.subject == "Reminder: Planning"
+
+
+def test_answers_reach_caldav_clients(world):
+    event = create(world)
+    invite(world, event)
+    before = Event.objects.get(id=event["id"]).updated_at
+    process_email(reply(GUEST, event["uid"], "ACCEPTED"))
+    assert Event.objects.get(id=event["id"]).updated_at > before
+
+
+def test_titles_over_several_lines_make_one_line_subjects():
+    from core.services.mail import one_line, sender
+
+    assert one_line("Team\nmeeting\r\n  today") == "Team meeting today"
+    assert "\n" not in sender("Ann\nOther", "App")

@@ -66,12 +66,15 @@ Without Docker for the app itself, only the services next to it:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d postgres redis mailpit   # the default DATABASE_URL, Redis, Mailpit
-cp .env.example .env     # once, in the project root; for Redis and Mailpit see the comments there
+cp .env.example .env     # once, in the project root; uncomment ENVIRONMENT=development there
 cd backend
 uv sync
 DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py migrate
 DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py runserver 0.0.0.0:8000
 ```
+
+Without `ENVIRONMENT=development` the backend runs as in production: it refuses to start with the
+development `SECRET_KEY`. The tests always use development settings (`config/settings_test.py`).
 
 In a second terminal, the worker of the task queue: it sends emails, delivers reminders and runs
 the other regular jobs (`core/tasks.py`).
@@ -140,6 +143,7 @@ Backend settings are read from environment variables:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | `postgresql://meanwhile:meanwhile@localhost:5432/meanwhile` | PostgreSQL only (the one of `docker-compose.dev.yml` by default) |
+| `ENVIRONMENT` | `production` | `development` for running the backend without Docker: DEBUG, the dev `SECRET_KEY`, the defaults marked as such below. |
 | `SECRET_KEY` | dev key | Change in production (>= 32 bytes). |
 | `ALLOW_REGISTRATION` | `true` in development, `false` otherwise | Whether anyone may sign up. Signed-in users can look each other up (by name and email) to share calendars, so only open it to people who may see each other. |
 | `ADMIN_EMAIL` | - | The admin user. `manage.py ensure_admin` (run on every start of the Docker setups) creates it or makes the existing user of that address admin; without it, a user registering with this address becomes admin. |

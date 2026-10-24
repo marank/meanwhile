@@ -69,6 +69,7 @@ describe('parseRrule', () => {
       end: 'until',
       until: '2026-12-31',
     })
+    expect(parseRrule('FREQ=DAILY;UNTIL=20261231', defaults)).toMatchObject({ end: 'until', until: '2026-12-31' })
   })
 
   it.each([
@@ -94,7 +95,7 @@ describe('buildRrule', () => {
 
   it.each([
     'FREQ=DAILY;INTERVAL=3;COUNT=4',
-    'FREQ=WEEKLY;BYDAY=MO,TH;UNTIL=20270101T235959Z',
+    'FREQ=WEEKLY;BYDAY=MO,TH;UNTIL=20270101',
     'FREQ=MONTHLY;BYDAY=2TU',
     'FREQ=MONTHLY;BYDAY=1TU,3TU,-1TU',
     'FREQ=MONTHLY;BYDAY=5FR',
@@ -103,6 +104,17 @@ describe('buildRrule', () => {
     'FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
   ])('round-trips %s', (rule) => {
     expect(buildRrule(parseRrule(rule, defaults))).toBe(rule)
+  })
+
+  it("writes the end as a date, which the server reads as through that day in the event's zone", () => {
+    const rule = { ...defaultRecurrenceRule(defaults), end: 'until' as const, until: '2026-12-31' }
+    expect(buildRrule(rule)).toBe('FREQ=WEEKLY;BYDAY=WE;UNTIL=20261231')
+  })
+
+  it('builds the same rule again from an older UTC end, so an unchanged rule stays unchanged', () => {
+    const older = parseRrule('FREQ=WEEKLY;BYDAY=MO;UNTIL=20270101T235959Z', defaults)
+    const resaved = parseRrule('FREQ=WEEKLY;BYDAY=MO;UNTIL=20270101', defaults)
+    expect(buildRrule(older)).toBe(buildRrule(resaved))
   })
 })
 

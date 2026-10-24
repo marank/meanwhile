@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from django.test import Client
 
-from core.models import Calendar, Category, Event, User
+from core.models import Calendar, CalendarMember, Category, Event, FeedToken, User
 
 pytestmark = pytest.mark.django_db
 
@@ -15,7 +15,9 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def calendar():
     owner = User.objects.create_user(email="owner@example.test", password="x")
-    calendar = Calendar.objects.create(name="Team Ä", description="Our dates", owner=owner, feed_token="tok", event_color="#3372cc")
+    calendar = Calendar.objects.create(name="Team Ä", description="Our dates", owner=owner, event_color="#3372cc")
+    CalendarMember.objects.create(calendar=calendar, user=owner, role="owner")
+    FeedToken.objects.create(calendar=calendar, user=owner, token="tok")
     Event.objects.create(
         calendar=calendar, creator=owner, title="Meeting", uid="m",
         start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
@@ -62,3 +64,29 @@ def test_renaming_a_category_changes_the_feed(calendar):
 
 def test_unknown_feed(calendar):
     assert Client().get("/ics/nope.ics").status_code == 404
+
+
+def test_feed_urls_are_personal_and_end_with_access(world):
+    cal = world["cal"]["id"]
+    owner, full = world["api"]["owner"], world["api"]["full"]
+    mine = owner.get(f"/calendars/{cal}/feed-url").json()["feed_url"]
+    theirs = full.get(f"/calendars/{cal}/feed-url").json()["feed_url"]
+    assert mine != theirs
+    # The same URL every time, until the user asks for a new one.
+    assert full.get(f"/calendars/{cal}/feed-url").json()["feed_url"] == theirs
+    path = theirs.split("://", 1)[1].split("/", 1)[1]
+    assert Client().get(f"/{path}").status_code == 200
+
+    assert owner.delete(f"/calendars/{cal}/members/{world['users']['full'].id}").status_code == 200
+    assert Client().get(f"/{path}").status_code == 404
+    mine_path = mine.split("://", 1)[1].split("/", 1)[1]
+    assert Client().get(f"/{mine_path}").status_code == 200
+
+
+def test_rotating_replaces_only_the_users_own_url(world):
+    cal = world["cal"]["id"]
+    full = world["api"]["full"]
+    old = full.get(f"/calendars/{cal}/feed-url").json()["feed_url"]
+    new = full.post(f"/calendars/{cal}/feed-token/rotate").json()["feed_url"]
+    assert new != old
+    assert Client().get("/" + old.split("://", 1)[1].split("/", 1)[1]).status_code == 404

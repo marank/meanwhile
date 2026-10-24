@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell, EllipsisVertical, Menu, Moon, Sun } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import IconButton from '@/components/IconButton.vue'
 import type { AppNotification } from '@/api'
+import { useAction } from '@/composables/useAction'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
+import { useLoader } from '@/composables/useLoader'
 import { formatDateTime } from '@/services/datetime'
 import { notificationText } from '@/services/labels'
 import { sidebarDrawerOpen } from '@/services/sidebarState'
@@ -19,6 +21,8 @@ const theme = useThemeStore()
 const settings = useSettingsStore()
 const notifications = useNotificationsStore()
 const router = useRouter()
+const { run } = useAction()
+const { reload: loadNotifications } = useLoader(notifications.loadRecent, { immediate: false })
 
 const menuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
@@ -57,6 +61,7 @@ onBeforeUnmount(() => {
   document.documentElement.style.removeProperty('--navbar-height')
   document.removeEventListener('pointerdown', closeOnOutsideClick)
   notifications.stopPolling()
+  notifications.setRecentShown(false)
 })
 
 const unreadBadge = computed(() => (notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount)))
@@ -70,13 +75,15 @@ const initials = computed(() =>
     .slice(0, 2),
 )
 
-async function toggleNotifications() {
-  notificationsOpen.value = !notificationsOpen.value
-  if (notificationsOpen.value) await notifications.load()
-}
+// The dropdown has its own list, loaded whenever it opens and kept current while it is open.
+watch(notificationsOpen, (open) => {
+  notifications.setRecentShown(open)
+  if (open) void loadNotifications()
+})
 
 async function openNotification(notification: AppNotification) {
-  await notifications.markRead(notification.id)
+  // The page is worth showing even if marking it read failed (reported as a toast).
+  await run(() => notifications.markRead(notification.id))
   navigate('/notifications')
 }
 
@@ -117,7 +124,7 @@ async function logout() {
           :label="$t('notifications.title')"
           :aria-expanded="notificationsOpen"
           aria-haspopup="true"
-          @click="toggleNotifications"
+          @click="notificationsOpen = !notificationsOpen"
         >
           <Bell :size="20" :stroke-width="2.25" />
         </IconButton>
@@ -137,16 +144,16 @@ async function logout() {
               v-if="notifications.unreadCount > 0"
               type="button"
               class="text-xs text-blue-600 hover:underline"
-              @click="notifications.markAllRead()"
+              @click="run(notifications.markAllRead)"
             >
               {{ $t('notifications.markAllRead') }}
             </button>
           </div>
-          <div v-if="!notifications.items.length" class="px-4 py-6 text-center text-sm text-gray-500">
+          <div v-if="!notifications.recent.length" class="px-4 py-6 text-center text-sm text-gray-500">
             {{ $t('notifications.empty') }}
           </div>
           <ul v-else class="max-h-[min(24rem,70vh)] divide-y divide-line overflow-y-auto">
-            <li v-for="notification in notifications.items" :key="notification.id">
+            <li v-for="notification in notifications.recent" :key="notification.id">
               <button
                 type="button"
                 class="block w-full px-4 py-3 text-left text-sm hover:bg-hover"

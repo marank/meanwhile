@@ -29,7 +29,9 @@ def _list_env(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+# Production unless asked otherwise: a deployment that forgets to set it doesn't run with DEBUG,
+# the development SECRET_KEY, open registration and insecure cookies.
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
 
 _DEV_SECRET = "dev-change-me-in-production-needs-32-bytes"
 SECRET_KEY = os.environ.get("SECRET_KEY", _DEV_SECRET)

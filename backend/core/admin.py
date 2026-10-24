@@ -156,12 +156,12 @@ class CalendarAdmin(admin.ModelAdmin):
     list_filter = ("is_public", "force_all_day")
     search_fields = ("name", "description", "owner__email", "owner__display_name")
     autocomplete_fields = ("owner",)
-    readonly_fields = ("feed_token", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
     date_hierarchy = "created_at"
     inlines = (CalendarMemberInline, CalendarGroupInline, CalendarApproverInline, CategoryInline)
     fieldsets = (
         (None, {"fields": ("name", "description", "owner", "force_all_day")}),
-        (_("Sharing"), {"fields": ("is_public", "public_role", "feed_token")}),
+        (_("Sharing"), {"fields": ("is_public", "public_role")}),
         (_("CalDAV"), {"classes": ("collapse",), "fields": ("dav_name", "url_path")}),
         *APPEARANCE_FIELDSETS,
         (_("Dates"), {"fields": ("created_at", "updated_at")}),

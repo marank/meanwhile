@@ -16,7 +16,7 @@ from django.test.utils import CaptureQueriesContext
 
 from config.wsgi import application
 from core.caldav import auth
-from core.models import AppPassword, Calendar, CalendarMember, Event, User
+from core.models import AppPassword, Calendar, CalendarMember, Event, FeedToken, User
 
 # The CalDAV app tidies up the database connection after every request, which a test transaction can't survive.
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -95,9 +95,10 @@ def team():
         name: User.objects.create_user(email=f"{name}@example.test", password=PASSWORD, display_name=name.title())
         for name in ("owner", "own", "read", "outsider")
     }
-    calendar = Calendar.objects.create(name="Team", owner=users["owner"], feed_token="team-feed")
+    calendar = Calendar.objects.create(name="Team", owner=users["owner"])
     for name, role in (("owner", "owner"), ("own", "own"), ("read", "read")):
         CalendarMember.objects.create(calendar=calendar, user=users[name], role=role)
+    FeedToken.objects.create(calendar=calendar, user=users["owner"], token="team-feed")
     path = f"/caldav/{users['owner'].email}/{calendar.id}/"
     return {"users": users, "calendar": calendar, "path": path}
 
@@ -472,7 +473,7 @@ def move(team, from_path: str, to_path: str, user_name: str = "owner", **headers
 
 @pytest.fixture
 def other_calendar(team):
-    calendar = Calendar.objects.create(name="Other", owner=team["users"]["owner"], feed_token="other-feed")
+    calendar = Calendar.objects.create(name="Other", owner=team["users"]["owner"])
     CalendarMember.objects.create(calendar=calendar, user=team["users"]["owner"], role="owner")
     return calendar, f"/caldav/{team['users']['owner'].email}/{calendar.id}/"
 
@@ -569,6 +570,10 @@ def test_calendars_are_not_created_elsewhere_or_for_tasks(team):
     assert mkcalendar(contributor, f"/caldav/{owner.email}/new/") == 403
     assert mkcalendar(contributor, f"/caldav/{contributor.email}/tasks/", components="VTODO") == 403
     assert mkcalendar(contributor, f"/caldav/{contributor.email}/{team['calendar'].id}/") in (403, 405, 409)
+    assert Calendar.objects.count() == 1
+    # Nor under another calendar's id, which names that calendar in every path.
+    outsider = team["users"]["outsider"]
+    assert mkcalendar(outsider, f"/caldav/{outsider.email}/{team['calendar'].id}/") in (403, 405, 409)
     assert Calendar.objects.count() == 1
 
 

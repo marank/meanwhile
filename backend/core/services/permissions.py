@@ -112,8 +112,11 @@ def _from_row(membership: CalendarMember, role: str, calendar: Calendar, user: U
 
 
 def can_modify_event(event: Event, user_id: str, role: str) -> bool:
-    """With "full" access every event, with "own" only those the user created."""
-    return role_weight(role) >= role_weight(Role.FULL) or event.creator_id == user_id
+    """With "full" access every event, with "own" only those the user created; with less (e.g.
+    after being demoted to "read") none, their own included."""
+    if role_weight(role) >= role_weight(Role.FULL):
+        return True
+    return role_weight(role) >= role_weight(Role.OWN) and event.creator_id == user_id
 
 
 def is_owner(member) -> bool:

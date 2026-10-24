@@ -39,6 +39,7 @@ RUN python manage.py collectstatic --no-input
 
 COPY --from=frontend /frontend/dist /srv/frontend
 COPY docker/nginx.conf /etc/nginx/conf.d/app.conf
+COPY docker/security-headers.conf /etc/nginx/security-headers.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/app.conf
 COPY docker/entrypoint.sh docker/trusted-proxies.sh /usr/local/bin/
 

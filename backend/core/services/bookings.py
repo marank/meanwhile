@@ -23,10 +23,10 @@ def get_resource_approvers(resource: Resource):
     resource_approvers = [a.user for a in resource.approvers.all()]
     if resource_approvers:
         return resource_approvers
-    return [
-        a.user
-        for a in CalendarApprover.objects.filter(calendar=resource.calendar).select_related("user")
-    ]
+    calendar = resource.calendar
+    if "approvers" in getattr(calendar, "_prefetched_objects_cache", {}):
+        return [a.user for a in calendar.approvers.all()]
+    return [a.user for a in CalendarApprover.objects.filter(calendar=calendar).select_related("user")]
 
 
 def can_decide_booking(calendar, resource: Resource | None, user_id: str) -> bool:

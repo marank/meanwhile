@@ -46,7 +46,6 @@ class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     force_all_day = models.BooleanField(default=False)
-    feed_token = models.CharField(max_length=255, unique=True, db_index=True)
     # Path name a CalDAV client chose when it created the calendar; the id serves as path otherwise.
     dav_name = models.CharField(max_length=255, unique=True, blank=True, null=True)
     url_path = models.CharField(max_length=100, unique=True, blank=True, null=True)
@@ -129,6 +128,20 @@ class CalendarApprover(UUIDModel):
             models.UniqueConstraint(
                 fields=["calendar", "user"], name="uq_calendar_approver"
             )
+        ]
+
+
+class FeedToken(UUIDModel):
+    """A user's own iCal feed URL of a calendar; it works while they have access to the calendar."""
+
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="feed_tokens")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    token = models.CharField(max_length=64, unique=True)
+
+    class Meta:
+        db_table = "feed_tokens"
+        constraints = [
+            models.UniqueConstraint(fields=["calendar", "user"], name="uq_feed_token")
         ]
 
 
