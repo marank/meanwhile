@@ -24,6 +24,7 @@ from core.schemas import (
     EventUpdate,
     OccurrenceOut,
     OccurrenceScope,
+    OkOut,
 )
 from core.services.activity import record_activity
 from core.services.bookings import (
@@ -431,7 +432,7 @@ def _apply_update(user: User, event: Event, data: dict) -> None:
         send_request(event, update=True)
 
 
-@router.delete("/events/{event_id}")
+@router.delete("/events/{event_id}", response=OkOut)
 def delete_event(request, event_id: str):
     event, _ = _modifiable_event(event_id, request.user)
     with transaction.atomic():
@@ -507,7 +508,7 @@ def update_occurrence(
         return EventOut.model_validate(serialize_event(series))
 
 
-@router.delete("/events/{event_id}/occurrences/{recurrence_id}")
+@router.delete("/events/{event_id}/occurrences/{recurrence_id}", response=OkOut)
 def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: OccurrenceScope = "this"):
     """Removes one occurrence of a series ("this"), it and the later ones ("following"), or all."""
     rid = as_utc(recurrence_id)
@@ -667,7 +668,7 @@ def update_event_participant(request, event_id: str, participant_id: str, payloa
     return _serialize_participant(participant)
 
 
-@router.delete("/events/{event_id}/participants/{participant_id}")
+@router.delete("/events/{event_id}/participants/{participant_id}", response=OkOut)
 def delete_event_participant(request, event_id: str, participant_id: str):
     event = Event.objects.get(id=event_id)
     participant = EventParticipant.objects.get(id=participant_id, event=event)

@@ -2,5 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["scripts/*.{ts,mjs}"],
   "project": ["src/**/*.{ts,vue}", "scripts/*.{ts,mjs}"],
-  "ignoreDependencies": ["tailwindcss"]
+  "ignoreDependencies": ["tailwindcss"],
+  "ignore": ["src/api/schema.d.ts"]
 }

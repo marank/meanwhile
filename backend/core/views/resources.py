@@ -12,6 +12,7 @@ from core.models.base import Role
 from core.schemas import (
     ApproverOut,
     ApproversIn,
+    OkOut,
     ResourceCreate,
     ResourceOut,
     ResourceUpdate,
@@ -65,7 +66,7 @@ def update_resource(request, calendar_id: str, resource_id: str, payload: Resour
     return resource
 
 
-@router.delete("/calendars/{calendar_id}/resources/{resource_id}")
+@router.delete("/calendars/{calendar_id}/resources/{resource_id}", response=OkOut)
 def delete_resource(request, calendar_id: str, resource_id: str):
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     # Archive instead of deleting so existing bookings keep their resource.

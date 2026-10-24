@@ -22,7 +22,7 @@ onMounted(() => run(async () => (calendars.value = await api.listPublicCalendars
 const shown = computed(() => {
   const q = query.value.trim().toLowerCase()
   return (calendars.value ?? []).filter((calendar) =>
-    [calendar.name, calendar.description ?? '', calendar.owner_name].some((text) => text.toLowerCase().includes(q)),
+    [calendar.name, calendar.description, calendar.owner_name].some((text) => text.toLowerCase().includes(q)),
   )
 })
 

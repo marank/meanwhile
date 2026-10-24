@@ -37,6 +37,7 @@ from core.schemas import (
     CalendarUpdate,
     FeedTokenRotateOut,
     FeedUrlOut,
+    OkOut,
     PublicCalendarOut,
 )
 from core.services.calendars import create_calendar as create_calendar_for
@@ -141,7 +142,7 @@ def _public_calendar(calendar_id: str) -> Calendar:
     return calendar
 
 
-@router.put("/calendars/{calendar_id}/subscription")
+@router.put("/calendars/{calendar_id}/subscription", response=OkOut)
 def add_public_calendar(request, calendar_id: str):
     """Adds a public calendar to the sidebar, at its end; its public role applies (see get_membership)."""
     calendar = _public_calendar(calendar_id)
@@ -156,7 +157,7 @@ def add_public_calendar(request, calendar_id: str):
     return {"ok": True}
 
 
-@router.delete("/calendars/{calendar_id}/subscription")
+@router.delete("/calendars/{calendar_id}/subscription", response=OkOut)
 def remove_public_calendar(request, calendar_id: str):
     """Takes a public calendar the user added out of the sidebar again."""
     # Deleting a queryset still sends post_delete, which updates the user's other tabs.
@@ -218,7 +219,7 @@ def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
     return out
 
 
-@router.delete("/calendars/{calendar_id}")
+@router.delete("/calendars/{calendar_id}", response=OkOut)
 def delete_calendar(request, calendar_id: str):
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.OWNER, "Only the owner can delete this calendar")
     calendar.delete()
@@ -305,7 +306,7 @@ def update_member(request, calendar_id: str, user_id: str, payload: CalendarMemb
     return _serialize_membership(target)
 
 
-@router.delete("/calendars/{calendar_id}/members/{user_id}")
+@router.delete("/calendars/{calendar_id}/members/{user_id}", response=OkOut)
 def remove_member(request, calendar_id: str, user_id: str):
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can remove members"
@@ -435,7 +436,7 @@ def update_calendar_group(request, calendar_id: str, link_id: str, payload: Cale
     return _serialize_group_link(link)
 
 
-@router.delete("/calendars/{calendar_id}/groups/{link_id}")
+@router.delete("/calendars/{calendar_id}/groups/{link_id}", response=OkOut)
 def delete_calendar_group(request, calendar_id: str, link_id: str):
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage group links"

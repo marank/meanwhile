@@ -17,6 +17,7 @@ from core.schemas import (
     AppSettingsOut,
     AppSettingsUpdate,
     GroupOut,
+    OkOut,
 )
 from core.views.common import require_admin
 
@@ -117,7 +118,7 @@ def admin_update_user(request, user_id: str, payload: AdminUserUpdate):
     return _serialize_user(user)
 
 
-@router.delete("/admin/users/{user_id}")
+@router.delete("/admin/users/{user_id}", response=OkOut)
 def admin_delete_user(request, user_id: str):
     require_admin(request)
     if str(request.user.id) == user_id:

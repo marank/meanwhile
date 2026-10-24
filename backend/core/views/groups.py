@@ -6,7 +6,7 @@ from django.db.models import Count
 from ninja import Router
 
 from core.models import User, UserGroup
-from core.schemas import GroupCreate, GroupDetailOut, GroupMemberOut, GroupOut, GroupUpdate
+from core.schemas import GroupCreate, GroupDetailOut, GroupMemberOut, GroupOut, GroupUpdate, OkOut
 from core.views.common import require_admin
 
 router = Router()
@@ -64,7 +64,7 @@ def update_group(request, group_id: str, payload: GroupUpdate):
     return _with_member_count(group.id)
 
 
-@router.delete("/groups/{group_id}")
+@router.delete("/groups/{group_id}", response=OkOut)
 def delete_group(request, group_id: str):
     require_admin(request)
     UserGroup.objects.filter(id=group_id).delete()

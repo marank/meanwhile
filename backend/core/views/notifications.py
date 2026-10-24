@@ -2,6 +2,7 @@
 Notification endpoints.
 """
 
+from typing import Literal
 from uuid import UUID
 
 from django.db.models import Q
@@ -12,7 +13,7 @@ from ninja.errors import HttpError
 from core.models import EventParticipant, Notification
 from core.models.base import EventStatus, ParticipantStatus
 from core.realtime import broadcast
-from core.schemas import NotificationOut
+from core.schemas import NotificationCountsOut, NotificationOut, OkOut
 
 router = Router()
 
@@ -57,19 +58,17 @@ MAX_NOTIFICATIONS = 200
 
 
 @router.get("/notifications", response=list[NotificationOut])
-def list_notifications(request, limit: int = 50, group: str | None = None):
+def list_notifications(request, limit: int = 50, group: Literal["approvals", "invitations"] | None = None):
     limit = max(1, min(limit, MAX_NOTIFICATIONS))
     query = Notification.objects.filter(user=request.user)
     if group is not None:
-        if group not in TYPE_GROUPS:
-            raise HttpError(422, "Unknown notification group")
         query = query.filter(type__in=TYPE_GROUPS[group])
     notifications = list(query.select_related("actor", "event").order_by("-created_at")[:limit])
     responses = _my_responses(request.user, notifications)
     return [_serialize(n, responses) for n in notifications]
 
 
-@router.get("/notifications/counts")
+@router.get("/notifications/counts", response=NotificationCountsOut)
 def counts(request):
     """The numbers the app shows as badges: unread notifications, and requests still waiting for this user
     (pending approvals and unanswered invitations)."""
@@ -89,7 +88,7 @@ def counts(request):
     return {"unread": unread, "approvals": approvals, "invitations": invitations}
 
 
-@router.post("/notifications/read-all")
+@router.post("/notifications/read-all", response=OkOut)
 def mark_all_read(request):
     now = timezone.now()
     Notification.objects.filter(user=request.user, read_at__isnull=True).update(read_at=now)
@@ -106,7 +105,7 @@ def mark_read(request, notification_id: str):
     return _serialize(notification)
 
 
-@router.delete("/notifications/{notification_id}")
+@router.delete("/notifications/{notification_id}", response=OkOut)
 def delete_notification(request, notification_id: str):
     notification = Notification.objects.get(id=notification_id, user=request.user)
     if notification.type in UNDELETABLE_TYPES:

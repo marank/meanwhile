@@ -116,6 +116,12 @@ jobs:
           APP_URLS: https://app.example.com
         run: uv run python manage.py check --deploy --fail-level WARNING
 
+      # The committed schema is what the frontend's API types are generated from.
+      - name: OpenAPI schema up to date
+        run: |
+          uv run python manage.py export_openapi_schema --api core.api.api --indent 2 --output /tmp/openapi.json
+          diff -u ../frontend/openapi.json /tmp/openapi.json
+
       - name: Tests
         run: uv run pytest -q --cov --cov-report=term --cov-fail-under=90
 
@@ -143,6 +149,10 @@ jobs:
       # unit tests with their coverage minimum
       - name: Checks
         run: pnpm check
+
+      # src/api/schema.d.ts is generated from openapi.json, which the backend job checks.
+      - name: API types up to date
+        run: pnpm api:types && git diff --exit-code -- src/api/schema.d.ts
 
       - name: Build
         run: pnpm build-only

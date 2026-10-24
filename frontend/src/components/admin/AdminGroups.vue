@@ -43,7 +43,7 @@ async function startEdit(group: api.UserGroup) {
       form.value = {
         id: group.id,
         name: group.name,
-        description: group.description ?? '',
+        description: group.description,
         members: detail.members,
       }
       pickedUserId.value = null
@@ -69,7 +69,7 @@ async function save() {
   if (!value?.name) return
   const data = {
     name: value.name,
-    description: value.description || null,
+    description: value.description,
     member_ids: value.members.map((m) => m.id),
   }
   const saved = await run(

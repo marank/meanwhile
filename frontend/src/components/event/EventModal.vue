@@ -249,7 +249,7 @@ function setLocalRange(start: Date, end: Date) {
 
 function fillFromEvent(value: api.Event) {
   form.title = value.title
-  form.description = value.description || ''
+  form.description = value.description
   form.allDay = forceAllDay.value || value.all_day
   if (form.allDay) {
     // All-day events are stored as UTC midnights, so the UTC date is the calendar date.
@@ -311,7 +311,7 @@ function eventInput(): api.EventInput {
   const rrule = currentRrule()
   return {
     title: form.title,
-    description: form.description || null,
+    description: form.description,
     start: toDate(form.startDate, form.startTime).toISOString(),
     end: toDate(form.endDate, form.endTime).toISOString(),
     all_day: form.allDay,

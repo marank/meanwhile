@@ -8,7 +8,7 @@ from ninja import Router
 from ninja.errors import HttpError
 
 from core.models import EventParticipant
-from core.models.base import EventStatus
+from core.models.base import EventStatus, ParticipantStatus
 from core.schemas import RsvpAnswer, RsvpOut
 from core.services.itip import record_answer, series_of
 from core.services.recurrence import as_utc
@@ -44,7 +44,7 @@ def _serialize(participant: EventParticipant) -> RsvpOut:
         rrule=series.rrule,
         organizer_name=organizer.display_name or organizer.email,
         email=participant.email,
-        status=participant.status,
+        status=ParticipantStatus(participant.status),
         cancelled=event.status in _GONE,
     )
 

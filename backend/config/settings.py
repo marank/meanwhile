@@ -95,6 +95,8 @@ INSTALLED_APPS = [
     # The task queue: emails, reminders and other regular jobs (core.tasks), run by
     # `manage.py procrastinate worker`.
     "procrastinate.contrib.django",
+    # For `manage.py export_openapi_schema` (the frontend's API types) and the docs' static files.
+    "ninja",
     "core",
 ]
 

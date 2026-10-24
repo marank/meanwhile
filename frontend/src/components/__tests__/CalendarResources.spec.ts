@@ -19,7 +19,7 @@ const resource = (approvers: ReturnType<typeof approver>[]) =>
     id: 'r1',
     calendar_id: 'c',
     name: 'Room',
-    description: null,
+    description: '',
     color: '#f59e0b',
     requires_approval: true,
     is_location: false,

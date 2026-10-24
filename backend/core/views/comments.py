@@ -7,7 +7,7 @@ from ninja.errors import HttpError
 
 from core.models import EventActivity, EventComment, User
 from core.models.base import Role
-from core.schemas import ActivityOut, CommentCreate, CommentOut
+from core.schemas import ActivityOut, CommentCreate, CommentOut, OkOut
 from core.services.notifications import notify
 from core.services.permissions import can_see_event, get_membership, get_visible_event, has_at_least_role
 
@@ -64,7 +64,7 @@ def create_comment(request, event_id: str, payload: CommentCreate):
     return _serialize_comment(comment)
 
 
-@router.delete("/events/{event_id}/comments/{comment_id}")
+@router.delete("/events/{event_id}/comments/{comment_id}", response=OkOut)
 def delete_comment(request, event_id: str, comment_id: str):
     comment = EventComment.objects.get(id=comment_id, event_id=event_id)
     membership = get_membership(comment.event.calendar, request.user)
