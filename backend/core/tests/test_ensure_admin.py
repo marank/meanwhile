@@ -5,10 +5,11 @@
 import pytest
 from allauth.account.models import EmailAddress
 from django.contrib.auth import SESSION_KEY
+from django.contrib.auth.hashers import make_password
 from django.core.management import CommandError, call_command
 from django.test import Client
 
-from core.models import OverviewSettings, User
+from core.models import AppPassword, OverviewSettings, User
 from core.tests.helpers import make_user
 
 pytestmark = pytest.mark.django_db
@@ -70,16 +71,33 @@ def test_an_unchanged_password_is_not_set_again(admin_env):
     assert User.objects.get().password == hash_before
 
 
-def test_without_a_password_an_existing_user_keeps_theirs(admin_env):
-    user = make_user("someone")
-    admin_env.ADMIN_EMAIL = user.email
+def test_without_a_password_an_existing_admin_keeps_theirs(admin_env):
+    call_command("ensure_admin")
     admin_env.ADMIN_PASSWORD = ""
 
     call_command("ensure_admin")
 
-    user.refresh_from_db()
-    assert user.is_admin
-    assert user.check_password("x")
+    assert User.objects.get().check_password("secret-1")
+
+
+def test_whoever_signed_up_with_the_address_loses_the_account(admin_env):
+    """Emails aren't verified: someone else may have registered ADMIN_EMAIL before the admin was set up."""
+    squatter = make_user("someone")
+    AppPassword.objects.create(user=squatter, label="Phone", password_hash=make_password("app-1"))
+    admin_env.ADMIN_EMAIL = squatter.email
+
+    admin_env.ADMIN_PASSWORD = ""
+    with pytest.raises(CommandError):
+        call_command("ensure_admin")
+    squatter.refresh_from_db()
+    assert not squatter.is_admin
+
+    admin_env.ADMIN_PASSWORD = "secret-1"
+    call_command("ensure_admin")
+    squatter.refresh_from_db()
+    assert squatter.is_admin and squatter.check_password("secret-1")
+    assert not AppPassword.objects.filter(user=squatter).exists()
+    assert EmailAddress.objects.filter(user=squatter, verified=True).exists()
 
 
 def test_a_new_admin_needs_a_password(admin_env):

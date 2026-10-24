@@ -29,6 +29,12 @@ export const useEventStore = defineStore('events', () => {
     lastRange = [rangeStart, rangeEnd]
     if (!force && loadKey === lastLoadKey) return
     lastLoadKey = loadKey
+    // Events of calendars no longer selected go at once, not when the new ones have loaded: until then
+    // they could still be clicked or dragged.
+    const selected = new Set(ids)
+    if (occurrences.value.some((occ) => !selected.has(occ.calendar_id))) {
+      occurrences.value = occurrences.value.filter((occ) => selected.has(occ.calendar_id))
+    }
     const version = ++loadVersion
     try {
       const result = ids.length ? await api.listEvents(ids, start, end) : []

@@ -5,8 +5,6 @@ Custom django-allauth account adapter.
 from allauth.account.adapter import DefaultAccountAdapter
 from django.conf import settings as django_settings
 
-from core.models import User
-
 
 class AccountAdapter(DefaultAccountAdapter):
     def is_open_for_signup(self, request) -> bool:
@@ -20,13 +18,8 @@ class AccountAdapter(DefaultAccountAdapter):
         if hasattr(form, "cleaned_data"):
             user.display_name = form.cleaned_data.get("display_name") or user.display_name
 
-        # Grant admin rights to the very first user or a configured admin email.
-        email = (user.email or "").lower()
-        is_first = not User.objects.exists()
-        admin_email = (getattr(django_settings, "ADMIN_EMAIL", "") or "").lower()
-        if is_first or (admin_email and email == admin_email):
-            user.is_admin = True
-            user.is_superuser = True
+        # Signing up never makes anyone admin, the first user or one of ADMIN_EMAIL included: emails
+        # aren't verified, so whoever comes first would be. `manage.py ensure_admin` sets up the admin.
 
         if commit:
             user.save()

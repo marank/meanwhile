@@ -43,7 +43,7 @@ services:
       # The frontend comes from the same origin.
       CORS_ORIGINS: ""
     ports:
-      - "${APP_BIND:-127.0.0.1:6326}:80"
+      - "${APP_BIND:-127.0.0.1:6326}:8080"
     depends_on:
       db:
         condition: service_healthy

@@ -391,7 +391,8 @@ def _serialize_group_link(link: CalendarGroup) -> dict:
         "role": link.role,
         "members": [
             {"id": user.id, "email": user.email, "display_name": user.display_name}
-            for user in link.group.user_set.order_by("display_name")
+            # Sorted here, so that the members prefetched for a list of links serve (list_calendar_groups).
+            for user in sorted(link.group.user_set.all(), key=lambda user: user.display_name)
         ],
     }
 
@@ -401,7 +402,7 @@ def list_calendar_groups(request, calendar_id: str):
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage group links"
     )
-    links = CalendarGroup.objects.filter(calendar=calendar).select_related("group")
+    links = CalendarGroup.objects.filter(calendar=calendar).select_related("group").prefetch_related("group__user_set")
     return [_serialize_group_link(link) for link in links]
 
 

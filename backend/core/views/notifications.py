@@ -52,8 +52,12 @@ def _serialize(notification: Notification, responses: dict[str, str] | None = No
     }
 
 
+MAX_NOTIFICATIONS = 200
+
+
 @router.get("/notifications", response=list[NotificationOut])
 def list_notifications(request, limit: int = 50, group: str | None = None):
+    limit = max(1, min(limit, MAX_NOTIFICATIONS))
     query = Notification.objects.filter(user=request.user)
     if group is not None:
         if group not in TYPE_GROUPS:

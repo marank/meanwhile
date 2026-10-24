@@ -8,6 +8,7 @@ from ninja.errors import HttpError
 from core.schemas import SearchResult
 from core.services.permissions import get_member_calendar
 from core.services.search import (
+    MAX_LIMIT,
     search_calendar_members,
     search_categories,
     search_groups,
@@ -26,6 +27,8 @@ def search(
     limit: int = 20,
     calendar_id: str | None = None,
 ):
+    # No more than a dropdown shows: listing every user with their email is not what search is for.
+    limit = max(1, min(limit, MAX_LIMIT))
     if entity == "users":
         return search_users(q, limit)
     if entity == "groups":

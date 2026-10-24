@@ -158,7 +158,8 @@ export const RESOURCE_ICON_NAMES = Object.keys(RESOURCE_ICONS)
 
 /** The component for an icon name; undefined for no icon, and for a name this client doesn't know. */
 export function resourceIcon(name: string | null | undefined): Component | undefined {
-  return name ? RESOURCE_ICONS[name] : undefined
+  // Own keys only: names like "constructor" (which the backend accepts) aren't icons.
+  return name && Object.hasOwn(RESOURCE_ICONS, name) ? RESOURCE_ICONS[name] : undefined
 }
 
 const markup = new Map<string, string>()

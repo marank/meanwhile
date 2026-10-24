@@ -2,12 +2,13 @@
 Radicale auth plugin backed by Django users and app passwords.
 """
 
+import functools
 import hashlib
 import hmac
 import secrets
 from datetime import timedelta
 
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.cache import cache
 from django.utils import timezone
 from radicale import auth as base_auth
@@ -54,6 +55,8 @@ class Auth(base_auth.BaseAuth):
             return ""
         user = User.objects.filter(email__iexact=login, is_active=True).first()
         if user is None:
+            # As long as checking a password, so the answer's time doesn't tell which accounts exist.
+            check_password(password, _dummy_hash())
             _count_failure(failures)
             return ""
         app_passwords = list(AppPassword.objects.filter(user=user))
@@ -81,6 +84,11 @@ class Auth(base_auth.BaseAuth):
             app_password.last_used_at = now
             app_password.save(update_fields=["last_used_at"])
         return login
+
+
+@functools.cache
+def _dummy_hash() -> str:
+    return make_password(secrets.token_urlsafe(16))
 
 
 def _matching_hash(user: User, app_passwords: list[AppPassword], password: str) -> str | None:

@@ -7,6 +7,7 @@ with the session comes Ninja's CSRF check.
 
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError
 from ninja import NinjaAPI
 from ninja.errors import HttpError
 from ninja.security import django_auth
@@ -32,6 +33,13 @@ def not_found(request, exc: ObjectDoesNotExist):
     model = next((m for m in apps.get_models() if type(exc) is m.DoesNotExist), None)
     name = model._meta.verbose_name.capitalize() if model else "Object"
     return api.create_response(request, {"detail": f"{name} not found"}, status=404)
+
+
+@api.exception_handler(IntegrityError)
+def conflict(request, exc: IntegrityError):
+    # A unique constraint caught what a view's check let through, e.g. two requests adding the same
+    # member at once: the second one learns it is already there.
+    return api.create_response(request, {"detail": "This already exists or was just changed"}, status=409)
 
 
 # Register routers

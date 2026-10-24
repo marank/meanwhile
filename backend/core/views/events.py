@@ -542,11 +542,8 @@ def _serialize_participant(participant: EventParticipant) -> dict:
 
 
 def _participant_event(event_id: str, user: User):
-    event = Event.objects.get(id=event_id)
-    membership = get_membership(event.calendar, user)
-    if membership is None:
-        raise HttpError(403, "You cannot view this event")
-    return event, membership
+    # Like the event itself: a booking the user may not see (e.g. pending) doesn't show its participants.
+    return get_visible_event(event_id, user)
 
 
 def _create_participant(event: Event, current_user: User, data):

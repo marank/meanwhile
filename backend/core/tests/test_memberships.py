@@ -174,3 +174,18 @@ def test_fixtures_keep_the_memberships_they_bring(setup):
     for obj in serializers.deserialize("json", serializers.serialize("json", [setup["calendar"]])):
         obj.save()
     assert membership(setup).source == "public"
+
+
+def test_comments_reach_only_who_can_still_see_the_event(world):
+    from core.models import Notification
+
+    res = world["book"](world["api"]["booker"], None)
+    event_id = res.json()["id"]
+    other = world["api"]["other"]
+    assert other.post(f"/events/{event_id}/comments", {"body": "First"}).status_code == 200
+    owner = world["api"]["owner"]
+    assert owner.delete(f"/calendars/{world['cal']['id']}/members/{world['users']['other'].id}").status_code == 200
+
+    assert world["api"]["full"].post(f"/events/{event_id}/comments", {"body": "Secret plan"}).status_code == 200
+    assert not Notification.objects.filter(user=world["users"]["other"], type="comment_added").exists()
+    assert Notification.objects.filter(user=world["users"]["booker"], type="comment_added").exists()

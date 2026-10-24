@@ -146,8 +146,8 @@ Backend settings are read from environment variables:
 | `ENVIRONMENT` | `production` | `development` for running the backend without Docker: DEBUG, the dev `SECRET_KEY`, the defaults marked as such below. |
 | `SECRET_KEY` | dev key | Change in production (>= 32 bytes). |
 | `ALLOW_REGISTRATION` | `true` in development, `false` otherwise | Whether anyone may sign up. Signed-in users can look each other up (by name and email) to share calendars, so only open it to people who may see each other. |
-| `ADMIN_EMAIL` | - | The admin user. `manage.py ensure_admin` (run on every start of the Docker setups) creates it or makes the existing user of that address admin; without it, a user registering with this address becomes admin. |
-| `ADMIN_PASSWORD` | - | Password of the admin user; needed to create it, set again when it differs (which signs the admin out). Empty: an existing admin keeps their password. |
+| `ADMIN_EMAIL` | - | The admin user. `manage.py ensure_admin` (run on every start of the Docker setups) creates it or makes the existing user of that address admin (who then loses their sessions and app passwords to `ADMIN_PASSWORD`). Signing up never makes anyone admin; without Docker, run `manage.py ensure_admin` once. |
+| `ADMIN_PASSWORD` | - | Password of the admin user; needed to create it or make an existing user admin, set again when it differs (which signs the admin out). Empty: an existing admin keeps their password. |
 | `ADMIN_NAME` | - | Display name of the admin user. |
 | `CALDAV_PATH` | `/caldav` | URL prefix for the embedded CalDAV server. |
 | `REDIS_URL` | - | e.g. `redis://redis:6379/0`. Required with more than one server process, so that live updates reach every process's WebSockets. Without it they stay within one process (fine for development). |
@@ -268,8 +268,9 @@ This starts PostgreSQL, Redis and the `app` container, built by the `Dockerfile`
 
 - On every start, `docker/entrypoint.sh` applies the migrations first and creates or updates
   the admin user of `ADMIN_EMAIL` (`manage.py ensure_admin`).
-- Then supervisord (`docker/supervisord.conf`) runs:
-  - nginx (`docker/nginx.conf`), which serves the built frontend and Django admin's static files
+- Then supervisord (`docker/supervisord.conf`) runs, like everything in the container, as the
+  unprivileged user `app`:
+  - nginx (`docker/nginx.conf`, port 8080 inside the container), which serves the built frontend and Django admin's static files
     and passes `/api`, `/admin`, `/ics`, `/caldav`, `/.well-known/caldav` and the WebSocket `/ws/`
     on;
   - uvicorn, with `WEB_WORKERS` processes;

@@ -31,7 +31,9 @@ class Application(RadicaleApplication):
 
 
 def create_application() -> Application:
-    config = load_config()
+    # Radicale's defaults only: not /etc/radicale/config, ~/.config/radicale/config or RADICALE_CONFIG,
+    # which could switch on what this app doesn't expect (other plugins, sharing, ...).
+    config = load_config([])
     config.update(
         {
             "auth": {"type": "core.caldav.auth"},

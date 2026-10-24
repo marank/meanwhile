@@ -61,3 +61,31 @@ def test_roles_and_statuses_are_checked_by_the_schema(world):
     event = world["book"](owner, None).json()
     res = owner.post(f"/events/{event['id']}/participants", {"email": "a@example.test", "status": "maybe"})
     assert res.status_code == 422
+
+
+def test_searches_list_no_more_than_a_dropdown_shows(world):
+    from core.services.search import MAX_LIMIT
+    from core.tests.helpers import make_user
+
+    for i in range(MAX_LIMIT + 5):
+        make_user(f"person{i}")
+    res = world["api"]["owner"].get("/search?entity=users&q=person&limit=100000")
+    assert res.status_code == 200 and len(res.json()) == MAX_LIMIT
+    assert world["api"]["owner"].get("/search?entity=users&q=person&limit=-1").status_code == 200
+
+
+def test_participants_of_hidden_bookings_stay_hidden(world):
+    room = world["resource"]("Room", approver_ids=[str(world["users"]["resapprover"].id)])
+    res = world["book"](world["api"]["booker"], room["id"])
+    assert res.json()["status"] == "pending"
+    assert world["api"]["other"].get(f"/events/{res.json()['id']}/participants").status_code == 404
+    assert world["api"]["booker"].get(f"/events/{res.json()['id']}/participants").status_code == 200
+
+
+def test_unique_clashes_answer_conflict_not_server_error(world):
+    from django.db import IntegrityError
+
+    from core.api import conflict
+
+    response = conflict(None, IntegrityError("duplicate key"))
+    assert response.status_code == 409

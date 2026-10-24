@@ -636,7 +636,9 @@ const calendarOptions = computed(() => ({
   selectable: calendarStore.canCreateInSelected,
   selectMirror: calendarStore.canCreateInSelected,
   select: (info: DateSelectInfo) => {
-    const end = info.allDay ? new Date(info.end.getTime() - DAY_MS) : info.end
+    // The day before by the calendar, as in handleEventChange.
+    const end = new Date(info.end)
+    if (info.allDay) end.setDate(end.getDate() - 1)
     openCreateModal(info.start, end, info.allDay)
   },
   eventClick: (info: EventClickInfo) => openEditModal(info.event.extendedProps.occurrence as Occurrence),

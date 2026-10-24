@@ -4,7 +4,9 @@ start of the containers, after the migrations.
 
 Without ADMIN_EMAIL nothing happens. An existing user of that address becomes admin; their
 password is only replaced when ADMIN_PASSWORD differs from it (setting it again would sign them
-out everywhere). A new user needs ADMIN_PASSWORD.
+out everywhere). A new user needs ADMIN_PASSWORD, and so does an existing one who isn't admin yet:
+anyone may have signed up with that address (emails aren't verified), so whoever did loses the
+account to ADMIN_PASSWORD, their sessions and their app passwords.
 """
 
 from allauth.account.models import EmailAddress
@@ -12,7 +14,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from core.models import User
+from core.models import AppPassword, User
 
 
 class Command(BaseCommand):
@@ -38,6 +40,13 @@ class Command(BaseCommand):
 
         changed = []
         if not (user.is_admin and user.is_superuser and user.is_active):
+            if not password:
+                raise CommandError(f"ADMIN_PASSWORD is needed to make the existing user {email} admin.")
+            # The new password signs out every session (Django checks the password hash with each).
+            AppPassword.objects.filter(user=user).delete()
+            EmailAddress.objects.update_or_create(
+                user=user, email__iexact=email, defaults={"email": email, "primary": True, "verified": True}
+            )
             user.is_admin = user.is_superuser = user.is_active = True
             changed.append("admin rights")
         if password and not user.check_password(password):

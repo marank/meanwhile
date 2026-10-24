@@ -69,6 +69,8 @@ def admin_users(request):
 @router.post("/admin/users", response=AdminUserOut)
 def admin_create_user(request, payload: AdminUserCreate):
     require_admin(request)
+    if User.objects.filter(email__iexact=payload.email).exists():
+        raise HttpError(400, "A user with this email already exists")
     user = User(
         email=payload.email,
         display_name=payload.display_name,

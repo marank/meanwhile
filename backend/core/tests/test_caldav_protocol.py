@@ -796,3 +796,18 @@ def test_failed_logins_are_limited_like_the_web_login(team):
     # Now even the right password is refused for a while; other logins are not affected.
     assert dav("PROPFIND", path, user, DEPTH="0")[0] == 401
     assert dav("PROPFIND", f"/caldav/{team['users']['own'].email}/", team["users"]["own"], DEPTH="0")[0] == 207
+
+
+def test_the_feed_leaves_out_what_clients_note_for_members(team):
+    owner = team["users"]["owner"]
+    body = ics("notes").replace(
+        "SUMMARY:Meeting\r\n",
+        "SUMMARY:Meeting\r\nCOMMENT:Call Ann on 0123\r\nX-PRIVATE-NOTE:ask about salary\r\nTRANSP:OPAQUE\r\n",
+    )
+    assert dav("PUT", team["path"] + "notes.ics", owner, body, content_type="text/calendar")[0] == 201
+    members = dav("GET", team["path"] + "notes.ics", owner)[1]
+    assert "COMMENT:Call Ann" in members and "X-PRIVATE-NOTE" in members
+
+    feed = __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
+    assert "SUMMARY:Meeting" in feed and "TRANSP:OPAQUE" in feed
+    assert "Call Ann" not in feed and "X-PRIVATE-NOTE" not in feed

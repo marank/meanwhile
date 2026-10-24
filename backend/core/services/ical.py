@@ -29,6 +29,10 @@ _OWN_PROPERTIES = (
     "CATEGORIES", "LOCATION", "RESOURCES", "ORGANIZER", "ATTENDEE", "SEQUENCE",
 )
 
+# What the feed keeps of the properties clients sent besides those the app writes: plain event data.
+# Everything else (COMMENT, CONTACT, ATTACH, X-...) may name people or carry notes for the members.
+_FEED_PROPERTIES = ("CREATED", "LAST-MODIFIED", "CLASS", "TRANSP", "PRIORITY", "URL", "GEO")
+
 PARTSTAT = {
     "needs_action": "NEEDS-ACTION",
     "accepted": "ACCEPTED",
@@ -175,11 +179,13 @@ def build_event_ical(
     vevent = ICalEvent()
     if raw is not None:
         for name, value in raw.property_items(recursive=False):
-            if name not in ("BEGIN", "END") and name not in _OWN_PROPERTIES:
+            if name in ("BEGIN", "END") or name in _OWN_PROPERTIES:
+                continue
+            if audience.people or name in _FEED_PROPERTIES:
                 vevent.add(name, value, encode=False)
         for sub in raw.subcomponents:
-            # Reminders are kept per user and written below.
-            if sub.name != "VALARM":
+            # Reminders are kept per user and written below; the feed takes none of the client's parts.
+            if sub.name != "VALARM" and audience.people:
                 vevent.add_component(sub)
     if "CREATED" not in vevent:
         vevent.add("created", event.created_at)

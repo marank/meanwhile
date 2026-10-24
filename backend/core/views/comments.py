@@ -6,11 +6,11 @@ Event comments and activity endpoints.
 from ninja import Router
 from ninja.errors import HttpError
 
-from core.models import EventActivity, EventComment
+from core.models import EventActivity, EventComment, User
 from core.models.base import Role
 from core.schemas import ActivityOut, CommentCreate, CommentOut
 from core.services.notifications import notify
-from core.services.permissions import get_membership, get_visible_event, has_at_least_role
+from core.services.permissions import can_see_event, get_membership, get_visible_event, has_at_least_role
 
 router = Router()
 
@@ -51,8 +51,14 @@ def create_comment(request, event_id: str, payload: CommentCreate):
         .values_list("author_id", flat=True)
         .distinct()
     )
+    # Only who may still see the event: the notification carries the comment.
+    recipients = [
+        user
+        for user in User.objects.filter(id__in={event.creator_id, *previous_commenters}, is_active=True)
+        if (access := get_membership(event.calendar, user)) is not None and can_see_event(event, user, access)
+    ]
     notify(
-        [str(event.creator_id)] + [str(aid) for aid in previous_commenters],
+        [str(user.id) for user in recipients],
         "comment_added",
         str(request.user.id),
         event.title,

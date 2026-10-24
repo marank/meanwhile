@@ -14,6 +14,9 @@ describe('resource icons', () => {
     expect(resourceIcon('door-open')).toBeDefined()
     expect(resourceIconSvg('no-such-icon')).toBe('')
     expect(resourceIconSvg('')).toBe('')
+    // Names of the object's prototype, which the server's name check lets through.
+    expect(resourceIcon('constructor')).toBeUndefined()
+    expect(resourceIconSvg('constructor')).toBe('')
   })
 
   it('renders an svg of the asked size, the same every time', () => {
