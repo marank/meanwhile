@@ -35,7 +35,7 @@ class _PathDispatcher:
             if path == prefix or path.startswith(prefix + "/"):
                 environ = environ.copy()
                 environ["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + prefix
-                environ["PATH_INFO"] = path[len(prefix):]
+                environ["PATH_INFO"] = path[len(prefix) :]
                 return app(environ, start_response)
         return self.default_app(environ, start_response)
 

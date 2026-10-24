@@ -4,6 +4,7 @@ URL configuration for the Calendar backend.
 
 from allauth.headless.constants import Client
 from allauth.headless.urls import build_urlpatterns
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
 
@@ -13,8 +14,7 @@ from core.views.dav import well_known_caldav
 from core.views.feed import calendar_feed
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/auth/csrf/", csrf_view),
+    path("api/auth/csrf", csrf_view),
     path(
         "api/auth/",
         include((build_urlpatterns(Client.BROWSER), "headless"), namespace="browser"),
@@ -23,3 +23,7 @@ urlpatterns = [
     path("ics/<str:feed_token>.ics", calendar_feed),
     re_path(r"^\.well-known/caldav/?$", well_known_caldav),
 ]
+
+# Defense in depth: nginx also answers /admin with 404 when ADMIN_ENABLED is false.
+if settings.ADMIN_ENABLED:
+    urlpatterns.insert(0, path("admin/", admin.site.urls))

@@ -61,9 +61,18 @@ def send_emails_right_away(settings, monkeypatch):
 @pytest.fixture
 def world():
     """A calendar with members in every role relevant to approvals."""
-    users = {name: make_user(name) for name in (
-        "owner", "full", "booker", "other", "approver", "resapprover", "outsider",
-    )}
+    users = {
+        name: make_user(name)
+        for name in (
+            "owner",
+            "full",
+            "booker",
+            "other",
+            "approver",
+            "resapprover",
+            "outsider",
+        )
+    }
     apis = {name: Api(user) for name, user in users.items()}
     owner = apis["owner"]
 
@@ -92,12 +101,15 @@ def world():
         return created
 
     def book(api: Api, resource_id: str | None, start: datetime = BASE, hours: int = 1, **extra):
-        return api.post(f"/calendars/{cal['id']}/events", {
-            "title": extra.pop("title", "Booking"),
-            "start": iso(start),
-            "end": iso(start + timedelta(hours=hours)),
-            "resource_id": resource_id,
-            **extra,
-        })
+        return api.post(
+            f"/calendars/{cal['id']}/events",
+            {
+                "title": extra.pop("title", "Booking"),
+                "start": iso(start),
+                "end": iso(start + timedelta(hours=hours)),
+                "resource_id": resource_id,
+                **extra,
+            },
+        )
 
     return {"users": users, "api": apis, "cal": cal, "resource": resource, "book": book}

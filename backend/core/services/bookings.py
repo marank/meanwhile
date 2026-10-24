@@ -40,7 +40,7 @@ def can_decide_booking(calendar, resource: Resource | None, user_id: str) -> boo
 
 def booked_resources(event: Event) -> list[Resource]:
     """What the event books: its location (a place) and its resource, each at most once."""
-    booked = []
+    booked: list[Resource] = []
     for resource in (event.location_resource, event.resource):
         if resource is not None and all(r.pk != resource.pk for r in booked):
             booked.append(resource)
@@ -84,9 +84,7 @@ def update_booking_status(event: Event, user: User, recheck: list[Resource]) -> 
     rechecked = {str(r.pk) for r in recheck}
     awaiting = [i for i in (event.awaiting_approval or []) if str(i) in booked_ids and str(i) not in rechecked]
     awaiting += [
-        str(r.pk)
-        for r in recheck
-        if r.requires_approval and not can_decide_booking(event.calendar, r, str(user.pk))
+        str(r.pk) for r in recheck if r.requires_approval and not can_decide_booking(event.calendar, r, str(user.pk))
     ]
     was_pending = event.status == EventStatus.PENDING
     event.awaiting_approval = awaiting

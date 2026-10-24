@@ -52,12 +52,8 @@ class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
     dav_name = models.CharField(max_length=255, blank=True, null=True)  # noqa: DJ001
     url_path = models.CharField(max_length=100, unique=True, blank=True, null=True)
     is_public = models.BooleanField(default=False)
-    public_role = models.CharField(
-        max_length=20, choices=Role.choices, default=Role.READ
-    )
-    owner = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="calendars_owned"
-    )
+    public_role = models.CharField(max_length=20, choices=Role.choices, default=Role.READ)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="calendars_owned")
 
     class Meta:
         db_table = "calendars"
@@ -68,12 +64,8 @@ class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
 
 
 class CalendarMember(UUIDModel):
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="members"
-    )
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="memberships"
-    )
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="memberships")
     source = models.CharField(max_length=10, choices=MembershipSource.choices, default=MembershipSource.DIRECT)
     # Granted with a direct membership only. From a group or a public calendar the role is what they give, worked
     # out when it's needed (core.services.permissions.get_membership), so there is none to keep in step.
@@ -92,46 +84,26 @@ class CalendarMember(UUIDModel):
 
     class Meta:
         db_table = "calendar_members"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["calendar", "user"], name="uq_calendar_member"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["calendar", "user"], name="uq_calendar_member")]
 
 
 class CalendarGroup(UUIDModel, TimestampedModel):
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="calendar_groups"
-    )
-    group = models.ForeignKey(
-        UserGroup, on_delete=models.CASCADE, related_name="calendar_groups"
-    )
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="calendar_groups")
+    group = models.ForeignKey(UserGroup, on_delete=models.CASCADE, related_name="calendar_groups")
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.READ)
 
     class Meta:
         db_table = "calendar_groups"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["calendar", "group"], name="uq_calendar_group"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["calendar", "group"], name="uq_calendar_group")]
 
 
 class CalendarApprover(UUIDModel):
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="approvers"
-    )
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="+"
-    )
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="approvers")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
 
     class Meta:
         db_table = "calendar_approvers"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["calendar", "user"], name="uq_calendar_approver"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["calendar", "user"], name="uq_calendar_approver")]
 
 
 class FeedToken(UUIDModel):
@@ -143,9 +115,7 @@ class FeedToken(UUIDModel):
 
     class Meta:
         db_table = "feed_tokens"
-        constraints = [
-            models.UniqueConstraint(fields=["calendar", "user"], name="uq_feed_token")
-        ]
+        constraints = [models.UniqueConstraint(fields=["calendar", "user"], name="uq_feed_token")]
 
 
 class OverviewSettings(CalendarAppearance):

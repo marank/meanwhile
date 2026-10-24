@@ -16,11 +16,14 @@ def test_events_of_several_calendars_in_one_request(world):
     owner = world["api"]["owner"]
     second = owner.post("/calendars", {"name": "Second"}).json()
     world["book"](owner, None, title="Team event")
-    owner.post(f"/calendars/{second['id']}/events", {
-        "title": "Second event",
-        "start": iso(BASE + timedelta(hours=2)),
-        "end": iso(BASE + timedelta(hours=3)),
-    })
+    owner.post(
+        f"/calendars/{second['id']}/events",
+        {
+            "title": "Second event",
+            "start": iso(BASE + timedelta(hours=2)),
+            "end": iso(BASE + timedelta(hours=3)),
+        },
+    )
 
     res = owner.get(
         f"/events?calendar_ids={world['cal']['id']}&calendar_ids={second['id']}"
@@ -81,7 +84,9 @@ def test_approvers_are_set_as_a_whole_list(world):
     resource = world["resource"]("Room", approver_ids=[str(u["approver"].id)])
     assert [a["user_id"] for a in resource["approvers"]] == [str(u["approver"].id)]
 
-    res = owner.put(f"{path}/{resource['id']}/approvers", {"user_ids": [str(u["resapprover"].id), str(u["resapprover"].id)]})
+    res = owner.put(
+        f"{path}/{resource['id']}/approvers", {"user_ids": [str(u["resapprover"].id), str(u["resapprover"].id)]}
+    )
     assert res.status_code == 200, res.content
     assert [a["user_id"] for a in res.json()] == [str(u["resapprover"].id)]
     assert [a["user_id"] for a in owner.get(f"{path}/{resource['id']}/approvers").json()] == [str(u["resapprover"].id)]
@@ -113,7 +118,9 @@ def test_approvers_must_be_members(world):
     owner, outsider = world["api"]["owner"], str(world["users"]["outsider"].id)
     resource = world["resource"]("Room")
     cal = world["cal"]["id"]
-    assert owner.put(f"/calendars/{cal}/resources/{resource['id']}/approvers", {"user_ids": [outsider]}).status_code == 400
+    assert (
+        owner.put(f"/calendars/{cal}/resources/{resource['id']}/approvers", {"user_ids": [outsider]}).status_code == 400
+    )
     assert owner.put(f"/calendars/{cal}/approvers", {"user_ids": [outsider]}).status_code == 400
     assert owner.put(f"/calendars/{cal}/approvers", {"user_ids": ["no-such-user"]}).status_code == 400
     assert not ResourceApprover.objects.exists()

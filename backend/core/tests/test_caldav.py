@@ -48,7 +48,9 @@ def upload(world, event, start=BASE, hours=1, summary="Booking"):
 
 
 def booking(world, status="pending", requires_approval=True, start=BASE):
-    room = world["resource"]("Room " + status + str(requires_approval) + start.isoformat(), requires_approval=requires_approval)
+    room = world["resource"](
+        "Room " + status + str(requires_approval) + start.isoformat(), requires_approval=requires_approval
+    )
     event = world["book"](world["api"]["booker"], room["id"], start=start).json()
     if status == "approved":
         world["api"]["owner"].post(f"/events/{event['id']}/approve")

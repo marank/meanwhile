@@ -64,7 +64,10 @@ def test_series_and_their_exceptions(world):
     series = create(world, "booker", rrule="FREQ=HOURLY;COUNT=3")
     url = f"/events/{series['id']}/occurrences/{iso(BASE + HOUR).replace('+', '%2B')}?scope=this"
     world["api"]["booker"].delete(url)
-    assert periods(availability(world, users=["booker"])["users"][0]) == [("09:00", "10:00", False), ("11:00", "12:00", False)]
+    assert periods(availability(world, users=["booker"])["users"][0]) == [
+        ("09:00", "10:00", False),
+        ("11:00", "12:00", False),
+    ]
     # Planning the series itself, it doesn't block itself.
     assert availability(world, users=["booker"], exclude=series["id"])["users"][0]["busy"] == []
 

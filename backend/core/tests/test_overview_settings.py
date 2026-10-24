@@ -27,11 +27,14 @@ def test_overview_starts_with_app_defaults_and_the_app_colors():
 def test_overview_settings_are_saved_per_user():
     owner = Api(make_user("owner"))
     other = Api(make_user("other"))
-    res = owner.patch("/users/me/settings", {
-        "use_calendar_colors": False,
-        "event_color": "#123456",
-        "weekend_days": [6, 0, 6],
-    })
+    res = owner.patch(
+        "/users/me/settings",
+        {
+            "use_calendar_colors": False,
+            "event_color": "#123456",
+            "weekend_days": [6, 0, 6],
+        },
+    )
     assert res.status_code == 200, res.content
     assert res.json()["weekend_days"] == [0, 6]
 

@@ -7,6 +7,7 @@ knows when it is next due, so that a delivery only looks at those due by then; a
 """
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -30,7 +31,7 @@ _HIDDEN = {EventStatus.REJECTED, EventStatus.CANCELLED}
 
 def series_of(event: Event) -> Event:
     """Reminders belong to the series; a changed occurrence is reminded of like the others."""
-    return event.parent if event.parent_id else event
+    return event.parent or event
 
 
 def reminder_minutes(event: Event, user: User) -> list[int]:
@@ -94,7 +95,7 @@ def deliver_due_reminders(user: User | None = None, now: datetime | None = None)
         reminders = reminders.filter(user=user)
 
     delivered = []
-    by_user: dict[str, list[dict]] = {}
+    by_user: dict[UUID, list[dict]] = {}
     for reminder in reminders:
         series, reader = reminder.event, reminder.user
         membership = get_membership(series.calendar, reader)
@@ -124,8 +125,8 @@ def deliver_due_reminders(user: User | None = None, now: datetime | None = None)
             by_user.setdefault(reader.id, []).append(reminded)
         reminder.next_due_at = _next_due(reminder, now)
         reminder.save(update_fields=["next_due_at"])
-    for user_id, reminders in by_user.items():
-        broadcast.reminders_due(user_id, reminders)
+    for user_id, user_reminders in by_user.items():
+        broadcast.reminders_due(user_id, user_reminders)
     return delivered
 
 
@@ -151,7 +152,7 @@ def _next_due(reminder: EventReminder, now: datetime) -> datetime | None:
     return min(starts) - before if starts else None
 
 
-def reminders_changed(series_id: str | None = None, user_id: str | None = None) -> None:
+def reminders_changed(series_id: UUID | str | None = None, user_id: UUID | str | None = None) -> None:
     """The event (a series) or the user's zone changed: their reminders are worked out again by the
     next delivery."""
     reminders = EventReminder.objects.all()

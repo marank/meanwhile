@@ -59,7 +59,7 @@ interface AllauthResponse<T = unknown> {
 }
 
 export async function getCsrf() {
-  return api<{ ok: boolean }>('/api/auth/csrf/')
+  return api<{ ok: boolean }>('/api/auth/csrf')
 }
 
 export async function login(data: { email: string; password: string }): Promise<User> {
@@ -248,9 +248,6 @@ export const setResourceApprovers = (calendarId: string, resourceId: string, use
     method: 'PUT',
     body: { user_ids: userIds },
   })
-
-export const removeCalendarApprover = (calendarId: string, userId: string) =>
-  api<void>(`/api/calendars/${calendarId}/approvers/${userId}`, { method: 'DELETE' })
 
 // Events
 export const listEvents = (calendarIds: string[], start: string, end: string) => {

@@ -15,9 +15,15 @@ def test_null_texts_are_stored_empty(world):
     assert owner.patch(f"/calendars/{cal}", {"description": None}).json()["description"] == ""
     assert Calendar.objects.get(id=cal).description == ""
 
-    event = owner.post(f"/calendars/{cal}/events", {
-        "title": "Plan", "description": None, "start": iso(BASE), "end": iso(BASE.replace(hour=10)),
-    }).json()
+    event = owner.post(
+        f"/calendars/{cal}/events",
+        {
+            "title": "Plan",
+            "description": None,
+            "start": iso(BASE),
+            "end": iso(BASE.replace(hour=10)),
+        },
+    ).json()
     assert event["description"] == ""
     owner.patch(f"/events/{event['id']}", {"description": "Agenda"})
     owner.patch(f"/events/{event['id']}", {"description": None})

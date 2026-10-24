@@ -27,7 +27,15 @@ from django.utils import timezone
 from core.models import Event, EventParticipant
 from core.models.base import EventStatus
 from core.services import mail
-from core.services.ical import PARTSTAT, SCHEDULING, build_event_ical, build_series_ical, new_calendar, to_ical
+from core.services.ical import (
+    PARTSTAT,
+    SCHEDULING,
+    build_event_ical,
+    build_series_ical,
+    new_calendar,
+    replaced_start,
+    to_ical,
+)
 from core.services.mail_texts import text
 from core.services.notifications import notify, wants_email
 from core.services.recurrence import as_utc, is_series
@@ -40,7 +48,7 @@ _ANSWERS = {value: key for key, value in PARTSTAT.items()}
 
 
 def series_of(event: Event) -> Event:
-    return event.parent if event.parent_id else event
+    return event.parent or event
 
 
 def _recipients(series: Event, only: list[EventParticipant] | None = None) -> list[EventParticipant]:
@@ -82,7 +90,7 @@ def request_ical(series: Event, occurrences: list[Event] | None = None) -> str:
     alone: they get those occurrences, not the series)."""
     components = build_series_ical(series, audience=SCHEDULING)
     if occurrences is not None:
-        wanted = {as_utc(o.recurrence_id) for o in occurrences}
+        wanted = {as_utc(replaced_start(o)) for o in occurrences}
         components = [c for c in components[1:] if _recurrence_id(c) in wanted]
     cal = new_calendar("REQUEST")
     for component in components:
@@ -390,8 +398,8 @@ def process_email(raw: bytes, trust_sender: bool = False) -> list[str]:
         if part.get_content_type() not in ("text/calendar", "application/ics") and not filename.endswith(".ics"):
             continue
         payload = part.get_payload(decode=True)
-        # The same message often comes inline and as attachment.
-        if not payload or payload in seen:
+        # The same message often comes inline and as attachment; decoded, a part is bytes (None if multipart).
+        if not isinstance(payload, bytes) or not payload or payload in seen:
             continue
         seen.add(payload)
         results += process_itip(payload, sender)

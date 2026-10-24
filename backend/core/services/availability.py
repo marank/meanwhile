@@ -32,7 +32,8 @@ def _merge(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, d
 
 def _periods(occurrences, start: datetime, end: datetime, tentative) -> list[dict]:
     """Busy and tentative periods, each merged; a busy time hides a tentative one at the same time."""
-    busy, maybe = [], []
+    busy: list[tuple[datetime, datetime]] = []
+    maybe: list[tuple[datetime, datetime]] = []
     for event, begin, finish in occurrences:
         period = (max(begin, start), min(finish, end))
         (maybe if tentative(event) else busy).append(period)

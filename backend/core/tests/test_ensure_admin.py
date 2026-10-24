@@ -114,3 +114,22 @@ def test_without_admin_email_nothing_happens(admin_env):
     call_command("ensure_admin")
 
     assert not User.objects.exists()
+
+
+@pytest.mark.parametrize("password", ["change-me", "CHANGE-ME", "short"])
+def test_refuses_a_placeholder_or_weak_password_outside_debug(admin_env, password):
+    admin_env.DEBUG = False
+    admin_env.ADMIN_PASSWORD = password
+
+    with pytest.raises(CommandError, match="ADMIN_PASSWORD"):
+        call_command("ensure_admin")
+    assert not User.objects.filter(email__iexact="admin@example.test").exists()
+
+
+def test_accepts_a_placeholder_in_debug(admin_env):
+    admin_env.DEBUG = True
+    admin_env.ADMIN_PASSWORD = "change-me"
+
+    call_command("ensure_admin")
+
+    assert User.objects.get(email__iexact="admin@example.test").check_password("change-me")

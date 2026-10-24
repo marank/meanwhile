@@ -2,12 +2,17 @@
 Django admin registrations.
 """
 
+from typing import TYPE_CHECKING
+
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import UserChangeForm
 from django.utils.translation import gettext_lazy as _
 
 from core import models
+
+if TYPE_CHECKING:
+    from django.contrib.admin.options import _FieldsetSpec
 
 admin.site.site_header = "Meanwhile"
 admin.site.site_title = "Meanwhile"
@@ -16,7 +21,7 @@ admin.site.index_title = "Administration"
 LIGHT_COLORS = ("base_color", "weekend_color", "today_color", "event_color", "border_color", "outer_border_color")
 DARK_COLORS = tuple(f"dark_{name}" for name in LIGHT_COLORS)
 
-APPEARANCE_FIELDSETS = (
+APPEARANCE_FIELDSETS: _FieldsetSpec = (
     (_("Week layout"), {"fields": ("first_weekday", "show_weekends", "weekend_days", "show_week_numbers")}),
     (_("Colors (light)"), {"classes": ("collapse",), "fields": LIGHT_COLORS}),
     (_("Colors (dark)"), {"classes": ("collapse",), "fields": DARK_COLORS}),
@@ -55,8 +60,13 @@ class CustomUserAdmin(UserAdmin):
             {
                 "classes": ("wide",),
                 "fields": (
-                    "email", "display_name", "password1", "password2",
-                    "is_admin", "is_superuser", "is_active",
+                    "email",
+                    "display_name",
+                    "password1",
+                    "password2",
+                    "is_admin",
+                    "is_superuser",
+                    "is_active",
                 ),
             },
         ),
@@ -87,8 +97,10 @@ class AppSettingsAdmin(admin.ModelAdmin):
             _("Calendar defaults"),
             {
                 "fields": (
-                    "default_first_weekday", "default_show_weekends",
-                    "default_weekend_days", "default_show_week_numbers",
+                    "default_first_weekday",
+                    "default_show_weekends",
+                    "default_weekend_days",
+                    "default_show_week_numbers",
                 )
             },
         ),

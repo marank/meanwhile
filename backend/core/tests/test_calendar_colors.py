@@ -2,14 +2,12 @@
 Tests for the stored calendar color roles.
 """
 
-
 import pytest
 
 from core.models.calendar_colors import DEFAULT_COLORS
 from core.tests.helpers import Api, make_user
 
 pytestmark = pytest.mark.django_db
-
 
 
 def test_new_calendars_start_with_the_default_preset():
@@ -37,9 +35,14 @@ def test_invalid_colors_are_rejected():
 def test_occurrences_name_their_calendar():
     api = Api(make_user("owner"))
     calendar = api.post("/calendars", {"name": "Team"}).json()
-    api.post(f"/calendars/{calendar['id']}/events", {
-        "title": "Meeting", "start": "2030-01-07T09:00:00Z", "end": "2030-01-07T10:00:00Z",
-    })
+    api.post(
+        f"/calendars/{calendar['id']}/events",
+        {
+            "title": "Meeting",
+            "start": "2030-01-07T09:00:00Z",
+            "end": "2030-01-07T10:00:00Z",
+        },
+    )
     occurrences = api.get(
         f"/calendars/{calendar['id']}/events?start=2030-01-01T00:00:00Z&end=2030-02-01T00:00:00Z"
     ).json()

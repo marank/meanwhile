@@ -82,9 +82,17 @@ def test_a_direct_membership_wins_and_falls_back_to_the_group_keeping_its_place(
     cal = setup["calendar"].id
 
     # Granted directly: the group's membership becomes the direct one, in the same place.
-    res = setup["api"].post(f"/api/calendars/{cal}/members", {"user_id": str(setup["me"].id), "role": "full"}, content_type="application/json")
+    res = setup["api"].post(
+        f"/api/calendars/{cal}/members",
+        {"user_id": str(setup["me"].id), "role": "full"},
+        content_type="application/json",
+    )
     assert res.status_code == 200, res.content
-    assert (membership(setup).source, membership(setup).role, membership(setup).folder_id) == ("direct", "full", folder.id)
+    assert (membership(setup).source, membership(setup).role, membership(setup).folder_id) == (
+        "direct",
+        "full",
+        folder.id,
+    )
     assert [m["user_id"] for m in setup["api"].get(f"/api/calendars/{cal}/members").json()] == [
         str(setup["owner"].id),
         str(setup["me"].id),

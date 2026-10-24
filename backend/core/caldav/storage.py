@@ -8,6 +8,7 @@ import functools
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
@@ -80,7 +81,7 @@ def _http_datetime(dt: datetime | None) -> str:
 
 
 def _hex_color(value: str | None) -> str | None:
-    """"#rrggbb" from a client's color; Apple adds an alpha channel ("#FF2968FF")."""
+    """ "#rrggbb" from a client's color; Apple adds an alpha channel ("#FF2968FF")."""
     if not value or not re.fullmatch(r"#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?", value.strip()):
         return None
     return value.strip()[:7].lower()
@@ -235,7 +236,7 @@ class Collection(storage.BaseCollection):
             return meta
         return meta.get(key)
 
-    def set_meta(self, props: dict[str, str]) -> None:
+    def set_meta(self, props: Mapping[str, str]) -> None:
         if self._calendar is None:
             return
         _, role = self._actor()
@@ -287,9 +288,9 @@ class Collection(storage.BaseCollection):
             ).values_list("href", "uid")
         }
         changed.update(
-            DeletedEvent.objects.filter(
-                calendar_id=self._calendar.id, deleted_at__gt=since
-            ).values_list("href", flat=True)
+            DeletedEvent.objects.filter(calendar_id=self._calendar.id, deleted_at__gt=since).values_list(
+                "href", flat=True
+            )
         )
         return token, sorted(changed)
 
@@ -319,6 +320,8 @@ class Collection(storage.BaseCollection):
         )
 
     def _item(self, event: Event) -> radicale_item.Item:
+        # Only a calendar's collection has items.
+        assert self._calendar is not None
         # One calendar object for all items, so that what is looked up of it is looked up once.
         event.calendar = self._calendar
         return _Item(
@@ -359,8 +362,12 @@ class Collection(storage.BaseCollection):
 
     def _actor(self) -> tuple[User, str]:
         """The user writing to this calendar and their role; writes need at least the role "own"."""
+        # Only a calendar's collection is written to.
+        assert self._calendar is not None
         user = self._viewer()
-        membership = get_membership(self._calendar, user) if user is not None and user.is_active else None
+        if user is None or not user.is_active:
+            raise _forbidden("No write access to this calendar")
+        membership = get_membership(self._calendar, user)
         if membership is None or not has_at_least_role(membership, Role.OWN):
             raise _forbidden("No write access to this calendar")
         return user, membership.role
@@ -448,6 +455,7 @@ class Collection(storage.BaseCollection):
 
     def _category(self, names: list[str]) -> Category | None:
         """The calendar's category among the client's CATEGORIES, if one of them is."""
+        assert self._calendar is not None  # an upload, which needs a calendar
         wanted = [n.lower() for n in names]
         by_name = {c.name.lower(): c for c in self._calendar.categories.all()}
         return next((by_name[n] for n in wanted if n in by_name), None)
@@ -482,9 +490,9 @@ class Collection(storage.BaseCollection):
         series.save()
 
         incoming = {o["recurrence_id"]: o for o in overrides if o["recurrence_id"] not in hidden}
-        for rid, override in current.items():
+        for rid, stale in current.items():
             if rid not in incoming and rid not in hidden:
-                override.delete()
+                stale.delete()
 
         booked = booked_resources(series)
         duration = series.end - series.start
@@ -492,9 +500,7 @@ class Collection(storage.BaseCollection):
         for rid, override_data in incoming.items():
             override = current.get(rid)
             before = (
-                (override.start, override.end, override.all_day)
-                if override
-                else (rid, rid + duration, series.all_day)
+                (override.start, override.end, override.all_day) if override else (rid, rid + duration, series.all_day)
             )
             moved = before != (override_data["start"], override_data["end"], override_data["all_day"])
             if moved and any(r.requires_approval for r in booked):
@@ -528,9 +534,9 @@ class Collection(storage.BaseCollection):
         organizer = data["organizer"] or event.creator.email.lower()
         wanted = {email: status for email, status in data["attendees"] if email and email != organizer}
         current = {p.email.lower(): p for p in event.participants.all()}
-        for email, participant in current.items():
+        for email, stale in current.items():
             if email not in wanted:
-                participant.delete()
+                stale.delete()
         for email, status in wanted.items():
             participant = current.get(email)
             if participant is not None:
@@ -630,11 +636,13 @@ class Storage(storage.BaseStorage):
             if coll is not None:
                 yield coll
             if depth != "0" and coll is not None and coll.is_principal:
+                owner = coll._user
+                assert owner is not None  # principals are users
                 # The calendars of the sidebar; another public one is still found by its address.
-                for calendar in sidebar_calendars(coll._user).order_by("name"):
+                for calendar in sidebar_calendars(owner).order_by("name"):
                     yield Collection(
                         self.configuration,
-                        f"/{coll._user.email}/{_dav_name(calendar, coll._user)}",
+                        f"/{owner.email}/{_dav_name(calendar, owner)}",
                         calendar=calendar,
                     )
             return
@@ -678,7 +686,7 @@ class Storage(storage.BaseStorage):
         # Nor may the name be another calendar's id, which names that calendar in every path.
         # Names are the owner's own; nor may one be another calendar's id, which names it in every home.
         if Calendar.objects.filter(owner=owner, dav_name=parts[1]).exists() or (
-            as_uuid(parts[1]) and Calendar.objects.filter(id=as_uuid(parts[1])).exists()
+            (calendar_id := as_uuid(parts[1])) and Calendar.objects.filter(id=calendar_id).exists()
         ):
             raise pathutils.CollidingPathError(href)
         calendar = create_calendar(
@@ -703,9 +711,10 @@ class Storage(storage.BaseStorage):
 
         moving = target.id != event.calendar_id
         if moving:
-            if booked_resources(event) or event.overrides.filter(
-                Q(resource__isnull=False) | Q(location_resource__isnull=False)
-            ).exists():
+            if (
+                booked_resources(event)
+                or event.overrides.filter(Q(resource__isnull=False) | Q(location_resource__isnull=False)).exists()
+            ):
                 # Resources belong to their calendar, and so do the bookings of them.
                 raise _forbidden("Bookings can't be moved to another calendar")
             if target.force_all_day and (event.all_day is False or event.overrides.filter(all_day=False).exists()):

@@ -30,7 +30,13 @@ def team():
     CalendarMember.objects.create(calendar=private, user=other, role="owner")
     client = Client()
     client.force_login(owner)
-    return {"owner": owner, "other": other, "calendar": calendar, "private": private, "session": client.cookies["sessionid"].value}
+    return {
+        "owner": owner,
+        "other": other,
+        "calendar": calendar,
+        "private": private,
+        "session": client.cookies["sessionid"].value,
+    }
 
 
 def socket(session: str | None = None, origin: bytes = ORIGIN) -> WebsocketCommunicator:
@@ -58,8 +64,12 @@ async def subscribe(communicator, *calendar_ids) -> list[str]:
 @database_sync_to_async
 def create_event(calendar: Calendar, title: str = "Meeting") -> Event:
     event = Event.objects.create(
-        calendar=calendar, creator=calendar.owner, title=title, uid=title,
-        start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+        calendar=calendar,
+        creator=calendar.owner,
+        title=title,
+        uid=title,
+        start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+        end=datetime(2030, 1, 7, 10, tzinfo=UTC),
     )
     return event
 
@@ -79,7 +89,9 @@ async def test_pages_of_other_sites_cannot_connect(team):
 
 async def test_only_readable_calendars_are_followed(team):
     communicator = await connected(team)
-    assert await subscribe(communicator, team["calendar"].id, team["private"].id, "nonsense") == [str(team["calendar"].id)]
+    assert await subscribe(communicator, team["calendar"].id, team["private"].id, "nonsense") == [
+        str(team["calendar"].id)
+    ]
     await communicator.disconnect()
 
 
@@ -109,8 +121,12 @@ async def test_a_transaction_is_announced_once(team):
         with transaction.atomic():
             for i in range(3):
                 Event.objects.create(
-                    calendar=team["calendar"], creator=team["owner"], title=f"E{i}", uid=f"e{i}",
-                    start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+                    calendar=team["calendar"],
+                    creator=team["owner"],
+                    title=f"E{i}",
+                    uid=f"e{i}",
+                    start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+                    end=datetime(2030, 1, 7, 10, tzinfo=UTC),
                 )
 
     await several()
@@ -129,16 +145,24 @@ async def test_changes_rolled_back_are_not_announced(team):
             try:
                 with transaction.atomic():
                     Event.objects.create(
-                        calendar=team["calendar"], creator=team["owner"], title="Gone", uid="gone",
-                        start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+                        calendar=team["calendar"],
+                        creator=team["owner"],
+                        title="Gone",
+                        uid="gone",
+                        start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+                        end=datetime(2030, 1, 7, 10, tzinfo=UTC),
                     )
                     raise RuntimeError
             except RuntimeError:
                 pass
         # A later change still goes out.
         Event.objects.create(
-            calendar=team["calendar"], creator=team["owner"], title="Kept", uid="kept",
-            start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+            calendar=team["calendar"],
+            creator=team["owner"],
+            title="Kept",
+            uid="kept",
+            start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+            end=datetime(2030, 1, 7, 10, tzinfo=UTC),
         )
 
     await rolled_back()
@@ -293,8 +317,12 @@ def remind_in(team, minutes_from_now: int, before: int = 15) -> Event:
 
     start = datetime.now(UTC) + timedelta(minutes=minutes_from_now)
     event = Event.objects.create(
-        calendar=team["calendar"], creator=team["owner"], title="Soon", uid=f"soon-{minutes_from_now}",
-        start=start, end=start + timedelta(hours=1),
+        calendar=team["calendar"],
+        creator=team["owner"],
+        title="Soon",
+        uid=f"soon-{minutes_from_now}",
+        start=start,
+        end=start + timedelta(hours=1),
     )
     EventReminder.objects.create(event=event, user=team["owner"], minutes_before=before)
     return event

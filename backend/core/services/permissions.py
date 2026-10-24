@@ -3,6 +3,7 @@ Permission helpers for calendars and events.
 """
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from django.db.models import Q
 from ninja.errors import HttpError
@@ -13,7 +14,7 @@ from core.models.events import Event, EventParticipant
 from core.models.users import User
 from core.services.bookings import is_in_approver_pool
 
-ROLE_ORDER = [Role.READ, Role.OWN, Role.FULL, Role.MANAGE, Role.OWNER]
+ROLE_ORDER: list[str] = [Role.READ, Role.OWN, Role.FULL, Role.MANAGE, Role.OWNER]
 
 
 def role_weight(role: str) -> int:
@@ -51,7 +52,7 @@ def _synthetic(calendar: Calendar, user: User, role: str) -> MembershipInfo:
     )
 
 
-def get_direct_membership(calendar_id: str, user_id: str) -> CalendarMember | None:
+def get_direct_membership(calendar_id: UUID | str, user_id: UUID | str) -> CalendarMember | None:
     """The membership granted to the user by hand (or theirs as the owner), not one from a group or added."""
     return CalendarMember.objects.filter(
         calendar_id=calendar_id, user_id=user_id, source=MembershipSource.DIRECT
@@ -63,7 +64,7 @@ def get_membership(calendar: Calendar, user: User) -> MembershipInfo | None:
     return memberships_of(user, [calendar]).get(calendar.id)
 
 
-def memberships_of(user: User, calendars) -> dict[str, MembershipInfo]:
+def memberships_of(user: User, calendars) -> dict[UUID, MembershipInfo]:
     """
     The user's access to each of the calendars they have access to, by calendar id; in at most two queries.
 
@@ -76,7 +77,7 @@ def memberships_of(user: User, calendars) -> dict[str, MembershipInfo]:
     direct = {calendar_id for calendar_id, row in rows.items() if row.source == MembershipSource.DIRECT}
     # Groups only matter where the user has no direct membership.
     others = [calendar_id for calendar_id in calendars if calendar_id not in direct]
-    group_roles: dict[str, str] = {}
+    group_roles: dict[UUID, str] = {}
     if others:
         links = CalendarGroup.objects.filter(calendar_id__in=others, group__in=user.groups.all())
         for calendar_id, role in links.values_list("calendar_id", "role"):
@@ -87,6 +88,8 @@ def memberships_of(user: User, calendars) -> dict[str, MembershipInfo]:
     for calendar_id, calendar in calendars.items():
         row = rows.get(calendar_id)
         if row is not None and row.source == MembershipSource.DIRECT:
+            # Direct memberships always have a role; only the others leave it empty.
+            assert row.role is not None
             role = row.role
         elif calendar_id in group_roles:
             role = group_roles[calendar_id]
@@ -156,11 +159,10 @@ def get_visible_event(event_id: str, user: User) -> tuple[Event, MembershipInfo]
     return event, membership
 
 
-def participant_event_ids(user: User) -> set[str]:
+def participant_event_ids(user: User) -> set[UUID]:
     """Events the user is invited to, by account or by email address."""
     return set(
-        EventParticipant.objects.filter(Q(user=user) | Q(email__iexact=user.email))
-        .values_list("event_id", flat=True)
+        EventParticipant.objects.filter(Q(user=user) | Q(email__iexact=user.email)).values_list("event_id", flat=True)
     )
 
 
@@ -179,10 +181,7 @@ def can_see_event(event: Event, user: User, membership) -> bool:
 def accessible_calendars(user: User):
     """Calendars the user can read: own, shared directly or via a group, and public ones."""
     return Calendar.objects.filter(
-        Q(owner=user)
-        | Q(members__user=user)
-        | Q(calendar_groups__group__in=user.groups.all())
-        | Q(is_public=True)
+        Q(owner=user) | Q(members__user=user) | Q(calendar_groups__group__in=user.groups.all()) | Q(is_public=True)
     ).distinct()
 
 

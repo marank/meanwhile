@@ -7,6 +7,7 @@ server neither holds up nor fails the request, and the worker tries again until 
 """
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from email.utils import formataddr
@@ -71,7 +72,7 @@ class Reader:
     twelve_hour: bool = False
 
     @classmethod
-    def of(cls, user: User | None, language: str, timezone: str) -> "Reader":
+    def of(cls, user: User | None, language: str, timezone: str) -> Reader:
         clock = user.time_format if user else "auto"
         twelve = clock == "12h" or (clock == "auto" and language == "en")
         return cls(language, (user.timezone if user else "") or timezone or "UTC", twelve)
@@ -121,8 +122,8 @@ def build_message(
     subject: str,
     paragraphs: list[str],
     language: str,
-    details: list[tuple[str, str]] = (),
-    links: list[Link] = (),
+    details: Sequence[tuple[str, str]] = (),
+    links: Sequence[Link] = (),
     from_name: str | None = None,
     reply_to: str | None = None,
     footer: str = "footer",
@@ -148,7 +149,7 @@ def build_message(
             f'<td style="padding:2px 0;white-space:pre-line">{escape(value)}</td></tr>'
             for label, value in details
         )
-        html.append(f"<table style=\"border-collapse:collapse;margin:12px 0\">{rows}</table>")
+        html.append(f'<table style="border-collapse:collapse;margin:12px 0">{rows}</table>')
     if links:
         buttons = " ".join(
             f'<a href="{escape(link.url)}" style="display:inline-block;margin:4px 8px 4px 0;padding:8px 14px;'

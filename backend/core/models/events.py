@@ -14,12 +14,8 @@ from core.models.users import User
 
 
 class Event(UUIDModel, TimestampedModel):
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="events"
-    )
-    creator = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="created_events"
-    )
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="events")
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="created_events")
     title = models.CharField(max_length=255, default="", blank=True)
     description = models.TextField(blank=True, default="")
     # Where the event takes place, as free text (an address, a link, ...). When a location resource
@@ -39,9 +35,7 @@ class Event(UUIDModel, TimestampedModel):
     # Starts (UTC, ISO 8601) of occurrences added to the series besides those of its rrule (RDATE).
     rdates = models.JSONField(default=list, blank=True)
     # An event with a parent replaces one occurrence of that series: the one starting at recurrence_id.
-    parent = models.ForeignKey(
-        "self", on_delete=models.CASCADE, related_name="overrides", blank=True, null=True
-    )
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, related_name="overrides", blank=True, null=True)
     recurrence_id = models.DateTimeField(blank=True, null=True)
     uid = models.CharField(max_length=255, db_index=True)
     # Name a CalDAV client stored the event under; clients may pick it freely. Empty means "{uid}.ics" (dav_href).
@@ -70,9 +64,7 @@ class Event(UUIDModel, TimestampedModel):
         blank=True,
         null=True,
     )
-    status = models.CharField(
-        max_length=20, choices=EventStatus.choices, default=EventStatus.CONFIRMED
-    )
+    status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.CONFIRMED)
     # Ids of the booked resources whose approval a pending event still waits for.
     awaiting_approval = models.JSONField(default=list, blank=True)
     decided_by = models.ForeignKey(
@@ -97,12 +89,8 @@ class Event(UUIDModel, TimestampedModel):
                 condition=models.Q(parent__isnull=True),
                 name="uq_event_calendar_uid",
             ),
-            models.UniqueConstraint(
-                fields=["calendar", "href"], name="uq_event_calendar_href"
-            ),
-            models.UniqueConstraint(
-                fields=["parent", "recurrence_id"], name="uq_event_parent_recurrence_id"
-            ),
+            models.UniqueConstraint(fields=["calendar", "href"], name="uq_event_calendar_href"),
+            models.UniqueConstraint(fields=["parent", "recurrence_id"], name="uq_event_parent_recurrence_id"),
         ]
 
     def __str__(self) -> str:
@@ -137,9 +125,7 @@ class DeletedEvent(models.Model):
 class EventReminder(UUIDModel):
     """A reminder of one user before every occurrence of an event (of a series: of all of them)."""
 
-    event = models.ForeignKey(
-        Event, on_delete=models.CASCADE, related_name="reminders"
-    )
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="reminders")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
     minutes_before = models.PositiveIntegerField()
     # When the reminder is next due (its next occurrence's start less minutes_before); None when no
@@ -149,29 +135,19 @@ class EventReminder(UUIDModel):
 
     class Meta:
         db_table = "event_reminders"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["event", "user", "minutes_before"], name="uq_event_reminder"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["event", "user", "minutes_before"], name="uq_event_reminder")]
 
 
 class ReminderDelivery(models.Model):
     """A reminder that went out for one occurrence, so it goes out only once."""
 
-    reminder = models.ForeignKey(
-        EventReminder, on_delete=models.CASCADE, related_name="deliveries"
-    )
+    reminder = models.ForeignKey(EventReminder, on_delete=models.CASCADE, related_name="deliveries")
     occurrence_start = models.DateTimeField()
     delivered_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "reminder_deliveries"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["reminder", "occurrence_start"], name="uq_reminder_delivery"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["reminder", "occurrence_start"], name="uq_reminder_delivery")]
 
 
 def new_rsvp_token() -> str:
@@ -179,9 +155,7 @@ def new_rsvp_token() -> str:
 
 
 class EventParticipant(UUIDModel, TimestampedModel):
-    event = models.ForeignKey(
-        Event, on_delete=models.CASCADE, related_name="participants"
-    )
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="participants")
     user = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -201,22 +175,14 @@ class EventParticipant(UUIDModel, TimestampedModel):
     class Meta:
         db_table = "event_participants"
         constraints = [
-            models.UniqueConstraint(
-                fields=["event", "user"], name="uq_event_participant_user"
-            ),
-            models.UniqueConstraint(
-                fields=["event", "email"], name="uq_event_participant_email"
-            ),
+            models.UniqueConstraint(fields=["event", "user"], name="uq_event_participant_user"),
+            models.UniqueConstraint(fields=["event", "email"], name="uq_event_participant_email"),
         ]
 
 
 class EventComment(UUIDModel):
-    event = models.ForeignKey(
-        Event, on_delete=models.CASCADE, related_name="comments"
-    )
-    author = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="+"
-    )
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
     body = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -225,9 +191,7 @@ class EventComment(UUIDModel):
 
 
 class EventActivity(UUIDModel):
-    event = models.ForeignKey(
-        Event, on_delete=models.CASCADE, related_name="activity"
-    )
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="activity")
     actor = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -245,9 +209,7 @@ class EventActivity(UUIDModel):
 
 
 class Notification(UUIDModel):
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="notifications"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     type = models.CharField(max_length=40)
     actor = models.ForeignKey(
         User,

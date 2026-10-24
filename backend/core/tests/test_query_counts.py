@@ -36,9 +36,14 @@ def test_listing_costs_the_same_for_more_calendars():
             mine = create_calendar(me, f"Mine {len(calendar_ids)}")
             calendar_ids.extend([shared.id, mine.id])
             for calendar in (shared, mine):
-                Api(calendar.owner).post(f"/calendars/{calendar.id}/events", {
-                    "title": "Meeting", "start": iso(BASE), "end": iso(BASE.replace(hour=10)),
-                })
+                Api(calendar.owner).post(
+                    f"/calendars/{calendar.id}/events",
+                    {
+                        "title": "Meeting",
+                        "start": iso(BASE),
+                        "end": iso(BASE.replace(hour=10)),
+                    },
+                )
 
     def events_url() -> str:
         ids = "&".join(f"calendar_ids={i}" for i in calendar_ids)

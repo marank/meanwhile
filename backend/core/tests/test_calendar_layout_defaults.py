@@ -38,7 +38,9 @@ def test_a_new_calendar_follows_app_defaults_changed_later(owner):
 
     shown = owner.get(f"/calendars/{calendar['id']}").json()
     assert (shown["first_weekday"], shown["weekend_days"]) == (0, [5, 6])
-    listed = next(item["calendar"] for item in owner.get("/calendars").json() if item["calendar"]["id"] == calendar["id"])
+    listed = next(
+        item["calendar"] for item in owner.get("/calendars").json() if item["calendar"]["id"] == calendar["id"]
+    )
     assert listed["first_weekday"] == 0
 
 

@@ -4,12 +4,12 @@ Base model helpers and shared enums.
 
 import uuid
 
-import uuid_utils
 from django.db import models
 
 
 def new_uuid7() -> uuid.UUID:
-    return uuid.UUID(bytes=uuid_utils.uuid7().bytes)
+    # The migrations name this function as the default of every id, so it stays.
+    return uuid.uuid7()
 
 
 def as_uuid(value) -> uuid.UUID | None:
@@ -44,6 +44,7 @@ class TimestampedModel(models.Model):
 
 def default_weekend_days() -> list[int]:
     return [0, 6]
+
 
 class Role(models.TextChoices):
     OWNER = "owner", "Owner"

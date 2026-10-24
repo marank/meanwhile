@@ -1,6 +1,6 @@
 # Development image for docker-compose.dev.yml: the source is mounted at /app, so the virtualenv
 # lives outside of it (/opt/venv). Rebuild after changing the dependencies (uv.lock).
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm
+FROM ghcr.io/astral-sh/uv:python3.14-trixie
 
 ENV UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \

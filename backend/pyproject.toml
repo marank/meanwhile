@@ -1,37 +1,41 @@
 [project]
 name = "meanwhile-backend"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
-    "a2wsgi>=1.10,<2",
-    "argon2-cffi>=23.1,<24.0",
-    "channels>=4.2,<5",
-    "channels-redis>=4.2,<5",
-    "daphne>=4.1,<5",
-    "dj-database-url>=2.3,<3.0",
-    "django>=5.1,<5.2",
-    "django-allauth>=65.0,<66.0",
-    "django-cors-headers>=4.6,<5.0",
-    "django-ninja>=1.3,<2.0",
-    "email-validator>=2.2,<3.0",
-    "icalendar>=5.0,<7.0",
-    "procrastinate[django]>=3,<4",
-    "psycopg[binary]>=3.2,<4.0",
-    "python-dateutil>=2.9,<3.0",
-    "python-dotenv>=1.0,<2.0",
-    "radicale>=3.4,<4.0",
-    "uuid-utils>=0.10,<1.0",
-    "uvicorn[standard]>=0.32,<1",
-    "vobject>=0.9.7,<1.0",
+    "a2wsgi>=1.10",
+    "channels>=4.3.2",
+    "channels-redis>=4.2",
+    "daphne>=4.1",
+    "django[argon2]>=6.0.9,<6.1",
+    "django-allauth>=65.20.1",
+    "django-ninja>=1.7.1",
+    "email-validator>=2.2",
+    "icalendar>=7.3",
+    "procrastinate[django]>=3.10",
+    "psycopg[binary]>=3.3.6",
+    "python-dateutil>=2.9",
+    "radicale>=3.8.3",
+    "uvicorn[standard]>=0.54",
+    "vobject>=0.9.7",
+    "defusedxml>=0.7.1",
+    "asgiref>=3.13.0",
+    "pydantic>=2.14.1",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3,<9.0",
-    "pytest-asyncio>=0.24,<1",
-    "pytest-django>=4.9,<5.0",
-    "pytest-xdist>=3.6,<4",
-    "ruff>=0.14,<1",
+    "deptry>=0.25.1",
+    "django-stubs>=6.1.2",
+    "mypy>=2.4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=7.1.0",
+    "pytest-django>=4.9",
+    "pytest-xdist>=3.6",
+    "ruff>=0.14",
+    "types-defusedxml>=0.7.0.20260504",
+    "types-python-dateutil>=2.9.0.20261021",
 ]
 
 [tool.pytest.ini_options]
@@ -41,7 +45,7 @@ addopts = "-n auto"
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 extend-exclude = ["core/migrations"]
 
 [tool.ruff.lint]
@@ -68,5 +72,36 @@ extend-immutable-calls = ["ninja.Query", "ninja.Path", "ninja.Body", "ninja.Form
 [tool.ruff.lint.per-file-ignores]
 # The texts of the emails, one per line.
 "core/services/mail_texts.py" = ["E501"]
-# Until the tests are run through `ruff format`, which wraps their long lines.
-"core/tests/*" = ["E501"]
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+exclude = ["/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["*.migrations.*"]
+ignore_errors = true
+
+# Ship no type information.
+[[tool.mypy.overrides]]
+module = ["allauth.*", "channels.*", "vobject.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings_test"
+
+[tool.coverage.run]
+source = ["config", "core"]
+omit = ["*/migrations/*", "config/asgi.py", "config/wsgi.py", "manage.py"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+
+[tool.deptry]
+# The tests may use the dev dependencies.
+extend_exclude = ["core/tests"]
+
+[tool.deptry.per_rule_ignores]
+# Used, but never imported: the database driver (ENGINE), the channel layer (BACKEND), daphne
+# (INSTALLED_APPS, for runserver), pydantic's EmailStr (email-validator) and the ASGI server.
+DEP002 = ["psycopg", "channels-redis", "daphne", "email-validator", "uvicorn"]

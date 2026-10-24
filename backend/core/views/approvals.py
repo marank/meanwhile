@@ -2,7 +2,6 @@
 Approval workflow endpoints.
 """
 
-
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
@@ -105,7 +104,8 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
         if conflicts:
             raise HttpError(
                 409,
-                {
+                # Structured, which core.api.http_error passes through; Ninja types the message as a str.
+                {  # type: ignore[arg-type]
                     "message": "Approval conflicts with an existing approved booking",
                     "conflicts": [str(c.id) for c in conflicts],
                 },
@@ -120,7 +120,7 @@ def approve_event(request, event_id: str, payload: ApprovalAction):
         event.status = EventStatus.APPROVED
     event.save()
     _decide_changed_occurrences(event, previous_status, decided_ids)
-    details = {"resources": sorted(r.name for r in decided)}
+    details: dict[str, list[str] | str] = {"resources": sorted(r.name for r in decided)}
     if payload.note:
         details["note"] = payload.note
     record_activity(event, str(request.user.id), "approved", details)
@@ -205,10 +205,7 @@ def cancel_event(request, event_id: str):
     if not can_modify_event(event, request.user.id, membership.role):
         raise HttpError(403, "You cannot cancel this event")
 
-    had_booking = (
-        event.status in {EventStatus.PENDING, EventStatus.APPROVED}
-        and bool(booked_resources(event))
-    )
+    had_booking = event.status in {EventStatus.PENDING, EventStatus.APPROVED} and bool(booked_resources(event))
     previous_status = event.status
     event.status = EventStatus.CANCELLED
     event.awaiting_approval = []

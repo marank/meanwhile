@@ -20,7 +20,13 @@ def series(world):
     owner = world["api"]["owner"]
     res = owner.post(
         f"/calendars/{world['cal']['id']}/events",
-        {"title": "Daily", "start": iso(BASE), "end": iso(BASE + timedelta(hours=1)), "rrule": "FREQ=DAILY;COUNT=5", "timezone": "UTC"},
+        {
+            "title": "Daily",
+            "start": iso(BASE),
+            "end": iso(BASE + timedelta(hours=1)),
+            "rrule": "FREQ=DAILY;COUNT=5",
+            "timezone": "UTC",
+        },
     )
     assert res.status_code == 200, res.content
     return res.json()
@@ -28,7 +34,9 @@ def series(world):
 
 def occurrences(world, user="owner"):
     res = world["api"][user].get(
-        f"/events?start={iso(BASE - DAY)}&end={iso(BASE + 30 * DAY)}&calendar_ids={world['cal']['id']}".replace("+", "%2B")
+        f"/events?start={iso(BASE - DAY)}&end={iso(BASE + 30 * DAY)}&calendar_ids={world['cal']['id']}".replace(
+            "+", "%2B"
+        )
     )
     assert res.status_code == 200, res.content
     return res.json()
@@ -45,7 +53,10 @@ def occurrence_url(series, start, scope="this"):
 def test_changing_one_occurrence(world, series):
     owner = world["api"]["owner"]
     third = BASE + 2 * DAY
-    res = owner.patch(occurrence_url(series, third), {"title": "Moved", "start": iso(third + timedelta(hours=3)), "end": iso(third + timedelta(hours=4))})
+    res = owner.patch(
+        occurrence_url(series, third),
+        {"title": "Moved", "start": iso(third + timedelta(hours=3)), "end": iso(third + timedelta(hours=4))},
+    )
     assert res.status_code == 200, res.content
     override = res.json()
     assert override["parent_id"] == series["id"] and override["recurrence_id"].startswith("2030-01-09T09:00")
@@ -73,7 +84,12 @@ def test_changing_one_occurrence(world, series):
 def test_removing_one_occurrence(world, series):
     owner = world["api"]["owner"]
     assert owner.delete(occurrence_url(series, BASE + DAY)).status_code == 200
-    assert [s for s, _ in summary(world)] == ["2030-01-07T09:00", "2030-01-09T09:00", "2030-01-10T09:00", "2030-01-11T09:00"]
+    assert [s for s, _ in summary(world)] == [
+        "2030-01-07T09:00",
+        "2030-01-09T09:00",
+        "2030-01-10T09:00",
+        "2030-01-11T09:00",
+    ]
     # It is gone for good: asking for it again finds nothing.
     assert owner.delete(occurrence_url(series, BASE + DAY)).status_code == 404
 
@@ -89,7 +105,10 @@ def test_deleting_a_changed_occurrence_removes_it(world, series):
 def test_changing_this_and_following(world, series):
     owner = world["api"]["owner"]
     third = BASE + 2 * DAY
-    res = owner.patch(occurrence_url(series, third, "following"), {"title": "Later", "start": iso(third + timedelta(hours=1)), "end": iso(third + timedelta(hours=2))})
+    res = owner.patch(
+        occurrence_url(series, third, "following"),
+        {"title": "Later", "start": iso(third + timedelta(hours=1)), "end": iso(third + timedelta(hours=2))},
+    )
     assert res.status_code == 200, res.content
     following = res.json()
     assert following["id"] != series["id"] and following["rrule"] == "FREQ=DAILY;COUNT=3"
@@ -116,7 +135,10 @@ def test_moving_all_occurrences_keeps_the_changed_ones(world, series):
     owner.patch(occurrence_url(series, fourth), {"title": "Special"})
     owner.delete(occurrence_url(series, BASE + DAY))
     third = BASE + 2 * DAY
-    res = owner.patch(occurrence_url(series, third, "all"), {"start": iso(third + timedelta(hours=1)), "end": iso(third + timedelta(hours=2))})
+    res = owner.patch(
+        occurrence_url(series, third, "all"),
+        {"start": iso(third + timedelta(hours=1)), "end": iso(third + timedelta(hours=2))},
+    )
     assert res.json()["id"] == series["id"]
     assert summary(world) == [
         ("2030-01-07T10:00", "Daily"),
@@ -157,13 +179,22 @@ def test_changed_booking_occurrence_needs_approval_again(world):
     booker = world["api"]["booker"]
     res = booker.post(
         f"/calendars/{world['cal']['id']}/events",
-        {"title": "Weekly", "start": iso(BASE), "end": iso(BASE + timedelta(hours=1)), "rrule": "FREQ=WEEKLY;COUNT=3", "resource_id": room["id"]},
+        {
+            "title": "Weekly",
+            "start": iso(BASE),
+            "end": iso(BASE + timedelta(hours=1)),
+            "rrule": "FREQ=WEEKLY;COUNT=3",
+            "resource_id": room["id"],
+        },
     )
     series = res.json()
     world["api"]["owner"].post(f"/events/{series['id']}/approve")
 
     second = BASE + 7 * DAY
-    res = booker.patch(occurrence_url(series, second), {"start": iso(second + timedelta(hours=2)), "end": iso(second + timedelta(hours=3))})
+    res = booker.patch(
+        occurrence_url(series, second),
+        {"start": iso(second + timedelta(hours=2)), "end": iso(second + timedelta(hours=3))},
+    )
     assert res.status_code == 200, res.content
     assert res.json()["status"] == "pending"
     assert Event.objects.get(id=series["id"]).status == "approved"
@@ -174,7 +205,13 @@ def test_approving_a_series_approves_its_waiting_occurrences(world):
     booker = world["api"]["booker"]
     series = booker.post(
         f"/calendars/{world['cal']['id']}/events",
-        {"title": "Weekly", "start": iso(BASE), "end": iso(BASE + timedelta(hours=1)), "rrule": "FREQ=WEEKLY;COUNT=3", "resource_id": room["id"]},
+        {
+            "title": "Weekly",
+            "start": iso(BASE),
+            "end": iso(BASE + timedelta(hours=1)),
+            "rrule": "FREQ=WEEKLY;COUNT=3",
+            "resource_id": room["id"],
+        },
     ).json()
     override = booker.patch(occurrence_url(series, BASE + 7 * DAY), {"title": "Second"}).json()
     assert override["status"] == "pending"

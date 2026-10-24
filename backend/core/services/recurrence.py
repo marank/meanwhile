@@ -4,8 +4,11 @@ Recurrence expansion and conflict detection.
 
 from datetime import UTC, date, datetime, time, timedelta
 from itertools import islice, takewhile
+from typing import cast
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from dateutil.rrule import rrule as RRule
 from dateutil.rrule import rruleset, rrulestr
 from icalendar.timezone.windows_to_olson import WINDOWS_TO_OLSON
 
@@ -23,7 +26,7 @@ def zone(name: str | None):
     """The zone for an IANA name; unknown names fall back to UTC."""
     try:
         return ZoneInfo(name or "UTC")
-    except (ZoneInfoNotFoundError, ValueError):
+    except ZoneInfoNotFoundError, ValueError:
         return UTC
 
 
@@ -141,6 +144,7 @@ def _rule(event: Event, event_start: datetime):
     # Timed events repeat in their own zone, so weekdays and wall-clock times stay put across
     # midnight in UTC and daylight saving changes. All-day events are dates and repeat in UTC.
     if event.all_day:
+
         def local(dt: datetime) -> datetime:
             return dt.astimezone(UTC).replace(tzinfo=None)
     else:
@@ -153,7 +157,8 @@ def _rule(event: Event, event_start: datetime):
     rrule = normalized_rrule(event)
     try:
         if rrule:
-            rule.rrule(rrulestr(rrule, dtstart=local(event_start)))
+            # A single RRULE value parses to one rule, never a set.
+            rule.rrule(cast(RRule, rrulestr(rrule, dtstart=local(event_start))))
     except ValueError:
         # Stored before rules were validated (validate_rrule): the series is its first occurrence.
         rrule = None
@@ -170,7 +175,7 @@ def parse_exdates(values) -> set[datetime]:
     for value in values or []:
         try:
             result.add(as_utc(datetime.fromisoformat(value)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     return result
 
@@ -204,9 +209,7 @@ def expand_event(
     their starts in when they are already known.
     """
     event_start = as_utc(event.start)
-    event_end = as_utc(event.end) + (
-        timedelta(days=1) if event.all_day else timedelta()
-    )
+    event_end = as_utc(event.end) + (timedelta(days=1) if event.all_day else timedelta())
     duration = event_end - event_start
     if not is_series(event):
         if event_start < range_end and event_end > range_start:
@@ -273,7 +276,7 @@ def expand_events(events, range_start: datetime, range_end: datetime):
     events = list(events)
     # One query for the overridden occurrences of every series instead of one per series.
     series_ids = [e.pk for e in events if is_series(e)]
-    overridden: dict[str, set[datetime]] = {}
+    overridden: dict[UUID, set[datetime]] = {}
     for parent_id, rid in Event.objects.filter(parent_id__in=series_ids).values_list("parent_id", "recurrence_id"):
         if rid is not None:
             overridden.setdefault(parent_id, set()).add(rid)

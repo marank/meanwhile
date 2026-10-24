@@ -33,10 +33,8 @@ class OriginCheck:
     async def __call__(self, scope, receive, send):
         headers = dict(scope.get("headers", []))
         origin = headers.get(b"origin", b"").decode("latin1")
-        host = headers.get(b"host", b"")
-        if settings.BEHIND_PROXY:
-            host = headers.get(b"x-forwarded-host", host)
-        host = host.decode("latin1").split(",")[0].strip()
+        # nginx passes the host the client asked for, a trusted proxy's X-Forwarded-Host included.
+        host = headers.get(b"host", b"").decode("latin1").split(",")[0].strip()
         if origin and not _origin_allowed(origin, host):
             await send({"type": "websocket.close", "code": 4403})
             return

@@ -2,6 +2,7 @@
 iCalendar serialization.
 """
 
+from collections.abc import Set
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -24,9 +25,24 @@ _GONE = {EventStatus.REJECTED, EventStatus.CANCELLED}
 
 # Properties written from the database; everything else a client stored is passed through.
 _OWN_PROPERTIES = (
-    "SUMMARY", "DESCRIPTION", "DTSTART", "DTEND", "DURATION", "DTSTAMP", "STATUS",
-    "RRULE", "RDATE", "EXDATE", "RECURRENCE-ID", "UID",
-    "CATEGORIES", "LOCATION", "RESOURCES", "ORGANIZER", "ATTENDEE", "SEQUENCE",
+    "SUMMARY",
+    "DESCRIPTION",
+    "DTSTART",
+    "DTEND",
+    "DURATION",
+    "DTSTAMP",
+    "STATUS",
+    "RRULE",
+    "RDATE",
+    "EXDATE",
+    "RECURRENCE-ID",
+    "UID",
+    "CATEGORIES",
+    "LOCATION",
+    "RESOURCES",
+    "ORGANIZER",
+    "ATTENDEE",
+    "SEQUENCE",
 )
 
 # What the feed keeps of the properties clients sent besides those the app writes: plain event data.
@@ -73,7 +89,7 @@ def _map_status(status: str) -> str:
 
 def _raw_components(event: Event) -> dict:
     """The VEVENTs a client stored with the series, by recurrence id (None for the series itself)."""
-    components = {}
+    components: dict[datetime | None, icalendar.Component] = {}
     if not event.raw_ical:
         return components
     try:
@@ -103,7 +119,7 @@ def _raw_texts(raw: ICalEvent | None, name: str) -> list[str]:
         return []
     values = raw.get(name)
     values = values if isinstance(values, list) else [values]
-    texts = []
+    texts: list[str] = []
     for value in values:
         cats = getattr(value, "cats", None)
         if cats is not None:
@@ -164,7 +180,7 @@ def _add_people(vevent: ICalEvent, event: Event, organizer: User | None, schedul
 def _raw_sequence(raw: ICalEvent | None) -> int:
     try:
         return int(raw.get("SEQUENCE", 0)) if raw is not None else 0
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 
@@ -174,7 +190,7 @@ def build_event_ical(
     exdates=(),
     uid: str | None = None,
     audience: Audience = FEED,
-    category_names: set[str] = frozenset(),
+    category_names: Set[str] = frozenset(),
     organizer: User | None = None,
 ) -> ICalEvent:
     """One VEVENT; `category_names` are the lowercase names of its calendar's categories."""
@@ -206,16 +222,19 @@ def build_event_ical(
         vevent.add("dtend", _ical_time(event, event.end))
     if event.recurrence_id is not None:
         series = event.parent
+        # Only changed occurrences have a recurrence id, and they belong to a series.
+        assert series is not None
         vevent.add("recurrence-id", _ical_time(series, event.recurrence_id))
     vevent.add("dtstamp", event.updated_at or timezone.now())
     # Changes sent to participants count up; a client's own count is kept if it is higher.
-    sequence = max((event.parent if event.parent_id else event).sequence, _raw_sequence(raw))
+    sequence = max((event.parent or event).sequence, _raw_sequence(raw))
     if sequence or (raw is not None and "SEQUENCE" in raw):
         vevent.add("sequence", sequence)
     vevent.add("status", _map_status(event.status))
     if event.rrule:
         try:
-            vevent.add("rrule", icalendar.vRecur.from_ical(normalized_rrule(event)))
+            if rrule := normalized_rrule(event):
+                vevent.add("rrule", icalendar.vRecur.from_ical(rrule))
         except ValueError:
             pass  # stored before rules were validated; the app shows the series as its first occurrence too
     if is_series(event):
@@ -239,7 +258,7 @@ def build_event_ical(
     if audience.people:
         _add_people(vevent, event, organizer, audience.scheduling)
     if audience.viewer is not None:
-        _add_alarms(vevent, _reminder_minutes(event.parent if event.parent_id else event, audience.viewer))
+        _add_alarms(vevent, _reminder_minutes(event.parent or event, audience.viewer))
     return vevent
 
 
@@ -249,6 +268,12 @@ def _category_names(calendar) -> set[str]:
         cached = {name.lower() for name in calendar.categories.values_list("name", flat=True)}
         calendar._ical_category_names = cached
     return cached
+
+
+def replaced_start(override: Event) -> datetime:
+    # Changed occurrences always keep the start of the one they replace.
+    assert override.recurrence_id is not None
+    return override.recurrence_id
 
 
 def build_series_ical(event: Event, shared_only: bool = True, audience: Audience = FEED) -> list[ICalEvent]:
@@ -266,11 +291,11 @@ def build_series_ical(event: Event, shared_only: bool = True, audience: Audience
     else:
         visible = [o for o in overrides if not shared_only or o.status in SHARED_STATUSES]
     exdates = parse_exdates(event.exdates)
-    exdates.update(as_utc(o.recurrence_id) for o in overrides if o not in visible)
+    exdates.update(as_utc(replaced_start(o)) for o in overrides if o not in visible)
     components = [
         build_event_ical(event, raw.get(None), exdates, audience=audience, category_names=names, organizer=organizer)
     ]
-    for override in sorted(visible, key=lambda o: o.recurrence_id):
+    for override in sorted(visible, key=replaced_start):
         override.parent = event
         components.append(
             build_event_ical(
@@ -306,7 +331,7 @@ def to_ical(cal: ICalCalendar) -> str:
 
 def serialize_event_ical(event: Event, audience: Audience = CALDAV) -> str:
     """The series of `event` (or the event itself) as one iCalendar object, as CalDAV serves it."""
-    series = event.parent if event.parent_id else event
+    series = event.parent or event
     cal = new_calendar()
     for component in build_series_ical(series, audience=audience):
         cal.add_component(component)

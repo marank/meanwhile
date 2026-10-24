@@ -29,7 +29,13 @@ def empty_outbox(world):
 
 
 def create(world, user="owner", **fields):
-    data = {"title": "Planning", "start": iso(BASE), "end": iso(BASE + timedelta(hours=1)), "timezone": "Europe/Berlin", **fields}
+    data = {
+        "title": "Planning",
+        "start": iso(BASE),
+        "end": iso(BASE + timedelta(hours=1)),
+        "timezone": "Europe/Berlin",
+        **fields,
+    }
     res = world["api"][user].post(f"/calendars/{world['cal']['id']}/events", data)
     assert res.status_code == 200, res.content
     return res.json()
@@ -57,7 +63,9 @@ def reply(participant_email, uid, partstat, sender=None, organizer="owner@exampl
     vevent.add("uid", uid)
     vevent.add("dtstamp", BASE)
     vevent.add("organizer", f"mailto:{organizer}")
-    vevent.add("attendee", icalendar.vCalAddress(f"mailto:{participant_email}"), parameters={"PARTSTAT": partstat, **extra})
+    vevent.add(
+        "attendee", icalendar.vCalAddress(f"mailto:{participant_email}"), parameters={"PARTSTAT": partstat, **extra}
+    )
     cal = icalendar.Calendar()
     cal.add("prodid", "-//Test//EN")
     cal.add("version", "2.0")
@@ -136,7 +144,9 @@ def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(worl
     event = create(world)
     invite(world, event)
     owner = world["api"]["owner"]
-    owner.patch(f"/events/{event['id']}", {"start": iso(BASE + timedelta(hours=2)), "end": iso(BASE + timedelta(hours=3))})
+    owner.patch(
+        f"/events/{event['id']}", {"start": iso(BASE + timedelta(hours=2)), "end": iso(BASE + timedelta(hours=3))}
+    )
     _, update = to(GUEST)
     assert update.subject.startswith("Updated invitation: Planning")
     method, vevent = itip(update)
@@ -216,7 +226,9 @@ def test_cancelled_events_cannot_be_answered_by_link(world):
     world["api"]["owner"].post(f"/events/{event['id']}/cancel", {})
     anonymous = Client()
     assert anonymous.get(f"/api/rsvp/{token}").json()["cancelled"] is True
-    assert anonymous.post(f"/api/rsvp/{token}", {"status": "accepted"}, content_type="application/json").status_code == 409
+    assert (
+        anonymous.post(f"/api/rsvp/{token}", {"status": "accepted"}, content_type="application/json").status_code == 409
+    )
 
 
 def test_replies_from_mail_programs_set_the_participants_answer(world):
@@ -224,7 +236,9 @@ def test_replies_from_mail_programs_set_the_participants_answer(world):
     invite(world, event)
     # The occurrence changed before the answer follows the series' answer.
     second = BASE + timedelta(days=1)
-    world["api"]["owner"].patch(f"/events/{event['id']}/occurrences/{iso(second).replace('+', '%2B')}?scope=this", {"title": "Moved"})
+    world["api"]["owner"].patch(
+        f"/events/{event['id']}/occurrences/{iso(second).replace('+', '%2B')}?scope=this", {"title": "Moved"}
+    )
     assert process_email(reply(GUEST, event["uid"], "TENTATIVE")) == [f"{event['uid']}: {GUEST}: tentative"]
     assert set(EventParticipant.objects.filter(email=GUEST).values_list("status", flat=True)) == {"tentative"}
     assert process_email(reply(GUEST, event["uid"], "TENTATIVE")) == [f"{event['uid']}: {GUEST}: tentative (unchanged)"]
@@ -237,10 +251,20 @@ def test_replies_count_only_from_the_participant_themselves(world):
     assert result == [f"{event['uid']}: {GUEST}: ignored, sent by mallory@elsewhere.test"]
     assert status_of(event) == "needs_action"
     # SENT-BY is the sender's own claim and doesn't let anyone answer for the participant.
-    process_email(reply(GUEST, event["uid"], "DECLINED", sender="mallory@elsewhere.test", **{"SENT-BY": "mailto:mallory@elsewhere.test"}))
+    process_email(
+        reply(
+            GUEST,
+            event["uid"],
+            "DECLINED",
+            sender="mallory@elsewhere.test",
+            **{"SENT-BY": "mailto:mallory@elsewhere.test"},
+        )
+    )
     assert status_of(event) == "needs_action"
     # Nor does a message without a sender, whatever SENT-BY says.
-    anonymous = reply(GUEST, event["uid"], "DECLINED", **{"SENT-BY": "mailto:"}).replace(f"From: {GUEST}\n".encode(), b"")
+    anonymous = reply(GUEST, event["uid"], "DECLINED", **{"SENT-BY": "mailto:"}).replace(
+        f"From: {GUEST}\n".encode(), b""
+    )
     assert b"From:" not in anonymous
     process_email(anonymous)
     assert status_of(event) == "needs_action"
@@ -375,7 +399,14 @@ def test_cancelling_one_occurrence_cancels_only_that_one(world):
 def test_invitations_go_to_single_email_addresses_only(world):
     event = create(world)
     api = world["api"]["owner"]
-    for address in ("not-an-email", "", "Evil <victim@elsewhere.test>", "a@x.test, b@x.test", "a@x.test\r\nBcc: b@x.test", "a" * 300 + "@x.test"):
+    for address in (
+        "not-an-email",
+        "",
+        "Evil <victim@elsewhere.test>",
+        "a@x.test, b@x.test",
+        "a@x.test\r\nBcc: b@x.test",
+        "a" * 300 + "@x.test",
+    ):
         assert api.post(f"/events/{event['id']}/participants", {"email": address}).status_code == 422, address
     assert django_mail.outbox == []
 
@@ -421,9 +452,7 @@ def test_answers_for_one_unchanged_occurrence_count(world):
     ical.add("method", "REPLY")
     ical.add_component(vevent)
     assert process_itip(ical.to_ical(), GUEST) == [f"{event['uid']}: {GUEST}: declined"]
-    statuses = dict(
-        EventParticipant.objects.filter(email=GUEST).values_list("event__recurrence_id", "status")
-    )
+    statuses = dict(EventParticipant.objects.filter(email=GUEST).values_list("event__recurrence_id", "status"))
     assert statuses == {None: "needs_action", second: "declined"}
 
     # The answer for the series leaves that one alone.
@@ -436,7 +465,10 @@ def test_answers_are_asked_again_when_the_event_moves(world):
     event = create(world)
     invite(world, event)
     process_email(reply(GUEST, event["uid"], "ACCEPTED"))
-    world["api"]["owner"].patch(f"/events/{event['id']}", {"start": iso(BASE + timedelta(days=1)), "end": iso(BASE + timedelta(days=1, hours=1))})
+    world["api"]["owner"].patch(
+        f"/events/{event['id']}",
+        {"start": iso(BASE + timedelta(days=1)), "end": iso(BASE + timedelta(days=1, hours=1))},
+    )
     assert status_of(event) == "needs_action"
     _, vevent = itip(to(GUEST)[-1])
     assert vevent["ATTENDEE"].params["PARTSTAT"] == "NEEDS-ACTION"

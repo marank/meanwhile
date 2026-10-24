@@ -2,7 +2,6 @@
 Creating calendars.
 """
 
-
 from core.models import Calendar, CalendarMember, User
 from core.models.base import Role
 from core.models.calendar_colors import COLOR_FIELDS, DEFAULT_COLORS

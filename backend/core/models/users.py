@@ -2,16 +2,18 @@
 User and user-related models.
 """
 
+from typing import Any, ClassVar
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
 from core.models.base import TimestampedModel, UUIDModel, default_weekend_days
 
 
-class UserManager(BaseUserManager):
+class UserManager(BaseUserManager["User"]):
     use_in_migrations = True
 
-    def _create_user(self, email: str, password: str | None, **extra) -> "User":
+    def _create_user(self, email: str, password: str | None, **extra) -> User:
         if not email:
             raise ValueError("Email is required")
         email = self.normalize_email(email)
@@ -23,18 +25,19 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_user(self, email: str, password: str | None = None, **extra) -> "User":
+    def create_user(self, email: str, password: str | None = None, **extra) -> User:
         extra.setdefault("is_superuser", False)
         return self._create_user(email, password, **extra)
 
-    def create_superuser(self, email: str, password: str | None = None, **extra) -> "User":
+    def create_superuser(self, email: str, password: str | None = None, **extra) -> User:
         extra.setdefault("is_superuser", True)
         extra.setdefault("is_admin", True)
         return self._create_user(email, password, **extra)
 
 
 class User(UUIDModel, TimestampedModel, AbstractUser):
-    username = None
+    # The stubs type username as a str field; removing it with None is how Django documents it.
+    username = None  # type: ignore[assignment]
     email = models.EmailField(unique=True)
     display_name = models.CharField(max_length=255)
     is_admin = models.BooleanField(default=False)
@@ -56,7 +59,8 @@ class User(UUIDModel, TimestampedModel, AbstractUser):
     # Which kinds of notifications also come by email, by kind; missing kinds use the defaults.
     email_notifications = models.JSONField(default=dict, blank=True)
 
-    groups = models.ManyToManyField(
+    # Replaces the auth Group relation of PermissionsMixin, which the stubs cannot express.
+    groups: models.ManyToManyField[UserGroup, Any] = models.ManyToManyField(  # type: ignore[assignment]
         "UserGroup",
         related_name="user_set",
         db_table="user_group_members",
@@ -66,7 +70,8 @@ class User(UUIDModel, TimestampedModel, AbstractUser):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
-    objects = UserManager()
+    # The stubs expect django.contrib.auth's UserManager, whose username-based create_user this replaces.
+    objects: ClassVar[UserManager] = UserManager()  # type: ignore[assignment]
 
     class Meta:
         db_table = "users"
@@ -111,9 +116,7 @@ class AppSettings(models.Model):
 
 
 class AppPassword(UUIDModel):
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="app_passwords"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="app_passwords")
     label = models.CharField(max_length=255)
     password_hash = models.CharField(max_length=255)
     last_used_at = models.DateTimeField(blank=True, null=True)

@@ -19,8 +19,12 @@ def calendar():
     CalendarMember.objects.create(calendar=calendar, user=owner, role="owner")
     FeedToken.objects.create(calendar=calendar, user=owner, token="tok")
     Event.objects.create(
-        calendar=calendar, creator=owner, title="Meeting", uid="m",
-        start=datetime(2030, 1, 7, 9, tzinfo=UTC), end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+        calendar=calendar,
+        creator=owner,
+        title="Meeting",
+        uid="m",
+        start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+        end=datetime(2030, 1, 7, 10, tzinfo=UTC),
     )
     return calendar
 

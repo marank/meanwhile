@@ -19,29 +19,12 @@ export default defineConfig({
   server: {
     port: 6326,
     strictPort: true,
+    // Django must see the browser's Host (localhost:6326), so no changeOrigin: it is one of the
+    // allowed hosts in DEBUG, and the CSRF and WebSocket origin checks compare against it.
     proxy: {
-      '/api': {
-        target: backendUrl,
-        changeOrigin: true,
-      },
-      '/ics': {
-        target: backendUrl,
-        changeOrigin: true,
-      },
-      '/.well-known/caldav': {
-        target: backendUrl,
-        changeOrigin: true,
-      },
-      '/caldav': {
-        target: backendUrl,
-        changeOrigin: true,
-      },
+      '^/(api|admin|django-static|ics|caldav|\\.well-known/caldav)(/|$)': { target: backendUrl },
       // Live updates; the dev server passes the WebSocket upgrade on.
-      '/ws': {
-        target: backendUrl,
-        changeOrigin: true,
-        ws: true,
-      },
+      '/ws': { target: backendUrl, ws: true },
     },
   },
 })

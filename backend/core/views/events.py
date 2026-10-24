@@ -3,6 +3,7 @@ Event and participant endpoints.
 """
 
 from datetime import datetime
+from uuid import UUID
 
 from django.core.cache import cache
 from django.db import transaction
@@ -96,7 +97,7 @@ def _tracked_values(event: Event) -> dict:
 
 
 def _occurrences(
-    user, memberships: dict[str, MembershipInfo], range_start: datetime, range_end: datetime
+    user, memberships: dict[UUID, MembershipInfo], range_start: datetime, range_end: datetime
 ) -> list[OccurrenceOut]:
     """Occurrences in the range of the calendars of `memberships` (the user's, by calendar id), by start,
     as visible to the user."""
@@ -122,37 +123,37 @@ def _occurrences(
                 can_decide[key] = is_in_approver_pool(event, user_id)
             if not can_decide[key]:
                 continue
-        out.append(OccurrenceOut(
-            event_id=str(event.id),
-            calendar_id=str(event.calendar_id),
-            title=event.title,
-            description=event.description,
-            start=occ_start,
-            end=occ_end,
-            all_day=event.all_day,
-            recurrence_count=(
-                recurrence_count(event, occ_start)
-                if event.show_recurrence_count and is_series(event)
-                else None
-            ),
-            status=event.status,
-            category_id=str(event.category_id) if event.category_id else None,
-            category_name=event.category.name if event.category else None,
-            category_color=event.category.color if event.category else None,
-            resource_id=str(event.resource_id) if event.resource_id else None,
-            resource_name=event.resource.name if event.resource else None,
-            resource_icon=event.resource.icon if event.resource else "",
-            location=event.location,
-            location_resource_id=str(event.location_resource_id) if event.location_resource_id else None,
-            location_resource_icon=event.location_resource.icon if event.location_resource else "",
-            creator_id=str(event.creator_id),
-            can_edit=can_modify_event(event, user_id, memberships[event.calendar_id].role),
-            is_recurring=is_series(event) or bool(event.parent_id),
-            series_id=str(event.parent_id or event.id) if is_series(event) or event.parent_id else None,
-            recurrence_id=(
-                as_utc(event.recurrence_id) if event.parent_id else occ_start if is_series(event) else None
-            ),
-        ))
+        out.append(
+            OccurrenceOut(
+                event_id=str(event.id),
+                calendar_id=str(event.calendar_id),
+                title=event.title,
+                description=event.description,
+                start=occ_start,
+                end=occ_end,
+                all_day=event.all_day,
+                recurrence_count=(
+                    recurrence_count(event, occ_start) if event.show_recurrence_count and is_series(event) else None
+                ),
+                status=event.status,
+                category_id=str(event.category_id) if event.category_id else None,
+                category_name=event.category.name if event.category else None,
+                category_color=event.category.color if event.category else None,
+                resource_id=str(event.resource_id) if event.resource_id else None,
+                resource_name=event.resource.name if event.resource else None,
+                resource_icon=event.resource.icon if event.resource else "",
+                location=event.location,
+                location_resource_id=str(event.location_resource_id) if event.location_resource_id else None,
+                location_resource_icon=event.location_resource.icon if event.location_resource else "",
+                creator_id=str(event.creator_id),
+                can_edit=can_modify_event(event, user_id, memberships[event.calendar_id].role),
+                is_recurring=is_series(event) or bool(event.parent_id),
+                series_id=str(event.parent_id or event.id) if is_series(event) or event.parent_id else None,
+                recurrence_id=(
+                    as_utc(event.recurrence_id) if event.parent_id else occ_start if is_series(event) else None
+                ),
+            )
+        )
     out.sort(key=lambda o: o.start)
     return out
 
@@ -254,9 +255,7 @@ def create_event(request, calendar_id: str, payload: EventCreate):
 def get_event(request, event_id: str):
     event, _ = get_visible_event(event_id, request.user)
     data = serialize_event(event)
-    data["can_decide"] = event.status == EventStatus.PENDING and bool(
-        decidable_resources(event, str(request.user.id))
-    )
+    data["can_decide"] = event.status == EventStatus.PENDING and bool(decidable_resources(event, str(request.user.id)))
     return EventOut.model_validate(data)
 
 
@@ -277,7 +276,8 @@ def _check_booking_conflicts(event: Event) -> None:
     if conflicts:
         raise HttpError(
             409,
-            {
+            # Structured, which core.api.http_error passes through; Ninja types the message as a str.
+            {  # type: ignore[arg-type]
                 "message": "This booking conflicts with an approved booking",
                 "conflicts": [str(c.id) for c in conflicts],
             },
@@ -334,9 +334,7 @@ def _apply_update(user: User, event: Event, data: dict) -> None:
         if data["category_id"] is None:
             category = None
         else:
-            category = Category.objects.filter(
-                id=data["category_id"], calendar=calendar
-            ).first()
+            category = Category.objects.filter(id=data["category_id"], calendar=calendar).first()
             if category is None:
                 raise HttpError(404, "Category not found")
 
@@ -414,11 +412,9 @@ def _apply_update(user: User, event: Event, data: dict) -> None:
         EventParticipant.objects.filter(Q(event=event) | Q(event__parent=event)).exclude(user=user).exclude(
             status=ParticipantStatus.NEEDS_ACTION
         ).update(status=ParticipantStatus.NEEDS_ACTION)
-    status_reset = (
-        event.status == EventStatus.PENDING and old_status != EventStatus.PENDING
-    )
+    status_reset = event.status == EventStatus.PENDING and old_status != EventStatus.PENDING
     if changed:
-        details = {"fields": changed}
+        details: dict[str, list[str] | str] = {"fields": changed}
         if status_reset:
             details["status"] = "pending"
         record_activity(event, str(user.id), "updated", details)
@@ -440,11 +436,14 @@ def delete_event(request, event_id: str):
     event, _ = _modifiable_event(event_id, request.user)
     with transaction.atomic():
         if event.parent_id:
+            series, rid = event.parent, event.recurrence_id
+            # A changed occurrence belongs to a series and keeps the start it replaces.
+            assert series is not None and rid is not None
             # Deleting a changed occurrence removes it from the series instead of restoring it.
-            remove_occurrence(event.parent, event.recurrence_id)
-            details = _occurrence_details(event.recurrence_id)
-            record_activity(event.parent, str(request.user.id), "occurrence_deleted", details)
-            send_request(event.parent, update=True)
+            remove_occurrence(series, rid)
+            details = _occurrence_details(rid)
+            record_activity(series, str(request.user.id), "occurrence_deleted", details)
+            send_request(series, update=True)
         else:
             # A cancelled or rejected event was called off already; participants don't hear it twice.
             if event.status not in _GONE:
@@ -484,7 +483,10 @@ def update_occurrence(
             _apply_update(request.user, override, data)
             record_activity(series, str(request.user.id), "occurrence_changed", _occurrence_details(rid))
             return EventOut.model_validate(serialize_event(override))
-        if scope == "following" and occurrence_index(series, rid) > 0:
+        index = occurrence_index(series, rid) if scope == "following" else 0
+        # _series_occurrence found the occurrence, so the rule has one then.
+        assert index is not None
+        if scope == "following" and index > 0:
             following = split(series, rid)
             record_activity(following, str(request.user.id), "created")
             record_activity(series, str(request.user.id), "series_ended", _occurrence_details(rid))

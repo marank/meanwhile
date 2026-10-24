@@ -6,6 +6,7 @@ with the session comes Ninja's CSRF check.
 """
 
 from django.apps import apps
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError
 from ninja import NinjaAPI
@@ -16,6 +17,8 @@ api = NinjaAPI(
     title="Calendar API",
     version="0.1.0",
     auth=django_auth,
+    # The interactive docs load their scripts from a CDN, which the CSP allows in DEBUG only.
+    docs_url="/docs" if settings.DEBUG else None,
 )
 
 
@@ -30,8 +33,9 @@ def http_error(request, exc: HttpError):
 @api.exception_handler(ObjectDoesNotExist)
 def not_found(request, exc: ObjectDoesNotExist):
     # An id in the path or payload that names nothing, e.g. Calendar.objects.get(id=calendar_id).
-    model = next((m for m in apps.get_models() if type(exc) is m.DoesNotExist), None)
-    name = model._meta.verbose_name.capitalize() if model else "Object"
+    # Every concrete model has its DoesNotExist; the stubs only know it on the models themselves.
+    model = next((m for m in apps.get_models() if type(exc) is m.DoesNotExist), None)  # type: ignore[attr-defined]
+    name = str(model._meta.verbose_name).capitalize() if model else "Object"
     return api.create_response(request, {"detail": f"{name} not found"}, status=404)
 
 

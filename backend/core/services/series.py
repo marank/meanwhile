@@ -105,6 +105,8 @@ def split(series: Event, start: datetime) -> Event:
     """
     start = as_utc(start)
     index = occurrence_index(series, start)
+    # Callers split only at an occurrence after the first.
+    assert index is not None
     rrule = None
     if series.rrule:
         parts = rrule_parts(series.rrule)
@@ -186,11 +188,13 @@ def remap_exceptions(series: Event, before: Event) -> None:
             return nth_occurrence(series, index) if index is not None else None
         return start if occurrence_index(series, start) is not None else None
 
-    series.exdates = sorted(
-        format_exdate(new) for d in parse_exdates(series.exdates) if (new := moved(d)) is not None
-    )
+    series.exdates = sorted(format_exdate(new) for d in parse_exdates(series.exdates) if (new := moved(d)) is not None)
     overrides = list(series.overrides.all())
-    targets = {o.pk: moved(o.recurrence_id) for o in overrides}
+    targets = {}
+    for override in overrides:
+        # Overrides always keep the start of the occurrence they replace.
+        assert override.recurrence_id is not None
+        targets[override.pk] = moved(override.recurrence_id)
     # Clear the old ids first so that two occurrences can trade places without a clash.
     Event.objects.filter(pk__in=[o.pk for o in overrides]).update(recurrence_id=None)
     for override in overrides:

@@ -40,10 +40,8 @@ def _group_detail(group_id) -> dict:
         "id": group.id,
         "name": group.name,
         "description": group.description,
-        "member_count": group.member_count,
-        "members": [
-            GroupMemberOut.model_validate(u) for u in group.user_set.all()
-        ],
+        "member_count": group.member_count,  # type: ignore[attr-defined]  # annotated by _with_member_count
+        "members": [GroupMemberOut.model_validate(u) for u in group.user_set.all()],
     }
 
 

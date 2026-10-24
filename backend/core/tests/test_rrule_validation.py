@@ -15,12 +15,20 @@ pytestmark = pytest.mark.django_db
 
 
 def _event(world, rrule):
-    return world["api"]["owner"].post(f"/calendars/{world['cal']['id']}/events", {
-        "title": "Series", "start": iso(BASE), "end": iso(BASE + timedelta(hours=1)), "rrule": rrule,
-    })
+    return world["api"]["owner"].post(
+        f"/calendars/{world['cal']['id']}/events",
+        {
+            "title": "Series",
+            "start": iso(BASE),
+            "end": iso(BASE + timedelta(hours=1)),
+            "rrule": rrule,
+        },
+    )
 
 
-@pytest.mark.parametrize("rrule", ["FREQ=BOGUS", "FREQ=SECONDLY", "FREQ=MINUTELY;COUNT=5", "INTERVAL=2", "FREQ=DAILY;UNTIL=soon"])
+@pytest.mark.parametrize(
+    "rrule", ["FREQ=BOGUS", "FREQ=SECONDLY", "FREQ=MINUTELY;COUNT=5", "INTERVAL=2", "FREQ=DAILY;UNTIL=soon"]
+)
 def test_unusable_rules_are_rejected(world, rrule):
     assert _event(world, rrule).status_code == 422
 

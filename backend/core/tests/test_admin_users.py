@@ -21,9 +21,15 @@ def admin_api():
 
 
 def test_the_api_neither_shows_nor_sets_superuser(admin_api):
-    res = admin_api.post("/admin/users", {
-        "email": "new@example.test", "display_name": "New", "password": "password-1", "is_superuser": True,
-    })
+    res = admin_api.post(
+        "/admin/users",
+        {
+            "email": "new@example.test",
+            "display_name": "New",
+            "password": "password-1",
+            "is_superuser": True,
+        },
+    )
     assert res.status_code == 200, res.content
     assert "is_superuser" not in res.json()
     user = User.objects.get(email="new@example.test")

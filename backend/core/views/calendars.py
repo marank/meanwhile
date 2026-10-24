@@ -76,7 +76,7 @@ def _serialize_membership(member: CalendarMember | MembershipInfo) -> dict:
     }
 
 
-ACCESS_OF_SOURCE = {
+ACCESS_OF_SOURCE: dict[str, str] = {
     MembershipSource.DIRECT: "member",
     MembershipSource.GROUP: "group",
     MembershipSource.PUBLIC: "public",
@@ -95,11 +95,13 @@ def sidebar_calendars_of(user) -> list[dict]:
         access = accesses.get(membership.calendar_id)
         if access is None:
             continue
-        results.append({
-            "calendar": membership.calendar,
-            "membership": _serialize_membership(access),
-            "access": ACCESS_OF_SOURCE[membership.source],
-        })
+        results.append(
+            {
+                "calendar": membership.calendar,
+                "membership": _serialize_membership(access),
+                "access": ACCESS_OF_SOURCE[membership.source],
+            }
+        )
     return results
 
 
@@ -200,7 +202,7 @@ def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
             raise HttpError(422, "This calendar URL is reserved")
         if Calendar.objects.exclude(id=calendar.id).filter(url_path=url_path).exists():
             raise HttpError(409, "This calendar URL is already in use")
-        if as_uuid(url_path) and Calendar.objects.exclude(id=calendar.id).filter(id=as_uuid(url_path)).exists():
+        if (path_id := as_uuid(url_path)) and Calendar.objects.exclude(id=calendar.id).filter(id=path_id).exists():
             raise HttpError(409, "This calendar URL is already in use")
     for attr, value in data.items():
         setattr(calendar, attr, value)
@@ -218,9 +220,7 @@ def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
 
 @router.delete("/calendars/{calendar_id}")
 def delete_calendar(request, calendar_id: str):
-    calendar, _ = get_member_calendar(
-        calendar_id, request.user, Role.OWNER, "Only the owner can delete this calendar"
-    )
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.OWNER, "Only the owner can delete this calendar")
     calendar.delete()
     return {"ok": True}
 

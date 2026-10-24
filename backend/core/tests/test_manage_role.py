@@ -12,7 +12,7 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def manager(world):
-    """"outsider" manages the calendar, through a group, as managing can be granted like any role."""
+    """ "outsider" manages the calendar, through a group, as managing can be granted like any role."""
     group = UserGroup.objects.create(name="Leads")
     world["users"]["outsider"].groups.add(group)
     CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="manage")

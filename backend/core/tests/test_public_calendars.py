@@ -53,7 +53,9 @@ def test_an_added_calendar_is_placed_like_any_other(world, public):
     api = world["api"]["outsider"]
     folder = Folder.objects.create(user=world["users"]["outsider"], name="Others")
     api.put(f"/calendars/{public}/subscription", {})
-    res = api.patch("/layout/items", {"items": [{"type": "calendar", "id": public, "parent_id": folder.id, "position": 3}]})
+    res = api.patch(
+        "/layout/items", {"items": [{"type": "calendar", "id": public, "parent_id": folder.id, "position": 3}]}
+    )
     assert res.status_code == 200, res.content
     membership = listed(world)[public]["membership"]
     assert (membership["folder_id"], membership["position"]) == (str(folder.id), 3)

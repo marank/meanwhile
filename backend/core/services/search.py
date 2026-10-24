@@ -16,29 +16,21 @@ def search_users(q: str, limit: int = MAX_LIMIT):
     if len(q) < 2:
         return []
     users = (
-        User.objects.filter(
-            Q(email__icontains=q) | Q(display_name__icontains=q)
-        )
+        User.objects.filter(Q(email__icontains=q) | Q(display_name__icontains=q))
         .order_by("display_name", "email")
         .values("id", "display_name", "email")[:limit]
     )
-    return [
-        {"id": u["id"], "type": "user", "label": u["display_name"], "subtitle": u["email"]}
-        for u in users
-    ]
+    return [{"id": u["id"], "type": "user", "label": u["display_name"], "subtitle": u["email"]} for u in users]
 
 
 def search_calendar_members(calendar_id: str, q: str, limit: int = MAX_LIMIT):
     q = q.strip()
     # Granted members (those approvers are picked from), not those with the calendar from a group or added.
-    users = User.objects.filter(memberships__calendar_id=calendar_id, memberships__source=MembershipSource.DIRECT)
+    members = User.objects.filter(memberships__calendar_id=calendar_id, memberships__source=MembershipSource.DIRECT)
     if q:
-        users = users.filter(Q(email__icontains=q) | Q(display_name__icontains=q))
-    users = users.order_by("display_name", "email").values("id", "display_name", "email")[:limit]
-    return [
-        {"id": u["id"], "type": "user", "label": u["display_name"], "subtitle": u["email"]}
-        for u in users
-    ]
+        members = members.filter(Q(email__icontains=q) | Q(display_name__icontains=q))
+    users = members.order_by("display_name", "email").values("id", "display_name", "email")[:limit]
+    return [{"id": u["id"], "type": "user", "label": u["display_name"], "subtitle": u["email"]} for u in users]
 
 
 def search_groups(q: str, limit: int = MAX_LIMIT):

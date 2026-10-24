@@ -21,7 +21,9 @@ def create(world, user="booker", start=BASE, **fields):
 @pytest.fixture
 def places(world):
     users = world["users"]
-    room = world["resource"]("Room 1", requires_approval=True, is_location=True, approver_ids=[str(users["approver"].id)])
+    room = world["resource"](
+        "Room 1", requires_approval=True, is_location=True, approver_ids=[str(users["approver"].id)]
+    )
     projector = world["resource"]("Projector", requires_approval=True, approver_ids=[str(users["resapprover"].id)])
     hall = world["resource"]("Hall", requires_approval=False, is_location=True)
     return {"room": room, "projector": projector, "hall": hall}
@@ -97,6 +99,10 @@ def test_typing_another_location_gives_the_place_up(world, places):
 
 def test_availability_includes_bookings_of_places(world, places):
     create(world, location_resource_id=places["hall"]["id"])
-    data = {"start": iso(BASE - timedelta(hours=1)), "end": iso(BASE + timedelta(hours=5)), "resource_ids": [places["hall"]["id"]]}
+    data = {
+        "start": iso(BASE - timedelta(hours=1)),
+        "end": iso(BASE + timedelta(hours=5)),
+        "resource_ids": [places["hall"]["id"]],
+    }
     body = world["api"]["owner"].post("/availability", data).json()
     assert [(p["start"][11:16], p["tentative"]) for p in body["resources"][0]["busy"]] == [("09:00", False)]

@@ -7,13 +7,19 @@ password is only replaced when ADMIN_PASSWORD differs from it (setting it again 
 out everywhere). A new user needs ADMIN_PASSWORD, and so does an existing one who isn't admin yet:
 anyone may have signed up with that address (emails aren't verified), so whoever did loses the
 account to ADMIN_PASSWORD, their sessions and their app passwords.
+
+Outside DEBUG, ADMIN_PASSWORD must pass the password validators and must not be a placeholder
+such as the "change-me" of .env.example.
 """
 
 from allauth.account.models import EmailAddress
 from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from config.env import INSECURE_SECRET_VALUES
 from core.models import AppPassword, User
 
 
@@ -28,6 +34,8 @@ class Command(BaseCommand):
         if not email:
             self.stdout.write("ADMIN_EMAIL is not set; no admin user to set up.")
             return
+        if password and not settings.DEBUG:
+            self._check_password(password)
 
         user = User.objects.filter(email__iexact=email).first()
         if user is None:
@@ -60,3 +68,11 @@ class Command(BaseCommand):
             self.stdout.write(f"Admin user {email} updated: {', '.join(changed)}.")
         else:
             self.stdout.write(f"Admin user {email} is up to date.")
+
+    def _check_password(self, password: str) -> None:
+        if password.strip().lower() in INSECURE_SECRET_VALUES:
+            raise CommandError("ADMIN_PASSWORD is still a placeholder; set a real password in .env.")
+        try:
+            validate_password(password)
+        except ValidationError as error:
+            raise CommandError("ADMIN_PASSWORD is too weak: " + " ".join(error.messages)) from error

@@ -22,7 +22,9 @@ def test_users_change_their_password_and_stay_signed_in():
     client = Client()
     client.force_login(user)
 
-    wrong = post(client, "/api/auth/v1/account/password/change", {"current_password": "nope", "new_password": "N3w-secret!"})
+    wrong = post(
+        client, "/api/auth/v1/account/password/change", {"current_password": "nope", "new_password": "N3w-secret!"}
+    )
     assert wrong.status_code == 400
     res = post(client, "/api/auth/v1/account/password/change", {"current_password": "x", "new_password": "N3w-secret!"})
     assert res.status_code == 200, res.content
@@ -39,8 +41,11 @@ def request_link(email: str) -> str | None:
         return None
     message = mail.outbox[-1]
     # From the app, not the Django site.
-    assert "example.com" not in message.subject + message.body
-    return re.search(r"https?://\S+/reset-password/(\S+)", message.body).group(1)
+    body = str(message.body)
+    assert "example.com" not in str(message.subject) + body
+    match = re.search(r"https?://\S+/reset-password/(\S+)", body)
+    assert match is not None
+    return match.group(1)
 
 
 def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings):
@@ -58,13 +63,18 @@ def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings):
     user.refresh_from_db()
     assert user.check_password("N3w-secret!")
     # The link works once.
-    assert post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "An0ther-one!"}).status_code == 400
+    assert (
+        post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "An0ther-one!"}).status_code == 400
+    )
 
 
 def test_made_up_keys_change_nothing(settings):
     user = make_user("someone")
     for key in ("nonsense", f"{user.pk.hex}-abc-def", "x-y"):
-        assert post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "N3w-secret!"}).status_code == 400
+        assert (
+            post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "N3w-secret!"}).status_code
+            == 400
+        )
     user.refresh_from_db()
     assert user.check_password("x")
 

@@ -39,7 +39,6 @@ def availability(request, data: AvailabilityIn):
             for u in users
         ],
         "resources": [
-            {"id": r.id, "name": r.name, "busy": resource_periods(r, start, end, exclude_event_id)}
-            for r in resources
+            {"id": r.id, "name": r.name, "busy": resource_periods(r, start, end, exclude_event_id)} for r in resources
         ],
     }

@@ -2,7 +2,6 @@
 Event comments and activity endpoints.
 """
 
-
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -46,11 +45,7 @@ def create_comment(request, event_id: str, payload: CommentCreate):
         author=request.user,
         body=body,
     )
-    previous_commenters = (
-        EventComment.objects.filter(event=event)
-        .values_list("author_id", flat=True)
-        .distinct()
-    )
+    previous_commenters = EventComment.objects.filter(event=event).values_list("author_id", flat=True).distinct()
     # Only who may still see the event: the notification carries the comment.
     recipients = [
         user
@@ -86,7 +81,7 @@ def list_activity(request, event_id: str):
     entries = EventActivity.objects.filter(event=event).order_by("created_at")
     return [
         ActivityOut(
-            id=e.id,
+            id=str(e.id),
             event_id=str(e.event_id),
             actor_id=str(e.actor_id) if e.actor_id else None,
             actor_name=e.actor.display_name if e.actor else None,

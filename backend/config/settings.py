@@ -2,47 +2,76 @@
 Django settings for the Calendar backend.
 """
 
-import os
 from pathlib import Path
 
-import dj_database_url
-from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
+from django.utils.csp import CSP
+
+from .env import env_bool, env_int, env_list, env_str, load_dotenv, parse_app_urls, secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# The .env of the project root, shared by all setups (template: .env.example there). In the
-# containers there is none; Compose passes its values as environment variables.
+# The .env of the project root, shared by all setups (template: .env.example there); variables
+# that are set already win. In the containers there is none; Compose passes its values.
 load_dotenv(BASE_DIR.parent / ".env")
 
 
-def _bool_env(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _list_env(name: str, default: list[str]) -> list[str]:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return [item.strip() for item in value.split(",") if item.strip()]
-
+# ---------------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------------
 
 # Production unless asked otherwise: a deployment that forgets to set it doesn't run with DEBUG,
 # the development SECRET_KEY, open registration and insecure cookies.
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+DEBUG = env_bool("DEBUG", False)
+SECRET_KEY = secret_key(DEBUG)  # >= 40 chars and no placeholder, else refuse to start (DEBUG: fixed dev key)
 
-_DEV_SECRET = "dev-change-me-in-production-needs-32-bytes"
-SECRET_KEY = os.environ.get("SECRET_KEY", _DEV_SECRET)
-if ENVIRONMENT != "development" and SECRET_KEY == _DEV_SECRET:
-    raise RuntimeError(
-        "SECRET_KEY must be set to a non-default value outside development"
+# Every URL users open the app under. The first one is the app's address in emails and feed links.
+APP_URLS = parse_app_urls(env_list("APP_URLS", ["http://localhost:6326"]))
+if DEBUG:
+    # Vite's dev and preview servers and runserver, so development needs no extra config.
+    APP_URLS += parse_app_urls(
+        ["http://localhost:6326", "http://127.0.0.1:6326", "http://localhost:4173", "http://localhost:8000"]
     )
 
-DEBUG = ENVIRONMENT == "development"
+ALLOWED_HOSTS = sorted({url.hostname for url in APP_URLS})
+CSRF_TRUSTED_ORIGINS = sorted({url.origin for url in APP_URLS})
 
-ALLOWED_HOSTS = _list_env("ALLOWED_HOSTS", ["*"])
+# Secure cookies only once every public URL is https (i.e. a TLS proxy is in front).
+_ALL_HTTPS = not DEBUG and all(url.scheme == "https" for url in APP_URLS)
+SESSION_COOKIE_SECURE = _ALL_HTTPS
+CSRF_COOKIE_SECURE = _ALL_HTTPS
+if _ALL_HTTPS:
+    # nginx sets X-Forwarded-Proto itself and takes it over only from TRUSTED_PROXIES; the
+    # backend is reachable only through nginx.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    # The container's own healthcheck talks plain http to 127.0.0.1.
+    SECURE_REDIRECT_EXEMPT = [r"^api/health$"]
+# No HSTS from the app: the proxy in front decides that for its domains (the app may be served
+# under domains that aren't ours).
+SILENCED_SYSTEM_CHECKS = ["security.W004"]
+
+CSRF_COOKIE_HTTPONLY = False  # the SPA reads csrftoken to send X-CSRFToken
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "same-origin"
+
+# Content Security Policy for Django's own responses (admin, API); nginx sets the frontend's
+# (docker/security_headers.conf). In DEBUG violations are only reported (browser console), as the
+# API docs (/api/docs) load their scripts from a CDN.
+_CSP = {
+    "default-src": [CSP.SELF],
+    "img-src": [CSP.SELF, "data:"],
+    "object-src": [CSP.NONE],
+    "base-uri": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+}
+if DEBUG:
+    SECURE_CSP_REPORT_ONLY = _CSP
+else:
+    SECURE_CSP = _CSP
+
+# /admin: on in DEBUG, off otherwise, unless ADMIN_ENABLED says differently.
+ADMIN_ENABLED = env_bool("ADMIN_ENABLED", DEBUG)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +91,6 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.headless",
-    "corsheaders",
     "channels",
     # The task queue: emails, reminders and other regular jobs (core.tasks), run by
     # `manage.py procrastinate worker`.
@@ -74,7 +102,7 @@ SITE_ID = 1
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -111,10 +139,18 @@ ASGI_APPLICATION = "config.asgi.application"
 # Database
 # ---------------------------------------------------------------------------
 
-# PostgreSQL only (the task queue, procrastinate, lives in it); by default the one of docker-compose.dev.yml.
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://meanwhile:meanwhile@localhost:5432/meanwhile")
+# PostgreSQL only: the task queue (procrastinate) lives in it. By default the one of compose.dev.yml.
 DATABASES = {
-    "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env_str("DB_NAME", "meanwhile"),
+        "USER": env_str("DB_USER", "meanwhile"),
+        "PASSWORD": env_str("DB_PASSWORD", "meanwhile" if DEBUG else None),
+        "HOST": env_str("DB_HOST", "localhost"),
+        "PORT": env_str("DB_PORT", "5432"),
+        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 600),
+        "CONN_HEALTH_CHECKS": True,
+    }
 }
 
 
@@ -141,9 +177,12 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Argon2 first; the others stay as fallbacks, so existing hashes keep working.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
 ]
 
 
@@ -168,39 +207,49 @@ HEADLESS_CLIENTS = ("browser",)
 
 
 # ---------------------------------------------------------------------------
-# Sessions / CSRF / CORS
+# Sessions
 # ---------------------------------------------------------------------------
 
-SESSION_COOKIE_AGE = int(
-    os.environ.get("SESSION_COOKIE_AGE_DAYS", "14") or "14"
-) * 24 * 60 * 60
+# The frontend and the backend share one origin (nginx, the Vite proxy), so there is no CORS.
+SESSION_COOKIE_AGE = env_int("SESSION_COOKIE_AGE_DAYS", 14) * 24 * 60 * 60
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_SAVE_EVERY_REQUEST = True
 
-CSRF_TRUSTED_ORIGINS = _list_env(
-    "CSRF_TRUSTED_ORIGINS",
-    ["http://localhost:6326", "http://localhost:4173"],
-)
-
-CORS_ALLOWED_ORIGINS = _list_env(
-    "CORS_ORIGINS",
-    ["http://localhost:6326", "http://localhost:4173"],
-)
-CORS_ALLOW_CREDENTIALS = True
-
 
 # ---------------------------------------------------------------------------
-# Internationalization / static
+# Internationalization / static / logging
 # ---------------------------------------------------------------------------
 
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+LANGUAGE_CODE = env_str("LANGUAGE_CODE", "en-us")
+TIME_ZONE = env_str("TIME_ZONE", "UTC")
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+# Admin assets only; nginx and Vite serve the frontend. Not "/static/", so it can't collide with
+# the frontend's paths.
+STATIC_URL = "/django-static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The only writable location in the container (read-only root filesystem). Without Docker: backend/data.
+DATA_DIR = Path(env_str("DATA_DIR", str(BASE_DIR / "data")))
+MEDIA_ROOT = DATA_DIR / "media"
+MEDIA_URL = "/media/"
+
+LOG_LEVEL = env_str("LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"default": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "default"}},
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # They list every task and periodic job at each start, of every management command too.
+        "procrastinate.blueprints": {"level": "WARNING"},
+        "procrastinate.periodic": {"level": "WARNING"},
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -210,28 +259,27 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---------------------------------------------------------------------------
 
 # Anyone may sign up only where that's wanted: users find each other (by name and email) to share.
-ALLOW_REGISTRATION = _bool_env("ALLOW_REGISTRATION", ENVIRONMENT == "development")
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+ALLOW_REGISTRATION = env_bool("ALLOW_REGISTRATION", DEBUG)
+ADMIN_EMAIL = env_str("ADMIN_EMAIL", "")
 # The admin user that `manage.py ensure_admin` creates or updates on every start of the containers.
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-ADMIN_NAME = os.environ.get("ADMIN_NAME", "")
-BASE_URL = os.environ.get("BASE_URL", "")
-CALDAV_PATH = os.environ.get("CALDAV_PATH", "/caldav")
+ADMIN_PASSWORD = env_str("ADMIN_PASSWORD", "")
+ADMIN_NAME = env_str("ADMIN_NAME", "")
+CALDAV_PATH = env_str("CALDAV_PATH", "/caldav")
 # Seconds before CalDAV answers a wrong password (Radicale's auth delay).
 CALDAV_FAILED_LOGIN_DELAY = 1
 
 
 # ---------------------------------------------------------------------------
-# Live updates (WebSockets) and reverse proxy
+# Live updates (WebSockets)
 # ---------------------------------------------------------------------------
 
 # Path of the WebSocket endpoint; the reverse proxy must pass WebSocket upgrades for it.
-WEBSOCKET_PATH = os.environ.get("WEBSOCKET_PATH", "/ws/")
+WEBSOCKET_PATH = env_str("WEBSOCKET_PATH", "/ws/")
 
 # Every process must reach the WebSocket connections of the others: with more than one (several
 # uvicorn workers, and the task queue's worker, whose reminders pop up in the users' tabs), set
 # REDIS_URL. Without it, messages stay within the process that sends them.
-REDIS_URL = os.environ.get("REDIS_URL", "")
+REDIS_URL = env_str("REDIS_URL", "")
 if REDIS_URL:
     CHANNEL_LAYERS = {
         "default": {
@@ -246,61 +294,51 @@ if REDIS_URL:
 else:
     CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
-# Behind a reverse proxy that terminates HTTPS: trust its X-Forwarded-Proto and -Host headers.
-# Only enable this when the app is reachable through the proxy alone, as clients could set them.
-BEHIND_PROXY = _bool_env("BEHIND_PROXY", False)
-if BEHIND_PROXY:
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    USE_X_FORWARDED_HOST = True
-# Cookies only over HTTPS once the app is served that way.
-SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = _bool_env("SECURE_COOKIES", ENVIRONMENT != "development")
-
 
 # ---------------------------------------------------------------------------
 # Email (notifications and invitations)
 # ---------------------------------------------------------------------------
 
 # Without EMAIL_HOST, emails are printed to the console in development and not sent otherwise.
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587") or "587")
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = _bool_env("EMAIL_USE_TLS", False)
-EMAIL_USE_SSL = _bool_env("EMAIL_USE_SSL", False)
+EMAIL_HOST = env_str("EMAIL_HOST", "")
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
+EMAIL_HOST_USER = env_str("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env_str("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
+EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
 if EMAIL_USE_TLS and EMAIL_USE_SSL:
-    raise RuntimeError("Set only one of EMAIL_USE_TLS (STARTTLS, port 587) and EMAIL_USE_SSL (port 465)")
+    raise ImproperlyConfigured("Set only one of EMAIL_USE_TLS (STARTTLS, port 587) and EMAIL_USE_SSL (port 465)")
 EMAIL_TIMEOUT = 15
 if EMAIL_HOST:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-elif ENVIRONMENT == "development":
+elif DEBUG:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "meanwhile@localhost")
+DEFAULT_FROM_EMAIL = env_str("DEFAULT_FROM_EMAIL", "meanwhile@localhost")
 # Emails go out as jobs of the task queue (core.tasks), retried while the mail server fails;
 # without, right after the request (tests do so).
-EMAIL_SEND_IN_BACKGROUND = _bool_env("EMAIL_SEND_IN_BACKGROUND", True)
+EMAIL_SEND_IN_BACKGROUND = env_bool("EMAIL_SEND_IN_BACKGROUND", True)
 
-# Address of the app for links in emails; BASE_URL, or in development the Vite dev server.
-APP_URL = (BASE_URL or ("http://localhost:6326" if ENVIRONMENT == "development" else "")).rstrip("/")
+# Address of the app for links in emails and feed URLs: the first of APP_URLS.
+APP_URL = APP_URLS[0].origin
 
 # Forgotten passwords: allauth mails a link to the app's page that sets a new one (ResetPasswordView);
 # the key in it works once, for PASSWORD_RESET_TIMEOUT. Only addresses with an account get one; the
 # answer is the same either way, so it tells nothing.
-if APP_URL:
-    HEADLESS_FRONTEND_URLS = {"account_reset_password_from_key": f"{APP_URL}/reset-password/{{key}}"}
+HEADLESS_FRONTEND_URLS = {"account_reset_password_from_key": f"{APP_URL}/reset-password/{{key}}"}
 ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS = False
 
 # iMIP: invitations name this mailbox as organizer, so participants' mail programs send their
 # answers (iTIP REPLY) there; `fetch_imip` reads them. Empty: the organizer's own address.
-IMIP_ADDRESS = os.environ.get("IMIP_ADDRESS", "")
-IMIP_IMAP_HOST = os.environ.get("IMIP_IMAP_HOST", "")
-IMIP_IMAP_PORT = int(os.environ.get("IMIP_IMAP_PORT", "993") or "993")
-IMIP_IMAP_USER = os.environ.get("IMIP_IMAP_USER", "")
-IMIP_IMAP_PASSWORD = os.environ.get("IMIP_IMAP_PASSWORD", "")
-IMIP_IMAP_SSL = _bool_env("IMIP_IMAP_SSL", True)
-IMIP_IMAP_FOLDER = os.environ.get("IMIP_IMAP_FOLDER", "INBOX")
+IMIP_ADDRESS = env_str("IMIP_ADDRESS", "")
+IMIP_IMAP_HOST = env_str("IMIP_IMAP_HOST", "")
+IMIP_IMAP_PORT = env_int("IMIP_IMAP_PORT", 993)
+IMIP_IMAP_USER = env_str("IMIP_IMAP_USER", "")
+IMIP_IMAP_PASSWORD = env_str("IMIP_IMAP_PASSWORD", "")
+IMIP_IMAP_SSL = env_bool("IMIP_IMAP_SSL", True)
+IMIP_IMAP_FOLDER = env_str("IMIP_IMAP_FOLDER", "INBOX")
 # The From address of an answer is easily forged. With this set to the name the receiving mail server
 # writes into its Authentication-Results header (e.g. "mx.example.com"), answers count only if that
 # server found the sender's domain verified (DMARC, or DKIM signed by that domain).
-IMIP_TRUSTED_AUTHSERV_ID = os.environ.get("IMIP_TRUSTED_AUTHSERV_ID", "").strip().lower()
+IMIP_TRUSTED_AUTHSERV_ID = env_str("IMIP_TRUSTED_AUTHSERV_ID", "").strip().lower()

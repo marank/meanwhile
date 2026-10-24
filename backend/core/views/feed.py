@@ -51,12 +51,14 @@ def calendar_feed(request, feed_token: str) -> HttpResponse:
     etag, last_modified = _feed_version(calendar)
     response = get_conditional_response(request, etag=etag, last_modified=last_modified)
     if response is None:
-        events = Event.objects.filter(
-            calendar=calendar,
-            parent__isnull=True,
-            status__in={EventStatus.CONFIRMED, EventStatus.APPROVED},
-        ).select_related("category", "resource").prefetch_related(
-            Prefetch("overrides", queryset=Event.objects.select_related("category", "resource"))
+        events = (
+            Event.objects.filter(
+                calendar=calendar,
+                parent__isnull=True,
+                status__in={EventStatus.CONFIRMED, EventStatus.APPROVED},
+            )
+            .select_related("category", "resource")
+            .prefetch_related(Prefetch("overrides", queryset=Event.objects.select_related("category", "resource")))
         )
         body = build_calendar_feed(calendar, events).encode()
         response = HttpResponse(body, content_type="text/calendar; charset=utf-8")

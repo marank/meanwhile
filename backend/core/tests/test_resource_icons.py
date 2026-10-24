@@ -64,4 +64,7 @@ def test_searches_and_occurrences_carry_the_icon(world):
     )
     assert plain.status_code == 200
     occurrences = occurrences_of(api, cal)
-    assert sorted((o["resource_icon"], o["location_resource_icon"]) for o in occurrences) == [("", ""), ("projector", "door-open")]
+    assert sorted((o["resource_icon"], o["location_resource_icon"]) for o in occurrences) == [
+        ("", ""),
+        ("projector", "door-open"),
+    ]

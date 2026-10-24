@@ -2,7 +2,6 @@
 Calendar category endpoints.
 """
 
-
 from ninja import Router
 
 from core.models import Category

@@ -7,14 +7,17 @@ import pytest
 pytestmark = pytest.mark.django_db
 
 
-@pytest.mark.parametrize("method, path", [
-    ("get", "/calendars/unknown"),
-    ("get", "/calendars/unknown/members"),
-    ("get", "/calendars/unknown/categories"),
-    ("get", "/events/unknown"),
-    ("patch", "/layout/folders/unknown"),
-    ("delete", "/notifications/unknown"),
-])
+@pytest.mark.parametrize(
+    "method, path",
+    [
+        ("get", "/calendars/unknown"),
+        ("get", "/calendars/unknown/members"),
+        ("get", "/calendars/unknown/categories"),
+        ("get", "/events/unknown"),
+        ("patch", "/layout/folders/unknown"),
+        ("delete", "/notifications/unknown"),
+    ],
+)
 def test_unknown_ids_are_not_found(world, method, path):
     api = world["api"]["owner"]
     res = api.patch(path, {"name": "x"}) if method == "patch" else getattr(api, method)(path)

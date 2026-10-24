@@ -33,7 +33,9 @@ def remind(world, event, minutes, user="owner"):
 
 def reminders_of(world, user="owner"):
     return list(
-        Notification.objects.filter(user=world["users"][user], type="event_reminder").values_list("data__start", flat=True)
+        Notification.objects.filter(user=world["users"][user], type="event_reminder").values_list(
+            "data__start", flat=True
+        )
     )
 
 
@@ -41,7 +43,9 @@ def test_reminders_are_set_per_user(world):
     event = create(world)
     assert remind(world, event, [30, 15, 15, -5]).json() == {"minutes": [15, 30]}
     # Viewers may be reminded too; it concerns only them.
-    world["api"]["owner"].post(f"/calendars/{world['cal']['id']}/members", {"user_id": str(world["users"]["outsider"].id), "role": "read"})
+    world["api"]["owner"].post(
+        f"/calendars/{world['cal']['id']}/members", {"user_id": str(world["users"]["outsider"].id), "role": "read"}
+    )
     assert remind(world, event, [60], "outsider").json() == {"minutes": [60]}
     assert world["api"]["owner"].get(f"/events/{event['id']}/reminders").json() == {"minutes": [15, 30]}
     assert world["api"]["outsider"].get(f"/events/{event['id']}/reminders").json() == {"minutes": [60]}
@@ -79,7 +83,11 @@ def test_changed_occurrences_are_reminded_of_at_their_new_time(world):
     remind(world, event, [15])
     second = NINE + timedelta(days=1)
     url = f"/events/{event['id']}/occurrences/{iso(second).replace('+', '%2B')}?scope=this"
-    override = world["api"]["owner"].patch(url, {"start": iso(second + timedelta(hours=2)), "end": iso(second + timedelta(hours=3))}).json()
+    override = (
+        world["api"]["owner"]
+        .patch(url, {"start": iso(second + timedelta(hours=2)), "end": iso(second + timedelta(hours=3))})
+        .json()
+    )
     assert deliver_due_reminders(now=NOW + timedelta(days=1)) == []
     delivered = deliver_due_reminders(now=NOW + timedelta(days=1, hours=2))
     assert [d["event_id"] for d in delivered] == [override["id"]]
@@ -131,8 +139,9 @@ def test_a_delivery_works_out_when_the_reminder_is_next_due(world):
     assert reminder.next_due_at == NINE.replace(year=2032) - timedelta(minutes=15)
 
     # Moving the series has it worked out again by the next delivery.
-    world["api"]["owner"].patch(f"/events/{event['id']}", {"start": iso(NINE + timedelta(hours=1)),
-                                                            "end": iso(NINE + timedelta(hours=2))})
+    world["api"]["owner"].patch(
+        f"/events/{event['id']}", {"start": iso(NINE + timedelta(hours=1)), "end": iso(NINE + timedelta(hours=2))}
+    )
     reminder.refresh_from_db()
     assert reminder.next_due_at <= NOW
     deliver_due_reminders(now=NOW)
@@ -147,11 +156,19 @@ def test_reminders_not_due_cost_nothing(world):
         return len(captured)
 
     for _ in range(3):
-        remind(world, create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))), [15])
+        remind(
+            world,
+            create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))),
+            [15],
+        )
     deliver_due_reminders(now=NOW)  # works out when each is due: in a month
     few = run_queries()
     for _ in range(20):
-        remind(world, create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))), [15])
+        remind(
+            world,
+            create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))),
+            [15],
+        )
     deliver_due_reminders(now=NOW)
     assert run_queries() == few
 

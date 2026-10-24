@@ -1,10 +1,12 @@
 """
-Settings for the tests (pytest): development's, whatever .env says.
+Settings for the tests (pytest): development's (DEBUG), whatever .env says.
 """
 
 import os
 
-os.environ["ENVIRONMENT"] = "development"
+os.environ["DEBUG"] = "true"
+# The app's address in links (emails, feeds), which the tests look for.
+os.environ["APP_URLS"] = "http://app.test"
 
 from config.settings import *  # noqa: E402, F403
 

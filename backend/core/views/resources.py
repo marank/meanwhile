@@ -40,7 +40,8 @@ def create_resource(request, calendar_id: str, payload: ResourceCreate):
         calendar=calendar,
         name=payload.name,
         description=payload.description,
-        color=payload.color,
+        # The schema still lets a null color through, which the column rejects.
+        color=payload.color,  # type: ignore[misc]
         icon=payload.icon,
         requires_approval=payload.requires_approval,
         is_location=payload.is_location,

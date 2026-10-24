@@ -232,16 +232,22 @@ def approved_booking(world):
 
 def test_rescheduling_an_approved_booking_needs_approval_again(world):
     _, event = approved_booking(world)
-    res = world["api"]["booker"].patch(f"/events/{event['id']}", {
-        "start": iso(BASE + timedelta(days=1)),
-        "end": iso(BASE + timedelta(days=1, hours=1)),
-    })
+    res = world["api"]["booker"].patch(
+        f"/events/{event['id']}",
+        {
+            "start": iso(BASE + timedelta(days=1)),
+            "end": iso(BASE + timedelta(days=1, hours=1)),
+        },
+    )
     assert res.status_code == 200, res.content
     assert res.json()["status"] == "pending"
     assert res.json()["decided_by"] is None
-    assert Notification.objects.filter(
-        user=world["users"]["approver"], type="approval_requested", event_id=event["id"]
-    ).count() == 2
+    assert (
+        Notification.objects.filter(
+            user=world["users"]["approver"], type="approval_requested", event_id=event["id"]
+        ).count()
+        == 2
+    )
 
 
 def test_renaming_an_approved_booking_keeps_the_approval(world):
@@ -253,16 +259,19 @@ def test_renaming_an_approved_booking_keeps_the_approval(world):
 def test_saving_the_edit_form_unchanged_keeps_the_approval(world):
     """The event dialog always sends every field, even the ones that did not change."""
     room, event = approved_booking(world)
-    res = world["api"]["booker"].patch(f"/events/{event['id']}", {
-        "title": "Renamed",
-        "start": event["start"],
-        "end": event["end"],
-        "all_day": False,
-        "show_recurrence_count": False,
-        "rrule": None,
-        "category_id": None,
-        "resource_id": room["id"],
-    })
+    res = world["api"]["booker"].patch(
+        f"/events/{event['id']}",
+        {
+            "title": "Renamed",
+            "start": event["start"],
+            "end": event["end"],
+            "all_day": False,
+            "show_recurrence_count": False,
+            "rrule": None,
+            "category_id": None,
+            "resource_id": room["id"],
+        },
+    )
     assert res.status_code == 200, res.content
     assert res.json()["status"] == "approved"
 
@@ -291,10 +300,13 @@ def test_removing_the_resource_confirms_the_event(world):
 def test_rescheduling_into_an_approved_slot_is_refused(world):
     room, event = approved_booking(world)
     later = world["book"](world["api"]["other"], room["id"], start=BASE + timedelta(hours=3)).json()
-    res = world["api"]["other"].patch(f"/events/{later['id']}", {
-        "start": event["start"],
-        "end": event["end"],
-    })
+    res = world["api"]["other"].patch(
+        f"/events/{later['id']}",
+        {
+            "start": event["start"],
+            "end": event["end"],
+        },
+    )
     assert res.status_code == 409
     assert Event.objects.get(id=later["id"]).start == BASE + timedelta(hours=3)
 
@@ -381,9 +393,9 @@ def test_approver_search_only_offers_calendar_members(world):
     names = {r["label"] for r in res.json()}
     assert "Approver" in names and "Owner" in names
     assert "Outsider" not in names
-    assert world["api"]["outsider"].get(
-        f"/search?entity=members&q=&calendar_id={world['cal']['id']}"
-    ).status_code == 403
+    assert (
+        world["api"]["outsider"].get(f"/search?entity=members&q=&calendar_id={world['cal']['id']}").status_code == 403
+    )
 
 
 def test_group_members_can_request_bookings(world):
@@ -447,7 +459,10 @@ def test_default_approver_still_asks_when_the_resource_has_its_own_approvers(wor
     room = world["resource"]("Room")
     add_resource_approver(world, room["id"], "resapprover")
     assert world["book"](world["api"]["approver"], room["id"]).json()["status"] == "pending"
-    assert world["book"](world["api"]["resapprover"], room["id"], start=BASE + timedelta(hours=2)).json()["status"] == "approved"
+    assert (
+        world["book"](world["api"]["resapprover"], room["id"], start=BASE + timedelta(hours=2)).json()["status"]
+        == "approved"
+    )
 
 
 def test_self_approved_booking_still_respects_conflicts(world):
@@ -460,10 +475,13 @@ def test_self_approved_booking_still_respects_conflicts(world):
 
 def test_rescheduling_by_an_approver_keeps_the_approval(world):
     _, event = approved_booking(world)
-    res = world["api"]["owner"].patch(f"/events/{event['id']}", {
-        "start": iso(BASE + timedelta(days=1)),
-        "end": iso(BASE + timedelta(days=1, hours=1)),
-    })
+    res = world["api"]["owner"].patch(
+        f"/events/{event['id']}",
+        {
+            "start": iso(BASE + timedelta(days=1)),
+            "end": iso(BASE + timedelta(days=1, hours=1)),
+        },
+    )
     assert res.json()["status"] == "approved"
 
 
@@ -501,7 +519,9 @@ def test_pending_bookings_are_only_listed_for_those_involved(world):
 def test_participants_see_the_pending_booking(world):
     room = world["resource"]("Room")
     event = world["book"](
-        world["api"]["booker"], room["id"], title="With guest",
+        world["api"]["booker"],
+        room["id"],
+        title="With guest",
         participants=[{"user_id": str(world["users"]["other"].id)}],
     ).json()
     assert "With guest" in visible_titles(world, "other")
@@ -543,7 +563,9 @@ def test_request_and_invitation_notifications_cannot_be_deleted(world):
     add_default_approver(world, "approver")
     room = world["resource"]("Room")
     event = world["book"](
-        world["api"]["booker"], room["id"], participants=[{"user_id": str(world["users"]["other"].id)}],
+        world["api"]["booker"],
+        room["id"],
+        participants=[{"user_id": str(world["users"]["other"].id)}],
     ).json()
     request_note = Notification.objects.get(user=world["users"]["approver"], type="approval_requested")
     invite = Notification.objects.get(user=world["users"]["other"], type="participant_added")
@@ -559,7 +581,9 @@ def test_notification_groups_and_live_status(world):
     add_default_approver(world, "approver")
     room = world["resource"]("Room")
     event = world["book"](
-        world["api"]["booker"], room["id"], participants=[{"user_id": str(world["users"]["approver"].id)}],
+        world["api"]["booker"],
+        room["id"],
+        participants=[{"user_id": str(world["users"]["approver"].id)}],
     ).json()
     api = world["api"]["approver"]
 

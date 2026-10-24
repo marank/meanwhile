@@ -70,10 +70,11 @@ class Auth(base_auth.BaseAuth):
         if remembered is not None and hmac.compare_digest(remembered[0], digest) and remembered[1] in candidates:
             matched = remembered[1]
         else:
-            matched = _matching_hash(user, app_passwords, password)
-            if matched is None:
+            found = _matching_hash(user, app_passwords, password)
+            if found is None:
                 _count_failure(failures)
                 return ""
+            matched = found
             _matched[key] = (digest, matched)
 
         app_password = candidates.get(matched)  # None: the account password (its hash may just have been upgraded)

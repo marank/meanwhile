@@ -2,6 +2,7 @@
 Notification endpoints.
 """
 
+from uuid import UUID
 
 from django.db.models import Q
 from django.utils import timezone
@@ -22,7 +23,7 @@ UNDELETABLE_TYPES = {"approval_requested", "participant_added"}
 TYPE_GROUPS = {"approvals": APPROVAL_TYPES, "invitations": INVITATION_TYPES}
 
 
-def _my_responses(user, notifications) -> dict[str, str]:
+def _my_responses(user, notifications) -> dict[UUID, str]:
     event_ids = {n.event_id for n in notifications if n.type in INVITATION_TYPES and n.event_id}
     if not event_ids:
         return {}
@@ -33,7 +34,7 @@ def _my_responses(user, notifications) -> dict[str, str]:
     )
 
 
-def _serialize(notification: Notification, responses: dict[str, str] | None = None) -> dict:
+def _serialize(notification: Notification, responses: dict[UUID, str] | None = None) -> dict:
     event = notification.event
     return {
         "id": notification.id,
@@ -47,7 +48,7 @@ def _serialize(notification: Notification, responses: dict[str, str] | None = No
         "read_at": notification.read_at,
         "created_at": notification.created_at,
         "event_status": event.status if event else None,
-        "response_status": (responses or {}).get(notification.event_id),
+        "response_status": responses.get(notification.event_id) if responses and notification.event_id else None,
         "deletable": notification.type not in UNDELETABLE_TYPES,
     }
 
@@ -74,9 +75,7 @@ def counts(request):
     (pending approvals and unanswered invitations)."""
     unread = Notification.objects.filter(user=request.user, read_at__isnull=True).count()
     approvals = (
-        Notification.objects.filter(
-            user=request.user, type="approval_requested", event__status=EventStatus.PENDING
-        )
+        Notification.objects.filter(user=request.user, type="approval_requested", event__status=EventStatus.PENDING)
         .values("event_id")
         .distinct()
         .count()

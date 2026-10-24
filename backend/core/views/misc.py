@@ -2,7 +2,6 @@
 Health and public settings endpoints.
 """
 
-
 from ninja import Router
 
 from core.models import get_or_create_app_settings

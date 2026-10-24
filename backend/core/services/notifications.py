@@ -81,9 +81,7 @@ def notify(
     calendar = Calendar.objects.filter(id=calendar_id).first() if calendar_id else None
     event = Event.objects.filter(id=event_id).first() if event_id else None
     app = mail.app_name()
-    mail.send(
-        _notification_email(user, type, actor, title, calendar, event, data or {}, app) for user in recipients
-    )
+    mail.send(_notification_email(user, type, actor, title, calendar, event, data or {}, app) for user in recipients)
 
 
 def _notification_email(user, type, actor, title, calendar, event, data, app: str):

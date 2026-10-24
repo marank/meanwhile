@@ -18,9 +18,14 @@ pytestmark = pytest.mark.django_db
 
 def invite(world, email="guest@example.test"):
     owner = world["api"]["owner"]
-    event = owner.post(f"/calendars/{world['cal']['id']}/events", {
-        "title": "Planning", "start": iso(BASE), "end": iso(BASE + timedelta(hours=1)),
-    }).json()
+    event = owner.post(
+        f"/calendars/{world['cal']['id']}/events",
+        {
+            "title": "Planning",
+            "start": iso(BASE),
+            "end": iso(BASE + timedelta(hours=1)),
+        },
+    ).json()
     assert owner.post(f"/events/{event['id']}/participants", {"email": email}).status_code == 200
 
 

@@ -10,29 +10,21 @@ from core.models.users import User
 
 
 class Category(UUIDModel, TimestampedModel):
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="categories"
-    )
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="categories")
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     color = models.CharField(max_length=7, default="#64748b")
 
     class Meta:
         db_table = "categories"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["calendar", "name"], name="uq_category_calendar_name"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["calendar", "name"], name="uq_category_calendar_name")]
 
     def __str__(self) -> str:
         return self.name
 
 
 class Resource(UUIDModel, TimestampedModel):
-    calendar = models.ForeignKey(
-        Calendar, on_delete=models.CASCADE, related_name="resources"
-    )
+    calendar = models.ForeignKey(Calendar, on_delete=models.CASCADE, related_name="resources")
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     color = models.CharField(max_length=7, default="#f59e0b")
@@ -55,15 +47,9 @@ class Resource(UUIDModel, TimestampedModel):
 
 
 class ResourceApprover(UUIDModel):
-    resource = models.ForeignKey(
-        Resource, on_delete=models.CASCADE, related_name="approvers"
-    )
+    resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name="approvers")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
 
     class Meta:
         db_table = "resource_approvers"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["resource", "user"], name="uq_resource_approver"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=["resource", "user"], name="uq_resource_approver")]

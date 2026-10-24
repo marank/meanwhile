@@ -23,7 +23,7 @@ Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 def _known_zone(name: str) -> str:
     try:
         ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
+    except ZoneInfoNotFoundError, ValueError:
         raise ValueError("Unknown time zone") from None
     return name
 
@@ -568,7 +568,7 @@ class EventParticipantInvite(Schema):
     status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
     @model_validator(mode="after")
-    def require_user_id_or_email(self) -> "EventParticipantInvite":
+    def require_user_id_or_email(self) -> EventParticipantInvite:
         if self.user_id is None and self.email is None:
             raise ValueError("Either user_id or email is required")
         return self
@@ -612,7 +612,7 @@ class EventParticipantCreate(Schema):
     status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
     @model_validator(mode="after")
-    def require_user_id_or_email(self) -> "EventParticipantCreate":
+    def require_user_id_or_email(self) -> EventParticipantCreate:
         if self.user_id is None and self.email is None:
             raise ValueError("Either user_id or email is required")
         return self

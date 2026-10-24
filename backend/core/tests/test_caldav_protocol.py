@@ -6,6 +6,7 @@ import base64
 import io
 import re
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import unquote
 from wsgiref.util import setup_testing_defaults
 from zoneinfo import ZoneInfo
@@ -26,7 +27,7 @@ PASSWORD = "secret-pw"
 
 
 def dav(method: str, path: str, user: User | str | None = None, body: str = "", password=PASSWORD, **headers):
-    environ = {}
+    environ: dict[str, Any] = {}
     setup_testing_defaults(environ)
     data = body.encode()
     environ.update(
@@ -87,7 +88,9 @@ def sync_collection(path: str, user: User, token: str = "") -> tuple[int, str]:
 
 
 def sync_token(xml: str) -> str:
-    return re.search(r"<sync-token>([^<]*)</sync-token>", xml).group(1)
+    match = re.search(r"<sync-token>([^<]*)</sync-token>", xml)
+    assert match is not None
+    return match.group(1)
 
 
 @pytest.fixture
@@ -236,8 +239,12 @@ def test_events_stay_at_the_href_the_client_chose(team):
 def test_events_from_the_app_are_found_by_uid(team):
     owner = team["users"]["owner"]
     Event.objects.create(
-        calendar=team["calendar"], creator=owner, title="From the app", uid="app-event",
-        start=datetime(2030, 10, 7, 9, tzinfo=UTC), end=datetime(2030, 10, 7, 10, tzinfo=UTC),
+        calendar=team["calendar"],
+        creator=owner,
+        title="From the app",
+        uid="app-event",
+        start=datetime(2030, 10, 7, 9, tzinfo=UTC),
+        end=datetime(2030, 10, 7, 10, tzinfo=UTC),
     )
     status, content, _ = dav("GET", team["path"] + "app-event.ics", owner)
     assert status == 200 and "SUMMARY:From the app" in content
@@ -249,7 +256,9 @@ def changes(xml: str) -> dict[str, str]:
     """href -> "found" or "deleted" from a sync-collection answer."""
     result = {}
     for response in re.findall(r"<response>(.*?)</response>", xml, re.S):
-        href = unquote(re.search(r"<href>([^<]*)</href>", response).group(1))
+        match = re.search(r"<href>([^<]*)</href>", response)
+        assert match is not None
+        href = unquote(match.group(1))
         result[href.rsplit("/", 1)[1]] = "deleted" if "404 Not Found" in response else "found"
     return result
 
@@ -292,7 +301,9 @@ def test_sync_drops_bookings_that_turn_hidden(team):
     assert changes(sync_collection(path, owner, token)[1]) == {"booking.ics": "deleted"}
 
 
-@pytest.mark.parametrize("token", ["garbage", "http://radicale.org/ns/sync/0123abc", "http://radicale.org/ns/sync/1000-x"])
+@pytest.mark.parametrize(
+    "token", ["garbage", "http://radicale.org/ns/sync/0123abc", "http://radicale.org/ns/sync/1000-x"]
+)
 def test_unknown_or_expired_sync_tokens_ask_for_a_full_sync(team, token):
     status, content = sync_collection(team["path"], team["users"]["owner"], token)
     assert status == 403 and "valid-sync-token" in content
@@ -302,7 +313,9 @@ def test_ctag_changes_when_an_event_is_deleted(team):
     body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:prop><cs:getctag/></d:prop></d:propfind>'
 
     def ctag():
-        return re.search(r"getctag>([^<]*)<", dav("PROPFIND", team["path"], team["users"]["owner"], body, DEPTH="0")[1]).group(1)
+        return re.search(
+            r"getctag>([^<]*)<", dav("PROPFIND", team["path"], team["users"]["owner"], body, DEPTH="0")[1]
+        ).group(1)
 
     put(team, "one.ics")
     put(team, "two.ics")
@@ -320,11 +333,15 @@ def series_ics(uid: str, *, master_last: bool = False, with_override: bool = Tru
         "SUMMARY:Daily\r\nEND:VEVENT\r\n"
     )
     override = (
-        f"BEGIN:VEVENT\r\nUID:{uid}\r\nDTSTAMP:20300101T000000Z\r\n"
-        "RECURRENCE-ID;TZID=Europe/Berlin:20301009T090000\r\n"
-        "DTSTART;TZID=Europe/Berlin:20301009T140000\r\nDTEND;TZID=Europe/Berlin:20301009T150000\r\n"
-        "SUMMARY:Daily (moved)\r\nEND:VEVENT\r\n"
-    ) if with_override else ""
+        (
+            f"BEGIN:VEVENT\r\nUID:{uid}\r\nDTSTAMP:20300101T000000Z\r\n"
+            "RECURRENCE-ID;TZID=Europe/Berlin:20301009T090000\r\n"
+            "DTSTART;TZID=Europe/Berlin:20301009T140000\r\nDTEND;TZID=Europe/Berlin:20301009T150000\r\n"
+            "SUMMARY:Daily (moved)\r\nEND:VEVENT\r\n"
+        )
+        if with_override
+        else ""
+    )
     body = override + master if master_last else master + override
     return f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n{body}END:VCALENDAR\r\n"
 
@@ -369,8 +386,10 @@ def test_series_with_exceptions_round_trip(team, master_last):
 
 
 def test_all_day_events_keep_their_length(team):
-    text = ics("allday").replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007").replace(
-        "DTEND:20301007T100000Z", "DTEND;VALUE=DATE:20301008"
+    text = (
+        ics("allday")
+        .replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007")
+        .replace("DTEND:20301007T100000Z", "DTEND;VALUE=DATE:20301008")
     )
     assert put(team, "allday.ics", text=text) == 201
     event = Event.objects.get(uid="allday")
@@ -394,12 +413,16 @@ def test_tasks_are_refused(team):
 
 
 def test_all_day_series_until_a_date(team):
-    text = ics("weekly").replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007").replace(
-        "DTEND:20301007T100000Z", "DTEND;VALUE=DATE:20301008\r\nRRULE:FREQ=WEEKLY;UNTIL=20301021"
+    text = (
+        ics("weekly")
+        .replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007")
+        .replace("DTEND:20301007T100000Z", "DTEND;VALUE=DATE:20301008\r\nRRULE:FREQ=WEEKLY;UNTIL=20301021")
     )
     assert put(team, "weekly.ics", text=text) == 201
     assert [s for s, _ in occurrences_in_app(team)] == [
-        "2030-10-07T00:00:00Z", "2030-10-14T00:00:00Z", "2030-10-21T00:00:00Z",
+        "2030-10-07T00:00:00Z",
+        "2030-10-14T00:00:00Z",
+        "2030-10-21T00:00:00Z",
     ]
     content = dav("GET", team["path"] + "weekly.ics", team["users"]["owner"])[1]
     assert "UNTIL=20301021" in content and "UNTIL=20301021T" not in content
@@ -410,8 +433,13 @@ def test_caldav_shows_the_current_booking_status(team):
 
     owner = team["users"]["owner"]
     event = Event.objects.create(
-        calendar=team["calendar"], creator=owner, title="Room", uid="booking", status="pending",
-        start=datetime(2030, 10, 7, 9, tzinfo=UTC), end=datetime(2030, 10, 7, 10, tzinfo=UTC),
+        calendar=team["calendar"],
+        creator=owner,
+        title="Room",
+        uid="booking",
+        status="pending",
+        start=datetime(2030, 10, 7, 9, tzinfo=UTC),
+        end=datetime(2030, 10, 7, 10, tzinfo=UTC),
     )
     event.raw_ical = serialize_event_ical(event)
     event.save()
@@ -603,8 +631,10 @@ def test_long_titles_are_cut(team):
 def test_all_day_calendars_refuse_timed_events(team):
     Calendar.objects.filter(id=team["calendar"].id).update(force_all_day=True)
     assert put(team, "timed.ics") == 403
-    text = ics("day").replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007").replace(
-        "DTEND:20301007T100000Z", "DTEND;VALUE=DATE:20301008"
+    text = (
+        ics("day")
+        .replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007")
+        .replace("DTEND:20301007T100000Z", "DTEND;VALUE=DATE:20301008")
     )
     assert put(team, "day.ics", text=text) == 201
 
@@ -615,7 +645,9 @@ def test_changes_from_clients_are_recorded(team):
     put(team, "daily.ics", "own", series_ics("daily", with_override=False))
     put(team, "daily.ics", "own", series_ics("daily").replace("SUMMARY:Daily\r\n", "SUMMARY:Standup\r\n"))
     series = Event.objects.get(uid="daily", parent__isnull=True)
-    entries = [(a.action, a.actor.email, a.details) for a in EventActivity.objects.filter(event=series).order_by("created_at")]
+    entries = [
+        (a.action, a.actor.email, a.details) for a in EventActivity.objects.filter(event=series).order_by("created_at")
+    ]
     assert entries[0] == ("created", "own@example.test", None)
     assert entries[1] == ("updated", "own@example.test", {"fields": ["title"]})
     assert ("occurrence_changed", "own@example.test", {"occurrence": "2030-10-09T07:00:00+00:00"}) in entries
@@ -662,7 +694,10 @@ def test_extra_dates_of_a_series(team):
     )
     assert put(team, "extra.ics", text=text) == 201
     assert [s for s, _ in occurrences_in_app(team)] == [
-        "2030-10-07T09:00:00Z", "2030-10-09T09:00:00Z", "2030-10-14T09:00:00Z", "2030-10-20T09:00:00Z",
+        "2030-10-07T09:00:00Z",
+        "2030-10-09T09:00:00Z",
+        "2030-10-14T09:00:00Z",
+        "2030-10-20T09:00:00Z",
     ]
     content = dav("GET", team["path"] + "extra.ics", team["users"]["owner"])[1]
     assert "RDATE:20301009T090000Z" in content and "RDATE:20301020T090000Z" in content
@@ -719,18 +754,25 @@ def test_reminders_are_per_user(team):
     )
     assert put(team, "remind.ics", text=text) == 201
     event = Event.objects.get(uid="remind")
-    assert sorted(EventReminder.objects.filter(event=event, user=team["users"]["owner"]).values_list("minutes_before", flat=True)) == [15, 1440]
+    assert sorted(
+        EventReminder.objects.filter(event=event, user=team["users"]["owner"]).values_list("minutes_before", flat=True)
+    ) == [15, 1440]
 
     owner_view = dav("GET", team["path"] + "remind.ics", team["users"]["owner"])[1]
     assert owner_view.count("BEGIN:VALARM") == 2 and "TRIGGER:-PT15M" in owner_view
     assert "BEGIN:VALARM" not in dav("GET", team["path"] + "remind.ics", team["users"]["read"])[1]
-    assert "BEGIN:VALARM" not in __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
+    assert (
+        "BEGIN:VALARM"
+        not in __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
+    )
 
 
 def test_location_and_booked_place(team):
     from core.models import Resource
 
-    text = vevent_ics("loc", "DTSTART:20301007T090000Z\r\nDTEND:20301007T100000Z\r\nSUMMARY:Loc\r\nLOCATION:Café Central\r\n")
+    text = vevent_ics(
+        "loc", "DTSTART:20301007T090000Z\r\nDTEND:20301007T100000Z\r\nSUMMARY:Loc\r\nLOCATION:Café Central\r\n"
+    )
     assert put(team, "loc.ics", text=text) == 201
     event = Event.objects.get(uid="loc")
     assert event.location == "Café Central" and event.location_resource is None
@@ -755,8 +797,12 @@ def add_events(team, numbers: range) -> None:
     for i in numbers:
         start = COST_START + timedelta(hours=i)
         Event.objects.create(
-            calendar=team["calendar"], creator=team["users"]["owner"], uid=f"event-{i}",
-            title=f"E{i}", start=start, end=start + timedelta(minutes=30),
+            calendar=team["calendar"],
+            creator=team["users"]["owner"],
+            uid=f"event-{i}",
+            title=f"E{i}",
+            start=start,
+            end=start + timedelta(minutes=30),
         )
 
 
@@ -821,7 +867,7 @@ def test_expanded_queries_with_etags_work_for_series(team):
     query = (
         '<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
         '<d:prop><d:getetag/><c:calendar-data><c:expand start="20301001T000000Z" end="20301031T000000Z"/>'
-        "</c:calendar-data></d:prop><c:filter><c:comp-filter name=\"VCALENDAR\"><c:comp-filter name=\"VEVENT\">"
+        '</c:calendar-data></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">'
         '<c:time-range start="20301001T000000Z" end="20301031T000000Z"/></c:comp-filter></c:comp-filter>'
         "</c:filter></c:calendar-query>"
     )

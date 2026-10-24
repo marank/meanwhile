@@ -107,9 +107,9 @@ def test_the_layout_comes_in_one_request(user_client):
 
     body = client.get("/api/layout").json()
     assert [f["name"] for f in body["folders"]] == ["First", "Projects"]
-    assert [(c["calendar"]["name"], c["membership"]["folder_id"], c["membership"]["position"]) for c in body["calendars"]] == [
-        ("Work", str(folder.id), 2)
-    ]
+    assert [
+        (c["calendar"]["name"], c["membership"]["folder_id"], c["membership"]["position"]) for c in body["calendars"]
+    ] == [("Work", str(folder.id), 2)]
 
 
 def test_the_layout_shows_only_the_users_own_folders(user_client):
@@ -178,10 +178,12 @@ def test_items_that_are_gone_are_skipped(user_client):
     calendar = create_calendar(user, "Work")
     response = client.patch(
         "/api/layout/items",
-        {"items": [
-            {"type": "folder", "id": "gone", "parent_id": None, "position": 0},
-            {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 7},
-        ]},
+        {
+            "items": [
+                {"type": "folder", "id": "gone", "parent_id": None, "position": 0},
+                {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 7},
+            ]
+        },
         content_type="application/json",
     )
     assert response.status_code == 200

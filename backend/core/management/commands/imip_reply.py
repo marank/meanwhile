@@ -4,7 +4,6 @@ email to the event's organizer address. Sent through the configured mail server 
 from where `fetch_imip` picks it up; or applied right away with `--process`.
 """
 
-
 import icalendar
 from django.core.mail import EmailMessage
 from django.core.management.base import BaseCommand, CommandError

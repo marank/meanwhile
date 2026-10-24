@@ -3,6 +3,7 @@ Model signal handlers.
 """
 
 from datetime import timedelta
+from uuid import UUID
 
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
@@ -32,15 +33,15 @@ def _deleted_along(origin, model) -> bool:
     return isinstance(origin, model) or getattr(origin, "model", None) is model
 
 
-def _touch_series(event: Event) -> None:
+def _touch_series(series_id: UUID) -> None:
     # A changed occurrence is part of its series' iCalendar object, so the series counts as changed.
-    Event.objects.filter(pk=event.parent_id).update(updated_at=timezone.now())
+    Event.objects.filter(pk=series_id).update(updated_at=timezone.now())
 
 
 @receiver(post_save, sender=Event)
 def touch_series_of_saved_occurrence(sender, instance: Event, **kwargs) -> None:
     if instance.parent_id:
-        _touch_series(instance)
+        _touch_series(instance.parent_id)
 
 
 @receiver(post_delete, sender=Event)
@@ -49,7 +50,7 @@ def remember_deleted_event(sender, instance: Event, origin=None, **kwargs) -> No
         return  # the calendar's record of deleted events goes with it
     if instance.parent_id:
         if not (isinstance(origin, Event) and origin.pk == instance.parent_id):
-            _touch_series(instance)  # not when the whole series goes
+            _touch_series(instance.parent_id)  # not when the whole series goes
         return
     # Old records are removed regularly (core.tasks).
     DeletedEvent.objects.create(calendar_id=instance.calendar_id, href=instance.dav_href)
@@ -96,9 +97,7 @@ def _calendar_audience(calendar_id) -> set:
     """Everyone whose list of calendars shows the calendar: its members (granted, from a group or added) and
     the members of linked groups."""
     users = set(CalendarMember.objects.filter(calendar_id=calendar_id).values_list("user_id", flat=True))
-    users |= set(
-        User.objects.filter(groups__calendar_groups__calendar_id=calendar_id).values_list("pk", flat=True)
-    )
+    users |= set(User.objects.filter(groups__calendar_groups__calendar_id=calendar_id).values_list("pk", flat=True))
     owner = Calendar.objects.filter(pk=calendar_id).values_list("owner_id", flat=True).first()
     if owner:
         users.add(owner)
@@ -177,12 +176,12 @@ def _group_members_changed(group: UserGroup, action: str, user_ids: set | None) 
     """group.user_set.add/remove/clear: these users may gain or lose the group's calendars."""
     if action == "pre_clear":
         # Once cleared, the group can't tell who was in it.
-        group._cleared_user_ids = list(group.user_set.values_list("pk", flat=True))
+        group.__dict__["_cleared_user_ids"] = list(group.user_set.values_list("pk", flat=True))
         return
     if action == "post_clear":
         user_ids = group.__dict__.pop("_cleared_user_ids", [])
-    elif action not in {"post_add", "post_remove"}:
-        return
+    elif action not in {"post_add", "post_remove"} or user_ids is None:
+        return  # adding and removing always name the users
     for user_id in user_ids:
         memberships.sync_user_groups(user_id, [group.pk])
 

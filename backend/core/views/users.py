@@ -13,6 +13,7 @@ from core.schemas import (
     AppPasswordCreate,
     AppPasswordCreated,
     AppPasswordOut,
+    EmailNotifications,
     OverviewSettingsOut,
     OverviewSettingsUpdate,
     ProfileOut,
@@ -27,7 +28,7 @@ router = Router()
 
 def _profile(user: User) -> ProfileOut:
     data = UserOut.model_validate(user).dict()
-    return ProfileOut(**data, email_notifications=email_preferences(user))
+    return ProfileOut(**data, email_notifications=EmailNotifications.model_validate(email_preferences(user)))
 
 
 @router.get("/users/me", response=ProfileOut)
