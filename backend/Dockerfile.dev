@@ -1,5 +1,6 @@
-# Development image for docker-compose.dev.yml: the source is mounted at /app, so the virtualenv
-# lives outside of it (/opt/venv). Rebuild after changing the dependencies (uv.lock).
+# Development image for compose.dev.yml: the source is mounted at /app, so the virtualenv lives
+# outside of it (/opt/venv). Rebuild after changing the dependencies (uv.lock).
+# Runs as root on purpose: with rootless Docker that is the host user, who owns the mounted source.
 FROM ghcr.io/astral-sh/uv:python3.14-trixie
 
 ENV UV_LINK_MODE=copy \
@@ -9,8 +10,6 @@ ENV UV_LINK_MODE=copy \
     PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev && rm -rf /var/lib/apt/lists/*
 
 # With the dev dependencies, so that the tests run in the container too.
 COPY pyproject.toml uv.lock ./

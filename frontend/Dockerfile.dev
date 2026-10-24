@@ -1,4 +1,5 @@
-# Development image for docker-compose.dev.yml: the source is mounted at /app, node_modules is a volume.
+# Development image for compose.dev.yml: the source is mounted at /app, node_modules is a volume.
+# Runs as root on purpose: with rootless Docker that is the host user, who owns the mounted source.
 FROM node:24-alpine
 
 RUN npm install -g pnpm@10.28.0

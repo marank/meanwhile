@@ -182,7 +182,10 @@ jobs:
           }
           trivy --scanners secret --exit-code 1
           trivy --scanners vuln --severity CRITICAL --ignore-unfixed --exit-code 1
-          trivy --scanners misconfig --severity HIGH,CRITICAL --exit-code 1
+          # The development images run as root on purpose (with rootless Docker that is the host
+          # user, who owns the mounted source); they are never deployed.
+          trivy --scanners misconfig --severity HIGH,CRITICAL --exit-code 1 \
+            --skip-files backend/Dockerfile.dev --skip-files frontend/Dockerfile.dev
           trivy --scanners vuln --severity HIGH
 
   # --- Image: build, smoke-test, scan, push ---------------------------------------
