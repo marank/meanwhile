@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import * as api from '@/api'
 import type { User } from '@/api'
 import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
@@ -13,6 +14,7 @@ const { t, locale } = useI18n()
 const auth = useAuthStore()
 const theme = useThemeStore()
 const { busy, run } = useAction()
+const { busy: changingPassword, run: runPasswordChange } = useAction()
 
 const languages: Array<{ value: Locale; label: string }> = [
   { value: 'en', label: 'English' },
@@ -42,6 +44,17 @@ const form = ref({
   timeFormat: auth.user?.time_format ?? ('auto' as User['time_format']),
   dateFormat: auth.user?.date_format ?? ('auto' as User['date_format']),
 })
+
+const passwords = ref({ current: '', next: '' })
+
+async function changePassword() {
+  const value = passwords.value
+  const changed = await runPasswordChange(() => api.changePassword(value.current, value.next), {
+    success: t('auth.passwordChanged'),
+    failure: t('auth.passwordChangeFailed'),
+  })
+  if (changed) passwords.value = { current: '', next: '' }
+}
 
 // Name, formats and language belong to the account (emails are written in its language);
 // the color scheme is kept in this browser.
@@ -76,6 +89,41 @@ function save() {
           </label>
         </div>
       </section>
+
+      <!-- A form of its own, saved by its own button: the settings' Save doesn't send passwords. -->
+      <form class="space-y-3 border-t border-line pt-6" @submit.prevent="changePassword">
+        <h3 class="text-sm font-semibold text-gray-800">{{ $t('auth.changePassword') }}</h3>
+        <div class="grid gap-5 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('auth.currentPassword') }}</span>
+            <input
+              v-model="passwords.current"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="w-full rounded-lg border border-line px-3 py-2"
+            />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('auth.newPassword') }}</span>
+            <input
+              v-model="passwords.next"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="8"
+              class="w-full rounded-lg border border-line px-3 py-2"
+            />
+          </label>
+        </div>
+        <button
+          type="submit"
+          :disabled="changingPassword"
+          class="rounded-lg border border-line px-4 py-2 text-sm hover:bg-hover disabled:opacity-50"
+        >
+          {{ $t('auth.changePassword') }}
+        </button>
+      </form>
 
       <section class="space-y-3 border-t border-line pt-6">
         <h3 class="text-sm font-semibold text-gray-800">{{ $t('app.appearance') }}</h3>

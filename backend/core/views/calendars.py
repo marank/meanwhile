@@ -54,7 +54,9 @@ router = Router()
 
 
 def _make_feed_url(request, token: str) -> str:
-    base = (settings.BASE_URL or "").rstrip("/")
+    # The app's public address: behind a proxy (Vite in development, too) the request's host is the
+    # backend's own, which subscribers can't reach.
+    base = settings.APP_URL
     if not base:
         base = f"{request.scheme}://{request.get_host()}"
     return f"{base}/ics/{token}.ics"
@@ -321,6 +323,8 @@ def remove_member(request, calendar_id: str, user_id: str):
     if get_membership(calendar, user) is None:
         CalendarApprover.objects.filter(calendar=calendar, user=user).delete()
         ResourceApprover.objects.filter(resource__calendar=calendar, user=user).delete()
+        # And their feed URL goes for good: added again later, they get a new one.
+        FeedToken.objects.filter(calendar=calendar, user=user).delete()
     return {"ok": True}
 
 

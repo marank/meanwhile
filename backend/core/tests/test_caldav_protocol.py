@@ -8,6 +8,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote
 from wsgiref.util import setup_testing_defaults
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth.hashers import make_password
@@ -811,3 +812,69 @@ def test_the_feed_leaves_out_what_clients_note_for_members(team):
     feed = __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
     assert "SUMMARY:Meeting" in feed and "TRANSP:OPAQUE" in feed
     assert "Call Ann" not in feed and "X-PRIVATE-NOTE" not in feed
+
+
+def test_expanded_queries_with_etags_work_for_series(team):
+    owner = team["users"]["owner"]
+    body = ics("series").replace("SUMMARY:Meeting\r\n", "SUMMARY:Meeting\r\nRRULE:FREQ=DAILY;COUNT=3\r\n")
+    assert dav("PUT", team["path"] + "series.ics", owner, body, content_type="text/calendar")[0] == 201
+    query = (
+        '<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+        '<d:prop><d:getetag/><c:calendar-data><c:expand start="20301001T000000Z" end="20301031T000000Z"/>'
+        "</c:calendar-data></d:prop><c:filter><c:comp-filter name=\"VCALENDAR\"><c:comp-filter name=\"VEVENT\">"
+        '<c:time-range start="20301001T000000Z" end="20301031T000000Z"/></c:comp-filter></c:comp-filter>'
+        "</c:filter></c:calendar-query>"
+    )
+    status, content, _ = dav("REPORT", team["path"], owner, query, DEPTH="1")
+    assert status == 207, content
+    assert content.count("RECURRENCE-ID") == 3
+
+
+def test_zones_clients_define_themselves_keep_their_local_times(team):
+    owner = team["users"]["owner"]
+    body = (
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+        "BEGIN:VTIMEZONE\r\nTZID:Customized Time Zone\r\n"
+        "BEGIN:STANDARD\r\nDTSTART:16010101T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\n"
+        "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10\r\nEND:STANDARD\r\n"
+        "BEGIN:DAYLIGHT\r\nDTSTART:16010101T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200\r\n"
+        "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3\r\nEND:DAYLIGHT\r\nEND:VTIMEZONE\r\n"
+        "BEGIN:VEVENT\r\nUID:custom-tz\r\nDTSTAMP:20300101T000000Z\r\n"
+        "DTSTART;TZID=Customized Time Zone:20301014T090000\r\nDTEND;TZID=Customized Time Zone:20301014T100000\r\n"
+        "RRULE:FREQ=WEEKLY;COUNT=4\r\nSUMMARY:Weekly\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    assert dav("PUT", team["path"] + "custom-tz.ics", owner, body, content_type="text/calendar")[0] == 201
+    event = Event.objects.get(uid="custom-tz")
+    assert event.timezone != "UTC"
+    from core.services.recurrence import expand_event
+
+    starts = [s for s, _ in expand_event(event, event.start, event.start + timedelta(days=30))]
+    # 09:00 local before and after the clocks go back on 27 October.
+    assert [s.astimezone(ZoneInfo(event.timezone)).hour for s in starts] == [9, 9, 9, 9]
+
+
+def test_events_ending_before_they_start_are_refused(team):
+    owner = team["users"]["owner"]
+    body = ics("backwards", start="20301007T100000Z", end="20301007T090000Z")
+    assert dav("PUT", team["path"] + "backwards.ics", owner, body, content_type="text/calendar")[0] == 400
+
+
+def test_attendees_other_than_email_addresses_are_left_out(team):
+    owner = team["users"]["owner"]
+    body = ics("people").replace(
+        "SUMMARY:Meeting\r\n",
+        "SUMMARY:Meeting\r\nORGANIZER:mailto:owner@example.test\r\nATTENDEE:urn:uuid:1234\r\n"
+        f"ATTENDEE:mailto:{'a' * 300}@example.org\r\nATTENDEE;PARTSTAT=ACCEPTED:mailto:guest@elsewhere.test\r\n",
+    )
+    assert dav("PUT", team["path"] + "people.ics", owner, body, content_type="text/calendar")[0] == 201
+    assert list(Event.objects.get(uid="people").participants.values_list("email", flat=True)) == [
+        "guest@elsewhere.test"
+    ]
+
+
+def test_xml_with_entities_is_a_bad_request(team):
+    body = (
+        '<?xml version="1.0"?><!DOCTYPE d [<!ENTITY a "aaaa">]>'
+        '<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
+    )
+    assert dav("PROPFIND", team["path"], team["users"]["owner"], body, DEPTH="0")[0] == 400

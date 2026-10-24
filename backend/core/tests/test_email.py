@@ -352,3 +352,115 @@ def test_titles_over_several_lines_make_one_line_subjects():
 
     assert one_line("Team\nmeeting\r\n  today") == "Team meeting today"
     assert "\n" not in sender("Ann\nOther", "App")
+
+
+# Occurrences, addresses and answers in detail -----------------------------------------------------
+
+
+def occurrence_url(event, start):
+    return f"/events/{event['id']}/occurrences/{iso(start).replace('+', '%2B')}?scope=this"
+
+
+def test_cancelling_one_occurrence_cancels_only_that_one(world):
+    event = create(world, rrule="FREQ=DAILY;COUNT=3")
+    invite(world, event)
+    second = BASE + timedelta(days=1)
+    override = world["api"]["owner"].patch(occurrence_url(event, second), {"title": "Moved"}).json()
+    assert world["api"]["owner"].post(f"/events/{override['id']}/cancel").status_code == 200
+    method, vevent = itip(to(GUEST)[-1])
+    assert method == "CANCEL"
+    assert vevent["RECURRENCE-ID"].dt.astimezone(BASE.tzinfo) == second and "RRULE" not in vevent
+
+
+def test_invitations_go_to_single_email_addresses_only(world):
+    event = create(world)
+    api = world["api"]["owner"]
+    for address in ("not-an-email", "", "Evil <victim@elsewhere.test>", "a@x.test, b@x.test", "a@x.test\r\nBcc: b@x.test", "a" * 300 + "@x.test"):
+        assert api.post(f"/events/{event['id']}/participants", {"email": address}).status_code == 422, address
+    assert django_mail.outbox == []
+
+
+def test_nobody_sends_more_than_the_hourly_invitations(world, monkeypatch):
+    from core.views import events
+
+    monkeypatch.setattr(events, "MAX_INVITATIONS_PER_HOUR", 2)
+    event = create(world)
+    api = world["api"]["owner"]
+    assert [
+        api.post(f"/events/{event['id']}/participants", {"email": f"g{i}@elsewhere.test"}).status_code for i in range(3)
+    ] == [200, 200, 429]
+
+
+def test_who_is_invited_to_one_occurrence_gets_that_one_only(world):
+    event = create(world, rrule="FREQ=DAILY;COUNT=3")
+    second = BASE + timedelta(days=1)
+    override = world["api"]["owner"].patch(occurrence_url(event, second), {"title": "Moved"}).json()
+    participant = invite(world, {"id": override["id"]})
+    ical = icalendar.Calendar.from_ical(to(GUEST)[-1].attachments[0][1])
+    vevents = ical.walk("VEVENT")
+    assert len(vevents) == 1 and "RRULE" not in vevents[0] and "RECURRENCE-ID" in vevents[0]
+    assert "ORGANIZER" in vevents[0]
+    assert "Moved" in to(GUEST)[-1].subject
+
+    # Taken off it again, they hear so for that occurrence.
+    world["api"]["owner"].delete(f"/events/{override['id']}/participants/{participant['id']}")
+    method, vevent = itip(to(GUEST)[-1])
+    assert method == "CANCEL" and "RECURRENCE-ID" in vevent
+
+
+def test_answers_for_one_unchanged_occurrence_count(world):
+    event = create(world, rrule="FREQ=DAILY;COUNT=3")
+    invite(world, event)
+    second = BASE + timedelta(days=1)
+    vevent = icalendar.Event()
+    vevent.add("uid", event["uid"])
+    vevent.add("dtstamp", BASE)
+    vevent.add("recurrence-id", second)
+    vevent.add("attendee", icalendar.vCalAddress(f"mailto:{GUEST}"), parameters={"PARTSTAT": "DECLINED"})
+    ical = icalendar.Calendar()
+    ical.add("method", "REPLY")
+    ical.add_component(vevent)
+    assert process_itip(ical.to_ical(), GUEST) == [f"{event['uid']}: {GUEST}: declined"]
+    statuses = dict(
+        EventParticipant.objects.filter(email=GUEST).values_list("event__recurrence_id", "status")
+    )
+    assert statuses == {None: "needs_action", second: "declined"}
+
+    # The answer for the series leaves that one alone.
+    process_email(reply(GUEST, event["uid"], "ACCEPTED"))
+    statuses = dict(EventParticipant.objects.filter(email=GUEST).values_list("event__recurrence_id", "status"))
+    assert statuses == {None: "accepted", second: "declined"}
+
+
+def test_answers_are_asked_again_when_the_event_moves(world):
+    event = create(world)
+    invite(world, event)
+    process_email(reply(GUEST, event["uid"], "ACCEPTED"))
+    world["api"]["owner"].patch(f"/events/{event['id']}", {"start": iso(BASE + timedelta(days=1)), "end": iso(BASE + timedelta(days=1, hours=1))})
+    assert status_of(event) == "needs_action"
+    _, vevent = itip(to(GUEST)[-1])
+    assert vevent["ATTENDEE"].params["PARTSTAT"] == "NEEDS-ACTION"
+
+
+def test_cancelled_events_take_no_answers_and_are_cancelled_once(world):
+    event = create(world)
+    invite(world, event)
+    world["api"]["owner"].post(f"/events/{event['id']}/cancel")
+    assert "cancelled" in process_email(reply(GUEST, event["uid"], "DECLINED"))[0]
+    assert status_of(event) == "needs_action"
+    cancels = len(to(GUEST))
+    world["api"]["owner"].delete(f"/events/{event['id']}")
+    assert len(to(GUEST)) == cancels
+
+
+def test_with_an_authserv_id_answers_need_a_verified_sender(world, settings):
+    settings.IMIP_TRUSTED_AUTHSERV_ID = "mx.example.test"
+    event = create(world)
+    invite(world, event)
+    forged = reply(GUEST, event["uid"], "DECLINED")
+    assert process_email(forged)[0].startswith("ignored")
+    # Another server's verdict counts for nothing; ours does.
+    elsewhere = b"Authentication-Results: mx.attacker.test; dmarc=pass header.from=elsewhere.test\n" + forged
+    assert process_email(elsewhere)[0].startswith("ignored")
+    verified = b"Authentication-Results: mx.example.test; dkim=pass header.d=elsewhere.test; spf=pass\n" + forged
+    assert process_email(verified) == [f"{event['uid']}: {GUEST}: declined"]

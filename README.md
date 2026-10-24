@@ -162,6 +162,7 @@ Backend settings are read from environment variables:
 | `DEFAULT_FROM_EMAIL` | `meanwhile@localhost` | Sender address of all emails. |
 | `IMIP_ADDRESS` | - | Mailbox that receives participants' answers to invitations; invitations name it as organizer. Empty: answers go to the organizer's own address. |
 | `IMIP_IMAP_HOST`, `IMIP_IMAP_PORT`, `IMIP_IMAP_USER`, `IMIP_IMAP_PASSWORD`, `IMIP_IMAP_SSL`, `IMIP_IMAP_FOLDER` | -, `993`, -, -, `true`, `INBOX` | IMAP access to that mailbox; the worker reads it every five minutes. |
+| `IMIP_TRUSTED_AUTHSERV_ID` | - | The name your receiving mail server writes into its `Authentication-Results` header (e.g. `mx.example.com`). Set, answers by email count only if that server verified the sender's domain (DMARC, or a DKIM signature of that domain); otherwise anyone who knows a participant's address could answer for them. |
 
 ## Authentication
 

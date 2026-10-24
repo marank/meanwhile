@@ -36,8 +36,13 @@ def _feed_version(calendar: Calendar) -> tuple[str, int]:
 
 def calendar_feed(request, feed_token: str) -> HttpResponse:
     feed = FeedToken.objects.select_related("calendar", "user").filter(token=feed_token).first()
-    # The URL is the user's: it works only while they may still read the calendar.
-    if feed is None or not feed.user.is_active or get_membership(feed.calendar, feed.user) is None:
+    if feed is None:
+        return HttpResponse("Calendar not found", status=404, content_type="text/plain")
+    # The URL is the user's: it works only while they may still read the calendar. Once they may not,
+    # it is gone for good (lost through a group, say), also if they get access again later.
+    if not feed.user.is_active or get_membership(feed.calendar, feed.user) is None:
+        if feed.user.is_active:
+            feed.delete()
         return HttpResponse("Calendar not found", status=404, content_type="text/plain")
     calendar = feed.calendar
 

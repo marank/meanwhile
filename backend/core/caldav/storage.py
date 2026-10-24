@@ -111,6 +111,21 @@ def calendar_by_dav_name(calendars, name: str) -> Calendar | None:
     return calendars.filter(id=name).first() or calendars.filter(dav_name=name).first()
 
 
+class _Item(radicale_item.Item):
+    """Radicale's REPORT expands recurring events once per requested property, each time on a
+    shallow copy.copy() of the item, and the expansion changes the copy's iCalendar object, which
+    the original shares; the second property (e.g. calendar-data after getetag) then fails. A copy
+    of its own iCalendar object for each copy keeps them apart."""
+
+    def __copy__(self):
+        return _Item(
+            text=self.serialize(),
+            href=self.href,
+            last_modified=self.last_modified,
+            collection=self.collection,
+        )
+
+
 class Collection(storage.BaseCollection):
     def __init__(
         self,
@@ -279,7 +294,7 @@ class Collection(storage.BaseCollection):
     def _item(self, event: Event) -> radicale_item.Item:
         # One calendar object for all items, so that what is looked up of it is looked up once.
         event.calendar = self._calendar
-        return radicale_item.Item(
+        return _Item(
             text=event_ical_text(event, self._viewer()),
             href=event.dav_href,
             last_modified=_http_datetime(event.updated_at),

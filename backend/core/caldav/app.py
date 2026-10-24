@@ -2,6 +2,7 @@
 The Radicale WSGI application with the plugins of this app.
 """
 
+from defusedxml import DefusedXmlException
 from radicale import httputils
 from radicale.app import Application as RadicaleApplication
 from radicale.config import load as load_config
@@ -15,6 +16,14 @@ class Application(RadicaleApplication):
         # Radicale builds the whole response before it returns it.
         with request_scope():
             return super().__call__(environ, start_response)
+
+    def _read_xml_request_body(self, environ, request_info):
+        # XML with entities (which defusedxml refuses: billion laughs, XXE) is a bad request like
+        # any other XML that doesn't parse, not a server error.
+        try:
+            return super()._read_xml_request_body(environ, request_info)
+        except DefusedXmlException as exc:
+            raise RuntimeError(f"Refused XML: {exc!r}") from exc
 
     # Radicale answers errors raised by the storage with 500, except for PUT; refused writes get 403.
     def do_DELETE(self, *args, **kwargs):

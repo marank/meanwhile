@@ -141,7 +141,8 @@ const de: MessageSchema = {
     copyUrl: 'URL kopieren',
     urlCopied: 'URL kopiert.',
     feedUrl: 'Feed-URL',
-    feedUrlHelp: 'Abonniere eine schreibgeschützte Version dieses Kalenders. Diese URL gehört nur dir und funktioniert nicht mehr, sobald du keinen Zugriff auf den Kalender mehr hast; behandle sie vertraulich.',
+    feedUrlHelp:
+      'Abonniere eine schreibgeschützte Version dieses Kalenders. Diese URL gehört nur dir und funktioniert nicht mehr, sobald du keinen Zugriff auf den Kalender mehr hast; behandle sie vertraulich.',
     caldavUrl: 'CalDAV-URL',
     caldavUrlHelp:
       'Verwende diese Adresse, um den Kalender mit einer CalDAV-kompatiblen App zu verbinden und zu synchronisieren.',
@@ -233,7 +234,8 @@ const de: MessageSchema = {
     removeApproverText: 'Dieser Benutzer kann Anfragen für diesen Kalender nicht mehr genehmigen.',
     approverRemoved: 'Genehmiger entfernt.',
     rotateFeedTitle: 'Feed-Token neu erzeugen?',
-    rotateFeedText: 'Deine Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr. Andere Mitglieder behalten ihre eigenen URLs.',
+    rotateFeedText:
+      'Deine Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr. Andere Mitglieder behalten ihre eigenen URLs.',
     feedRotated: 'Feed-Token neu erzeugt.',
     menu: 'Menü',
     appearance: 'Darstellung',
@@ -318,6 +320,22 @@ const de: MessageSchema = {
     displayName: 'Anzeigename',
     noAccount: 'Noch kein Konto? Registrieren',
     hasAccount: 'Bereits ein Konto? Anmelden',
+    forgotPassword: 'Passwort vergessen?',
+    resetTitle: 'Passwort zurücksetzen',
+    resetRequestHelp:
+      'Gib deine E-Mail-Adresse ein. Gehört sie zu einem Konto, schicken wir dir einen Code, mit dem du ein neues Passwort setzt.',
+    resetSend: 'Code senden',
+    resetSent: 'Gehört die Adresse zu einem Konto, ist ein Code unterwegs. Gib ihn hier in diesem Fenster ein.',
+    newPassword: 'Neues Passwort',
+    currentPassword: 'Aktuelles Passwort',
+    setPassword: 'Passwort setzen',
+    resetCode: 'Code aus der E-Mail',
+    resetDone: 'Dein Passwort wurde geändert. Du kannst dich jetzt damit anmelden.',
+    resetInvalid: 'Der Code ist falsch oder abgelaufen. Fordere einen neuen an.',
+    backToLogin: 'Zurück zur Anmeldung',
+    changePassword: 'Passwort ändern',
+    passwordChanged: 'Passwort geändert.',
+    passwordChangeFailed: 'Das Passwort konnte nicht geändert werden.',
   },
   event: {
     location: 'Veranstaltungsort',

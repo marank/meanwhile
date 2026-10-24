@@ -3,8 +3,12 @@ Reading events from the iCalendar objects CalDAV clients send.
 """
 
 from datetime import UTC, date, datetime, timedelta
+from functools import lru_cache
+from zoneinfo import ZoneInfo, available_timezones
 
 import vobject
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 
 from core.services.recurrence import iana_zone_name, validate_rrule, zone
 from core.services.reminders import allowed_minutes
@@ -59,6 +63,39 @@ def _email(address) -> str:
     return (text[7:] if text.lower().startswith("mailto:") else text).lower()
 
 
+def _attendee_email(address) -> str | None:
+    """The email address of an ATTENDEE, or None for others (e.g. urn:uuid:..., or not an address)."""
+    text = str(address).strip()
+    if not text.lower().startswith("mailto:"):
+        return None
+    email = text[7:].lower()
+    try:
+        validate_email(email)
+    except ValidationError:
+        return None
+    return email if len(email) <= 254 else None
+
+
+def _zone_like(tzinfo, around: datetime, preferred: str) -> str | None:
+    """An IANA zone with the same offsets as a zone a client defined itself (a VTIMEZONE under a name
+    like "Customized Time Zone"), around the event's start; the writer's own zone if it fits."""
+    samples = tuple(around.replace(tzinfo=None) + timedelta(days=15 * k) for k in range(-4, 50))
+    try:
+        offsets = tuple(tzinfo.utcoffset(sample) for sample in samples)
+    except Exception:
+        return None
+    return _zone_with_offsets(offsets, samples, preferred)
+
+
+@lru_cache(maxsize=256)
+def _zone_with_offsets(offsets, samples, preferred: str) -> str | None:
+    for name in [preferred, *sorted(available_timezones())]:
+        zone_info = ZoneInfo(name)
+        if all(zone_info.utcoffset(sample) == offset for sample, offset in zip(samples, offsets, strict=True)):
+            return name
+    return None
+
+
 def _alarm_minutes(vevent, start: datetime, end: datetime) -> list[int] | None:
     """Minutes before the start of each VALARM; None if the event carries no VALARM at all."""
     alarms = vevent.contents.get("valarm")
@@ -100,6 +137,8 @@ def component_data(vevent, floating: str) -> dict:
     naive_zone = _naive_zone(vevent.dtstart, floating)
     start = to_utc(dtstart, naive_zone)
     end = to_utc(dtend, _naive_zone(vevent.dtend, floating) if hasattr(vevent, "dtend") else naive_zone)
+    if end < start:
+        raise ValueError("The event ends before it starts")
     if all_day:
         # iCalendar's DTEND is the day after an all-day event; the app stores its last day.
         end = max(start, end - timedelta(days=1))
@@ -112,6 +151,9 @@ def component_data(vevent, floating: str) -> dict:
             event_timezone = name
         elif dtstart.tzinfo is None:
             event_timezone = floating
+        else:
+            # A zone the client defined itself: the IANA zone that keeps its local times, if any.
+            event_timezone = _zone_like(dtstart.tzinfo, dtstart, floating) or "UTC"
 
     recurrence_id = None
     if hasattr(vevent, "recurrence_id"):
@@ -125,8 +167,11 @@ def component_data(vevent, floating: str) -> dict:
     organizer = _email(vevent.organizer.value) if hasattr(vevent, "organizer") else None
     attendees = []
     for line in vevent.contents.get("attendee", []):
+        email = _attendee_email(line.value)
+        if email is None:
+            continue  # rooms and groups by URN and the like; the app invites people by email
         partstat = (line.params.get("PARTSTAT") or ["NEEDS-ACTION"])[0].upper()
-        attendees.append((_email(line.value), PARTSTATS.get(partstat, "needs_action")))
+        attendees.append((email, PARTSTATS.get(partstat, "needs_action")))
 
     return {
         "title": str(vevent.summary.value)[:TITLE_MAX_LENGTH] if hasattr(vevent, "summary") else "",

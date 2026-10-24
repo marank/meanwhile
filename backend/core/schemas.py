@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from ninja import Field, Schema
 from pydantic import AfterValidator, BeforeValidator, model_validator
 
@@ -26,6 +28,18 @@ def _known_zone(name: str) -> str:
 
 
 TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
+
+
+def _single_address(value: str) -> str:
+    # One plain address, as invitations are mailed to it: no names, lists or line breaks.
+    try:
+        validate_email(value)
+    except ValidationError:
+        raise ValueError("Not a valid email address") from None
+    return value
+
+
+EmailAddress = Annotated[str, Field(max_length=254), AfterValidator(_single_address)]
 RRule = Annotated[str, AfterValidator(validate_rrule)]
 
 # Text that clients may also send as null for "none"; it is stored as "".
@@ -546,7 +560,7 @@ class CategoryOut(Schema):
 
 class EventParticipantInvite(Schema):
     user_id: str | None = None
-    email: str | None = None
+    email: EmailAddress | None = None
     status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
     @model_validator(mode="after")
@@ -590,7 +604,7 @@ class EventUpdate(Schema):
 
 class EventParticipantCreate(Schema):
     user_id: str | None = None
-    email: str | None = None
+    email: EmailAddress | None = None
     status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
     @model_validator(mode="after")

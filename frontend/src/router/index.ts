@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { public: true },
+    },
+    {
       // Answering an invitation from the link in its email; the token is the key.
       path: '/rsvp/:token',
       name: 'rsvp',

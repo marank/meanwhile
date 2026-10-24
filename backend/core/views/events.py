@@ -4,6 +4,7 @@ Event and participant endpoints.
 
 from datetime import datetime
 
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 from ninja import Query, Router
@@ -64,6 +65,9 @@ from core.services.series import (
     split,
 )
 from core.views.common import serialize_event
+
+# Called off: participants were told already.
+_GONE = {EventStatus.REJECTED, EventStatus.CANCELLED}
 
 router = Router()
 
@@ -404,6 +408,12 @@ def _apply_update(user: User, event: Event, data: dict) -> None:
     if rescheduled and not event.parent_id:
         remap_exceptions(event, before)
         event.save()
+    if rescheduled:
+        # Answers were for the old time: participants are asked again (as Outlook and Google do),
+        # except the one who moved it.
+        EventParticipant.objects.filter(Q(event=event) | Q(event__parent=event)).exclude(user=user).exclude(
+            status=ParticipantStatus.NEEDS_ACTION
+        ).update(status=ParticipantStatus.NEEDS_ACTION)
     status_reset = (
         event.status == EventStatus.PENDING and old_status != EventStatus.PENDING
     )
@@ -436,7 +446,9 @@ def delete_event(request, event_id: str):
             record_activity(event.parent, str(request.user.id), "occurrence_deleted", details)
             send_request(event.parent, update=True)
         else:
-            send_cancel(event)
+            # A cancelled or rejected event was called off already; participants don't hear it twice.
+            if event.status not in _GONE:
+                send_cancel(event)
             event.delete()
     return {"ok": True}
 
@@ -496,7 +508,8 @@ def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: Oc
     series = _series_occurrence(event_id, request.user, rid)
     with transaction.atomic():
         if scope == "all" or (scope == "following" and occurrence_index(series, rid) == 0):
-            send_cancel(series)
+            if series.status not in _GONE:
+                send_cancel(series)
             series.delete()
             return {"ok": True}
         if scope == "following":
@@ -546,6 +559,24 @@ def _participant_event(event_id: str, user: User):
     return get_visible_event(event_id, user)
 
 
+# Invitations go out by email to any address, from the app's mail server: no user sends more than this
+# many an hour, so the app isn't a way to spam people.
+MAX_INVITATIONS_PER_HOUR = 100
+
+
+def _count_invitation(user: User) -> None:
+    key = f"invitations:{user.id}"
+    if cache.add(key, 1, timeout=3600):
+        return
+    try:
+        count = cache.incr(key)
+    except ValueError:  # expired in between
+        cache.add(key, 1, timeout=3600)
+        return
+    if count > MAX_INVITATIONS_PER_HOUR:
+        raise HttpError(429, "Too many invitations; try again in an hour")
+
+
 def _create_participant(event: Event, current_user: User, data):
     participant_status = data.status or ParticipantStatus.NEEDS_ACTION
     if data.user_id is not None:
@@ -562,6 +593,7 @@ def _create_participant(event: Event, current_user: User, data):
         q |= Q(event=event, user=user)
     if EventParticipant.objects.filter(q).exists():
         raise HttpError(400, "Participant already exists")
+    _count_invitation(current_user)
 
     participant = EventParticipant.objects.create(
         event=event,
@@ -638,8 +670,8 @@ def delete_event_participant(request, event_id: str, participant_id: str):
     if not (can_modify or participant.user_id == request.user.id):
         raise HttpError(403, "You cannot remove this participant")
     with transaction.atomic():
-        # Taken off the event by someone else; taken off one occurrence, they still come to the others.
-        if participant.user_id != request.user.id and not event.parent_id:
+        # Taken off by someone else: told so, for the event or (a changed occurrence) that occurrence only.
+        if participant.user_id != request.user.id:
             send_cancel(event, [participant])
         participant.delete()
     return {"ok": True}

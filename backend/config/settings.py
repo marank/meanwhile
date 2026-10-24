@@ -165,7 +165,6 @@ ACCOUNT_RATE_LIMITS = {
 HEADLESS_ADAPTER = "core.headless_adapter.HeadlessAdapter"
 HEADLESS_ONLY = True
 HEADLESS_CLIENTS = ("browser",)
-HEADLESS_FRONTEND_URLS = {}
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +282,14 @@ EMAIL_SEND_IN_BACKGROUND = _bool_env("EMAIL_SEND_IN_BACKGROUND", True)
 # Address of the app for links in emails; BASE_URL, or in development the Vite dev server.
 APP_URL = (BASE_URL or ("http://localhost:6326" if ENVIRONMENT == "development" else "")).rstrip("/")
 
+# Forgotten passwords: allauth mails a code, which the app's page (ResetPasswordView) takes along
+# with the new password, in the same browser session. A code rather than a link: allauth's link keys
+# can't carry user ids with hyphens (ours are UUIDs). Only addresses with an account get one; the
+# answer is the same either way, so it tells nothing.
+ACCOUNT_PASSWORD_RESET_BY_CODE_ENABLED = True
+ACCOUNT_PASSWORD_RESET_BY_CODE_TIMEOUT = 15 * 60
+ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS = False
+
 # iMIP: invitations name this mailbox as organizer, so participants' mail programs send their
 # answers (iTIP REPLY) there; `fetch_imip` reads them. Empty: the organizer's own address.
 IMIP_ADDRESS = os.environ.get("IMIP_ADDRESS", "")
@@ -292,3 +299,7 @@ IMIP_IMAP_USER = os.environ.get("IMIP_IMAP_USER", "")
 IMIP_IMAP_PASSWORD = os.environ.get("IMIP_IMAP_PASSWORD", "")
 IMIP_IMAP_SSL = _bool_env("IMIP_IMAP_SSL", True)
 IMIP_IMAP_FOLDER = os.environ.get("IMIP_IMAP_FOLDER", "INBOX")
+# The From address of an answer is easily forged. With this set to the name the receiving mail server
+# writes into its Authentication-Results header (e.g. "mx.example.com"), answers count only if that
+# server found the sender's domain verified (DMARC, or DKIM signed by that domain).
+IMIP_TRUSTED_AUTHSERV_ID = os.environ.get("IMIP_TRUSTED_AUTHSERV_ID", "").strip().lower()

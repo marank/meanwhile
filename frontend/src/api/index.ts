@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, ApiError } from './client'
 
 export * from './client'
 export * from './types'
@@ -77,6 +77,32 @@ export async function register(data: { email: string; display_name: string; pass
   })
   return resp.data.user
 }
+
+/** Changes the signed-in user's password; the session stays signed in. */
+export async function changePassword(currentPassword: string, newPassword: string) {
+  await api('/api/auth/v1/account/password/change', {
+    method: 'POST',
+    body: { current_password: currentPassword, new_password: newPassword },
+  })
+}
+
+/** Calls an allauth endpoint whose 401 answer is part of the flow (a next step, or "now sign in"). */
+async function authFlowStep(path: string, body: unknown) {
+  try {
+    await api(path, { method: 'POST', body })
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return
+    throw error
+  }
+}
+
+/** Mails a code to set a new password with, if the address belongs to an account (the answer doesn't
+ * say). The code works in this browser session only. */
+export const requestPasswordReset = (email: string) => authFlowStep('/api/auth/v1/auth/password/request', { email })
+
+/** Sets a new password with the code from that email; afterwards the user signs in with it. */
+export const resetPassword = (code: string, password: string) =>
+  authFlowStep('/api/auth/v1/auth/password/reset', { key: code, password })
 
 export async function logout() {
   await api('/api/auth/v1/auth/session', { method: 'DELETE' })

@@ -3,7 +3,7 @@ iCalendar serialization.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import icalendar
 from django.conf import settings
@@ -142,7 +142,9 @@ def organizer_address(organizer: User, scheduling: bool) -> str:
 
 def _add_people(vevent: ICalEvent, event: Event, organizer: User | None, scheduling: bool = False) -> None:
     participants = _participants(event)
-    if not participants:
+    # Scheduling messages always name the organizer (RFC 5546), also for a part without participants
+    # of its own (a series whose participants are on single occurrences).
+    if not participants and not scheduling:
         return
     if organizer is not None:
         vevent.add(
@@ -292,9 +294,13 @@ def new_calendar(method: str | None = None) -> ICalCalendar:
     return cal
 
 
+VTIMEZONE_UNTIL = date(2100, 1, 1)
+
+
 def to_ical(cal: ICalCalendar) -> str:
-    # Adds the VTIMEZONE definitions for every TZID used, as RFC 5545 requires.
-    cal.add_missing_timezones()
+    # Adds the VTIMEZONE definitions for every TZID used, as RFC 5545 requires; up to well beyond
+    # 2038 (icalendar's default end), as series may run that long and clients go by these rules.
+    cal.add_missing_timezones(last_date=VTIMEZONE_UNTIL)
     return cal.to_ical().decode("utf-8")
 
 

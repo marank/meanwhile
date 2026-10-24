@@ -90,3 +90,14 @@ def test_rotating_replaces_only_the_users_own_url(world):
     new = full.post(f"/calendars/{cal}/feed-token/rotate").json()["feed_url"]
     assert new != old
     assert Client().get("/" + old.split("://", 1)[1].split("/", 1)[1]).status_code == 404
+
+
+def test_a_member_added_again_gets_a_new_feed_url(world):
+    cal = world["cal"]["id"]
+    owner, full = world["api"]["owner"], world["api"]["full"]
+    old = full.get(f"/calendars/{cal}/feed-url").json()["feed_url"]
+    user_id = str(world["users"]["full"].id)
+    assert owner.delete(f"/calendars/{cal}/members/{user_id}").status_code == 200
+    assert owner.post(f"/calendars/{cal}/members", {"user_id": user_id, "role": "read"}).status_code == 200
+    assert Client().get("/" + old.split("://", 1)[1].split("/", 1)[1]).status_code == 404
+    assert full.get(f"/calendars/{cal}/feed-url").json()["feed_url"] != old

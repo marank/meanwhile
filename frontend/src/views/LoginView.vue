@@ -87,6 +87,11 @@ async function submit() {
         </button>
       </form>
 
+      <p v-if="!isRegister" class="mt-4 text-center text-sm">
+        <RouterLink to="/forgot-password" class="text-blue-600 hover:underline">{{
+          $t('auth.forgotPassword')
+        }}</RouterLink>
+      </p>
       <p class="mt-4 text-center text-sm text-gray-600">
         <RouterLink :to="isRegister ? '/login' : '/register'" class="text-blue-600 hover:underline">
           {{ isRegister ? $t('auth.hasAccount') : $t('auth.noAccount') }}

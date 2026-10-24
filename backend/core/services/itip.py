@@ -27,10 +27,11 @@ from django.utils import timezone
 from core.models import Event, EventParticipant
 from core.models.base import EventStatus
 from core.services import mail
-from core.services.ical import PARTSTAT, SCHEDULING, build_series_ical, new_calendar, to_ical
+from core.services.ical import PARTSTAT, SCHEDULING, build_event_ical, build_series_ical, new_calendar, to_ical
 from core.services.mail_texts import text
 from core.services.notifications import notify, wants_email
-from core.services.recurrence import as_utc
+from core.services.recurrence import as_utc, is_series
+from core.services.series import is_occurrence, override_for
 
 logger = logging.getLogger(__name__)
 
@@ -76,16 +77,37 @@ def bump_sequence(series: Event) -> None:
 # Outgoing -------------------------------------------------------------------------------------
 
 
-def request_ical(series: Event) -> str:
+def request_ical(series: Event, occurrences: list[Event] | None = None) -> str:
+    """REQUEST of the series, or of only the given changed occurrences (for who is invited to those
+    alone: they get those occurrences, not the series)."""
+    components = build_series_ical(series, audience=SCHEDULING)
+    if occurrences is not None:
+        wanted = {as_utc(o.recurrence_id) for o in occurrences}
+        components = [c for c in components[1:] if _recurrence_id(c) in wanted]
     cal = new_calendar("REQUEST")
-    for component in build_series_ical(series, audience=SCHEDULING):
+    for component in components:
         cal.add_component(component)
     return to_ical(cal)
 
 
-def cancel_ical(series: Event, participants: list[EventParticipant], sequence: int) -> str:
-    """CANCEL of the whole event, naming the participants it is sent to."""
-    vevent = build_series_ical(series, audience=SCHEDULING)[0]
+def _recurrence_id(component) -> datetime | None:
+    rid = component.get("RECURRENCE-ID")
+    if rid is None:
+        return None
+    value = rid.dt
+    return as_utc(value if isinstance(value, datetime) else datetime(value.year, value.month, value.day))
+
+
+def cancel_ical(
+    series: Event, participants: list[EventParticipant], sequence: int, occurrence: Event | None = None
+) -> str:
+    """CANCEL of the whole event, or of one occurrence (with its RECURRENCE-ID), naming the
+    participants it is sent to."""
+    if occurrence is None:
+        vevent = build_series_ical(series, audience=SCHEDULING)[0]
+    else:
+        occurrence.parent = series
+        vevent = build_event_ical(occurrence, uid=series.uid, audience=SCHEDULING, organizer=series.creator)
     for name in ("STATUS", "ATTENDEE", "SEQUENCE", "DTSTAMP"):
         vevent.pop(name, None)
     vevent.add("status", "CANCELLED")
@@ -98,23 +120,32 @@ def cancel_ical(series: Event, participants: list[EventParticipant], sequence: i
     return to_ical(cal)
 
 
-def _message(series: Event, participant: EventParticipant, method: str, ical_text: str, kind: str):
-    """`kind`: "invite", "update", "cancel" or "removed"."""
+def _message(
+    series: Event,
+    participant: EventParticipant,
+    method: str,
+    ical_text: str,
+    kind: str,
+    shown: Event | None = None,
+):
+    """`kind`: "invite", "update", "cancel" or "removed". `shown`: the occurrence the mail is about,
+    if it is about one only."""
     organizer = series.creator
+    shown = shown or series
     language = mail.language_of(participant.user, fallback=mail.language_of(organizer))
-    reader = mail.Reader.of(participant.user, language, series.timezone)
-    title = series.title or text(language, "untitled")
-    when = mail.format_when(series.start, series.end, series.all_day, reader)
+    reader = mail.Reader.of(participant.user, language, shown.timezone)
+    title = shown.title or series.title or text(language, "untitled")
+    when = mail.format_when(shown.start, shown.end, shown.all_day, reader)
     name = organizer.display_name or organizer.email
 
     subject_kind = "cancel" if kind == "removed" else kind
     paragraphs = [text(language, f"{kind}_body", organizer=name, title=title)]
     details = [(text(language, "when"), when)]
-    if series.location:
-        details.append((text(language, "location"), series.location))
+    if shown.location:
+        details.append((text(language, "location"), shown.location))
     details.append((text(language, "organizer"), f"{name} <{organizer.email}>"))
-    if series.description and method == "REQUEST":
-        details.append((text(language, "description"), series.description))
+    if shown.description and method == "REQUEST":
+        details.append((text(language, "description"), shown.description))
 
     links = []
     if method == "REQUEST":
@@ -136,7 +167,7 @@ def _message(series: Event, participant: EventParticipant, method: str, ical_tex
     )
     # Inline for mail programs that show invitations, and as file for those that don't.
     message.attach_alternative(ical_text, f"text/calendar; method={method}")
-    message.attach("invite.ics", ical_text, "application/ics")
+    message.attach("invite.ics", ical_text, f"text/calendar; method={method}")
     return message
 
 
@@ -153,9 +184,23 @@ def send_request(event: Event, participants: list[EventParticipant] | None = Non
         bump_sequence(series)
     if not recipients:
         return
-    ical_text = request_ical(series)
     kind = "update" if update else "invite"
-    mail.send(_message(series, p, "REQUEST", ical_text, kind) for p in recipients)
+    # Who is invited to the series gets all of it; who is invited to changed occurrences only, those.
+    on_series = {p.email.lower() for p in series.participants.all()}
+    overrides = [o for o in series.overrides.prefetch_related("participants") if o.status not in _GONE]
+    series_text = None
+    messages = []
+    for participant in recipients:
+        address = participant.email.lower()
+        if address in on_series:
+            series_text = series_text or request_ical(series)
+            messages.append(_message(series, participant, "REQUEST", series_text, kind))
+            continue
+        theirs = [o for o in overrides if any(p.email.lower() == address for p in o.participants.all())]
+        if theirs:
+            text_ = request_ical(series, theirs)
+            messages.append(_message(series, participant, "REQUEST", text_, kind, shown=theirs[0]))
+    mail.send(messages)
 
 
 def send_cancel(event: Event, participants: list[EventParticipant] | None = None) -> None:
@@ -164,13 +209,15 @@ def send_cancel(event: Event, participants: list[EventParticipant] | None = None
     Call it before deleting the event: the message is built from the event as it still is.
     """
     series = series_of(event)
+    # A changed occurrence (cancelled, rejected, or someone taken off it): that occurrence only.
+    occurrence = event if event.parent_id else None
     recipients = _recipients(series, participants)
     if not recipients:
         return
     bump_sequence(series)
-    ical_text = cancel_ical(series, recipients, series.sequence)
+    ical_text = cancel_ical(series, recipients, series.sequence, occurrence)
     kind = "removed" if participants is not None else "cancel"
-    mail.send(_message(series, p, "CANCEL", ical_text, kind) for p in recipients)
+    mail.send(_message(series, p, "CANCEL", ical_text, kind, shown=occurrence) for p in recipients)
 
 
 # Answers --------------------------------------------------------------------------------------
@@ -183,12 +230,14 @@ def record_answer(participant: EventParticipant, status: str, name: str | None =
     """
     if participant.status == status:
         return False
+    previous = participant.status
     participant.status = status
     participant.save()
     event = participant.event
     if not event.parent_id:
+        # Occurrences answered the same as the series follow it; one answered on its own keeps that.
         for other in EventParticipant.objects.filter(event__parent=event, email__iexact=participant.email):
-            if other.status != status:
+            if other.status == previous:
                 other.status = status
                 other.save()
     series = series_of(event)
@@ -237,22 +286,40 @@ def _reply(vevent, sender: str | None) -> list[str]:
         if sender is not None and sender != address:
             results.append(f"{uid}: {address}: ignored, sent by {sender}")
             continue
-        participants = EventParticipant.objects.select_related("event", "user").filter(
+        participants = EventParticipant.objects.select_related("event", "event__parent", "user").filter(
             event__uid=uid, email__iexact=address
         )
-        participants = (
+        found = list(
             participants.filter(event__parent__isnull=True)
             if occurrence is None
             else participants.filter(event__recurrence_id=occurrence)
         )
-        found = list(participants)
+        if not found and occurrence is not None:
+            # An answer for one occurrence that hasn't been changed yet (mail programs send these
+            # when someone accepts or declines one meeting of a series): it becomes a changed one.
+            found = _occurrence_participants(participants.filter(event__parent__isnull=True), occurrence)
         if not found:
             results.append(f"{uid}: {address}: no such invitation")
+            continue
+        series = series_of(found[0].event)
+        if series.status in _GONE or any(p.event.status in _GONE for p in found):
+            results.append(f"{uid}: {address}: ignored, the event was cancelled")
             continue
         for participant in found:
             changed = record_answer(participant, status, params.get("CN"))
             results.append(f"{uid}: {address}: {status}" + ("" if changed else " (unchanged)"))
     return results
+
+
+def _occurrence_participants(series_participants, occurrence: datetime) -> list[EventParticipant]:
+    found = []
+    for participant in series_participants:
+        series = participant.event
+        if not is_series(series) or not is_occurrence(series, occurrence):
+            continue
+        override = override_for(series, occurrence)
+        found += list(override.participants.select_related("event", "user").filter(email__iexact=participant.email))
+    return found
 
 
 def _refresh(vevent, sender: str | None) -> list[str]:
@@ -287,11 +354,36 @@ def process_itip(data: bytes | str, sender: str | None = None) -> list[str]:
     return results
 
 
+def sender_verified(message, sender: str) -> bool:
+    """Whether the receiving mail server (IMIP_TRUSTED_AUTHSERV_ID) verified the sender's domain:
+    DMARC passed for it, or a DKIM signature of it did. Its Authentication-Results header is the one
+    it added; others with another server's name may come from anyone."""
+    domain = sender.rpartition("@")[2]
+    if not domain:
+        return False
+    for header in message.get_all("Authentication-Results") or []:
+        authserv_id, _, results = str(header).partition(";")
+        if authserv_id.strip().split()[0].lower() != settings.IMIP_TRUSTED_AUTHSERV_ID:
+            continue
+        for result in results.split(";"):
+            words = result.lower().split()
+            if not words:
+                continue
+            props = dict(word.partition("=")[::2] for word in words[1:])
+            if words[0] == "dmarc=pass" and props.get("header.from") == domain:
+                return True
+            if words[0] == "dkim=pass" and props.get("header.d") == domain:
+                return True
+    return False
+
+
 def process_email(raw: bytes, trust_sender: bool = False) -> list[str]:
     """Applies the iTIP messages in an email; answers count only for the address that sent them."""
     message = email.message_from_bytes(raw, policy=email.policy.default)
     senders = getaddresses([str(message.get("From", ""))])
     sender = None if trust_sender else (senders[0][1].lower() if senders and senders[0][1] else "")
+    if sender and settings.IMIP_TRUSTED_AUTHSERV_ID and not sender_verified(message, sender):
+        return [f"ignored: the sender {sender} wasn't verified by {settings.IMIP_TRUSTED_AUTHSERV_ID}"]
     seen, results = set(), []
     for part in message.walk():
         filename = (part.get_filename() or "").lower()
