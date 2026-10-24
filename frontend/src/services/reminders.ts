@@ -5,6 +5,8 @@ import { formatDate, formatDateTime } from './datetime'
 const DAY = 24 * 60
 /** The longest time before an event a reminder may be (as the server accepts it). */
 export const MAX_MINUTES_BEFORE = 4 * 7 * DAY
+/** The most reminders per event (as the server keeps them). */
+export const MAX_REMINDERS = 10
 
 export type ReminderUnit = 'minutes' | 'hours' | 'days' | 'weeks'
 

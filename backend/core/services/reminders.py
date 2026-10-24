@@ -20,8 +20,10 @@ from core.services.recurrence import as_utc, expand_event, is_series, occurrence
 
 # Reminders found late (e.g. while the app was closed) still go out until this long after the start.
 LATE_DELIVERY = timedelta(minutes=15)
-# Choices the app offers; clients may store other values via CalDAV.
+# Choices the app offers; clients may store other values via CalDAV, within these bounds.
 MAX_MINUTES_BEFORE = 4 * 7 * 24 * 60
+# Per user and event: every one is worked out again at each delivery (deliver_due_reminders).
+MAX_REMINDERS = 10
 
 _HIDDEN = {EventStatus.REJECTED, EventStatus.CANCELLED}
 
@@ -37,9 +39,15 @@ def reminder_minutes(event: Event, user: User) -> list[int]:
     )
 
 
+def allowed_minutes(minutes) -> list[int]:
+    """The reminders kept of those asked for, by the app or as CalDAV alarms: within
+    MAX_MINUTES_BEFORE, each once, and the MAX_REMINDERS closest to the start."""
+    return sorted({m for m in minutes if 0 <= m <= MAX_MINUTES_BEFORE})[:MAX_REMINDERS]
+
+
 def set_reminders(event: Event, user: User, minutes: list[int]) -> list[int]:
     series = series_of(event)
-    wanted = sorted({m for m in minutes if 0 <= m <= MAX_MINUTES_BEFORE})
+    wanted = allowed_minutes(minutes)
     with transaction.atomic():
         EventReminder.objects.filter(event=series, user=user).exclude(minutes_before__in=wanted).delete()
         for before in wanted:

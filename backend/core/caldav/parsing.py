@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 import vobject
 
 from core.services.recurrence import iana_zone_name, validate_rrule, zone
+from core.services.reminders import allowed_minutes
 
 # Longest title the database keeps; longer ones are cut.
 TITLE_MAX_LENGTH = 255
@@ -74,10 +75,9 @@ def _alarm_minutes(vevent, start: datetime, end: datetime) -> list[int] | None:
         else:
             at = to_utc(trigger)
         before = int((start - at).total_seconds() // 60)
-        # Reminders after the start make no sense here.
-        if before >= 0:
-            minutes.add(before)
-    return sorted(minutes)
+        minutes.add(before)
+    # Reminders after the start make no sense here; the rest within the app's bounds.
+    return allowed_minutes(minutes)
 
 
 def component_data(vevent, floating: str) -> dict:

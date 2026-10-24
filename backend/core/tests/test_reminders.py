@@ -154,3 +154,34 @@ def test_reminders_not_due_cost_nothing(world):
         remind(world, create(world, start=iso(NINE + timedelta(days=30)), end=iso(NINE + timedelta(days=30, hours=1))), [15])
     deliver_due_reminders(now=NOW)
     assert run_queries() == few
+
+
+def test_reminders_stay_within_bounds(world):
+    from core.services.reminders import MAX_MINUTES_BEFORE, MAX_REMINDERS
+
+    event = create(world)
+    asked = [-5, MAX_MINUTES_BEFORE + 1, *range(0, 2 * MAX_REMINDERS * 5, 5)]
+    res = remind(world, event, asked)
+    assert res.status_code == 200, res.content
+    # The ones closest to the start, as many as allowed.
+    assert res.json()["minutes"] == list(range(0, MAX_REMINDERS * 5, 5))
+
+
+def test_caldav_alarms_stay_within_the_same_bounds():
+    from core.caldav.parsing import parse_series
+    from core.services.reminders import MAX_REMINDERS
+
+    def alarm(trigger: str) -> str:
+        return f"BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:x\r\nTRIGGER:{trigger}\r\nEND:VALARM\r\n"
+
+    alarms = (
+        alarm("-P52W")  # a year before: more than the app offers
+        + alarm("PT10M")  # after the start
+        + "".join(alarm(f"-PT{m}M") for m in range(1, 3 * MAX_REMINDERS))
+    )
+    ics = (
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+        "DTSTART:20300107T090000Z\r\nDTEND:20300107T100000Z\r\n" + alarms + "END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    series, _ = parse_series(ics)
+    assert series["alarms"] == list(range(1, MAX_REMINDERS + 1))

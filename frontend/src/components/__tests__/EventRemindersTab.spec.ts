@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { i18n } from '@/i18n'
+import { MAX_REMINDERS } from '@/services/reminders'
 import EventRemindersTab from '../event/EventRemindersTab.vue'
 
 function render(minutes: number[], allDay = false) {
@@ -23,6 +24,14 @@ describe('EventRemindersTab', () => {
     const wrapper = render([15, 120])
     const amounts = wrapper.findAll('input[type="number"]').map((input) => (input.element as HTMLInputElement).value)
     expect(amounts).toEqual(['15', '2'])
+    wrapper.unmount()
+  })
+
+  it('offers no more reminders than the server keeps', () => {
+    const wrapper = render(Array.from({ length: MAX_REMINDERS }, (_, i) => (i + 1) * 5))
+    const add = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('reminders.add'))!
+    expect(add.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).not.toContain(i18n.global.t('reminders.quick'))
     wrapper.unmount()
   })
 

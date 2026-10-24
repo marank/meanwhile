@@ -9,6 +9,7 @@ import {
   fromTimedReminder,
   isValidReminder,
   MAX_MINUTES_BEFORE,
+  MAX_REMINDERS,
   reminderChoices,
   reminderLabel,
   toAllDayReminder,
@@ -100,6 +101,9 @@ function unitOptions(amount: number) {
   }))
 }
 
+/** No more rows than the server keeps reminders. */
+const full = computed(() => rows.value.length >= MAX_REMINDERS)
+
 /** Common choices not set yet. */
 const quickChoices = computed(() => reminderChoices(props.allDay).filter((m) => !minutes.value.includes(m)))
 
@@ -179,7 +183,8 @@ const maxWeeks = MAX_MINUTES_BEFORE / (7 * 24 * 60)
 
       <button
         type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hover"
+        :disabled="full"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-hover disabled:opacity-50"
         @click="add()"
       >
         <Plus :size="16" />
@@ -187,7 +192,7 @@ const maxWeeks = MAX_MINUTES_BEFORE / (7 * 24 * 60)
       </button>
     </div>
 
-    <div v-if="quickChoices.length">
+    <div v-if="quickChoices.length && !full">
       <p class="mb-2 text-xs text-gray-500">{{ $t('reminders.quick') }}</p>
       <div class="flex flex-wrap gap-2">
         <button
