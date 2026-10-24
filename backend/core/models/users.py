@@ -99,7 +99,8 @@ class AppSettings(models.Model):
     app_name = models.CharField(max_length=255, default="Meanwhile")
     logo_url = models.TextField(blank=True, default="")
     favicon_url = models.TextField(blank=True, default="")
-    default_first_weekday = models.IntegerField(default=0)
+    # Monday, as ISO 8601 and most of the world count; Sunday is 0.
+    default_first_weekday = models.IntegerField(default=1)
     default_show_weekends = models.BooleanField(default=True)
     default_weekend_days = models.JSONField(default=default_weekend_days)
     default_show_week_numbers = models.BooleanField(default=False)

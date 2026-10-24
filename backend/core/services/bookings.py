@@ -31,11 +31,11 @@ def get_resource_approvers(resource: Resource):
 
 def can_decide_booking(calendar, resource: Resource | None, user_id: str) -> bool:
     """The calendar owner and the resource's approver pool may approve or reject bookings."""
-    if calendar.owner_id == user_id:
+    if str(calendar.owner_id) == str(user_id):
         return True
     if resource is None:
         return False
-    return any(a.id == user_id for a in get_resource_approvers(resource))
+    return any(str(a.id) == str(user_id) for a in get_resource_approvers(resource))
 
 
 def booked_resources(event: Event) -> list[Resource]:

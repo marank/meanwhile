@@ -54,24 +54,24 @@ def set_app_defaults(**values):
 def test_the_week_layout_follows_app_defaults_changed_later():
     """Settings created before an admin changes the defaults (e.g. the admin's own) follow them."""
     owner = Api(make_user("owner"))
-    assert owner.get("/users/me/settings").json()["first_weekday"] == 0
+    assert owner.get("/users/me/settings").json()["first_weekday"] == 1  # Monday
     assert owner.patch("/users/me/settings", {"event_color": "#123456"}).status_code == 200
 
-    set_app_defaults(first_weekday=1, weekend_days=[5, 6])
+    set_app_defaults(first_weekday=0, weekend_days=[5, 6])
 
     settings = owner.get("/users/me/settings").json()
-    assert settings["first_weekday"] == 1
+    assert settings["first_weekday"] == 0
     assert settings["weekend_days"] == [5, 6]
 
 
 def test_a_layout_value_the_user_set_stays_theirs():
     owner = Api(make_user("owner"))
-    assert owner.patch("/users/me/settings", {"first_weekday": 0}).status_code == 200
+    assert owner.patch("/users/me/settings", {"first_weekday": 1}).status_code == 200
 
-    set_app_defaults(first_weekday=1, show_week_numbers=True)
+    set_app_defaults(first_weekday=0, show_week_numbers=True)
 
     settings = owner.get("/users/me/settings").json()
-    assert settings["first_weekday"] == 0
+    assert settings["first_weekday"] == 1
     assert settings["show_week_numbers"] is True
 
 

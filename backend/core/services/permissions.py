@@ -116,7 +116,7 @@ def can_modify_event(event: Event, user_id: str, role: str) -> bool:
     after being demoted to "read") none, their own included."""
     if role_weight(role) >= role_weight(Role.FULL):
         return True
-    return role_weight(role) >= role_weight(Role.OWN) and event.creator_id == user_id
+    return role_weight(role) >= role_weight(Role.OWN) and str(event.creator_id) == str(user_id)
 
 
 def is_owner(member) -> bool:
@@ -166,7 +166,7 @@ def participant_event_ids(user: User) -> set[str]:
 
 def can_see_event(event: Event, user: User, membership) -> bool:
     user_id = str(user.id)
-    if str(event.creator_id) == user_id:
+    if str(event.creator_id) == str(user_id):
         return True
     if event.status == EventStatus.PENDING:
         # Pending bookings are private to the requester, participants and approvers.

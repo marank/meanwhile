@@ -53,11 +53,11 @@ def test_calendars_shared_through_a_group_are_moved_too(user_client):
     folder = Folder.objects.create(user=user, name="Shared")
 
     reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": folder.id, "position": 2})
-    placed = listed(client)[calendar.id]
-    assert (placed["folder_id"], placed["position"]) == (folder.id, 2)
+    placed = listed(client)[str(calendar.id)]
+    assert (placed["folder_id"], placed["position"]) == (str(folder.id), 2)
 
     reorder(client, {"type": "calendar", "id": calendar.id, "parent_id": None, "position": 0})
-    assert listed(client)[calendar.id]["folder_id"] is None
+    assert listed(client)[str(calendar.id)]["folder_id"] is None
     assert CalendarMember.objects.get(calendar=calendar, user=user).source == "group"
 
 
@@ -108,7 +108,7 @@ def test_the_layout_comes_in_one_request(user_client):
     body = client.get("/api/layout").json()
     assert [f["name"] for f in body["folders"]] == ["First", "Projects"]
     assert [(c["calendar"]["name"], c["membership"]["folder_id"], c["membership"]["position"]) for c in body["calendars"]] == [
-        ("Work", folder.id, 2)
+        ("Work", str(folder.id), 2)
     ]
 
 

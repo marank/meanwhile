@@ -27,7 +27,7 @@ class Api:
     def _call(self, method: str, url: str, data=None):
         kwargs = {"content_type": "application/json"}
         if data is not None:
-            kwargs["data"] = json.dumps(data)
+            kwargs["data"] = json.dumps(data, default=str)  # model ids are UUIDs
         return getattr(self.client, method)(f"/api{url}", **kwargs)
 
     def get(self, url):

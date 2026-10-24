@@ -6,7 +6,7 @@ with the session comes Ninja's CSRF check.
 """
 
 from django.apps import apps
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError
 from ninja import NinjaAPI
 from ninja.errors import HttpError
@@ -33,6 +33,12 @@ def not_found(request, exc: ObjectDoesNotExist):
     model = next((m for m in apps.get_models() if type(exc) is m.DoesNotExist), None)
     name = model._meta.verbose_name.capitalize() if model else "Object"
     return api.create_response(request, {"detail": f"{name} not found"}, status=404)
+
+
+@api.exception_handler(ValidationError)
+def malformed_id(request, exc: ValidationError):
+    # An id that isn't even a UUID (Calendar.objects.get(id="nope")) names nothing, like an unknown one.
+    return api.create_response(request, {"detail": "Object not found"}, status=404)
 
 
 @api.exception_handler(IntegrityError)

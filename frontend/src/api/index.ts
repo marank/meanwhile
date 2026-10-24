@@ -96,13 +96,14 @@ async function authFlowStep(path: string, body: unknown) {
   }
 }
 
-/** Mails a code to set a new password with, if the address belongs to an account (the answer doesn't
- * say). The code works in this browser session only. */
-export const requestPasswordReset = (email: string) => authFlowStep('/api/auth/v1/auth/password/request', { email })
+/** Mails a link to set a new password, if the address belongs to an account (the answer doesn't say). */
+export async function requestPasswordReset(email: string) {
+  await api('/api/auth/v1/auth/password/request', { method: 'POST', body: { email } })
+}
 
-/** Sets a new password with the code from that email; afterwards the user signs in with it. */
-export const resetPassword = (code: string, password: string) =>
-  authFlowStep('/api/auth/v1/auth/password/reset', { key: code, password })
+/** Sets a new password with the key from that link; afterwards the user signs in with it. */
+export const resetPassword = (key: string, password: string) =>
+  authFlowStep('/api/auth/v1/auth/password/reset', { key, password })
 
 export async function logout() {
   await api('/api/auth/v1/auth/session', { method: 'DELETE' })

@@ -4,7 +4,7 @@ Common view helpers.
 
 from ninja.errors import HttpError
 
-from core.models import Event, User
+from core.models import Event, User, as_uuid
 from core.schemas import ApproverOut
 from core.services.bookings import awaiting_resources
 from core.services.permissions import get_direct_membership
@@ -25,9 +25,9 @@ def approvers_of(approver_model, **owner) -> list[ApproverOut]:
 
 def replace_approvers(approver_model, owner_field: str, owner, calendar_id, user_ids: list[str]) -> None:
     """Makes `user_ids` the approvers of the owner (a calendar or resource); each must be a direct member."""
-    wanted = list(dict.fromkeys(user_ids))
+    wanted = list(dict.fromkeys(as_uuid(user_id) for user_id in user_ids))
     for user_id in wanted:
-        if get_direct_membership(calendar_id, user_id) is None:
+        if user_id is None or get_direct_membership(calendar_id, user_id) is None:
             raise HttpError(400, "Approver must be a calendar member")
     current = approver_model.objects.filter(**{owner_field: owner})
     current.exclude(user_id__in=wanted).delete()

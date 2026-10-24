@@ -4,6 +4,7 @@ Radicale storage plugin backed by the Django ORM.
 
 import contextlib
 import errno
+import functools
 import hashlib
 import json
 import re
@@ -11,6 +12,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 
+import icalendar
 from django.db import transaction
 from django.db.models import Max, Prefetch, Q
 from django.utils import timezone
@@ -19,13 +21,13 @@ from radicale import pathutils, storage
 
 from core.caldav.parsing import parse_series, to_utc
 from core.caldav.request import once_per_request
-from core.models import Calendar, Category, DeletedEvent, Event, EventParticipant, EventReminder, User
+from core.models import Calendar, Category, DeletedEvent, Event, EventParticipant, EventReminder, User, as_uuid
 from core.models.base import EventStatus, Role
 from core.realtime import broadcast
 from core.services.activity import record_activity
 from core.services.bookings import booked_resources, find_booking_conflicts
 from core.services.calendars import create_calendar
-from core.services.ical import event_ical_text
+from core.services.ical import PRODID, VTIMEZONE_UNTIL, event_ical_text
 from core.services.notifications import notify
 from core.services.permissions import (
     accessible_calendars,
@@ -98,17 +100,35 @@ def _fields(event: Event) -> dict:
     }
 
 
-def _dav_name(calendar: Calendar) -> str:
-    return calendar.dav_name or calendar.id
+@functools.lru_cache(maxsize=64)
+def calendar_timezone(name: str) -> str:
+    """A VCALENDAR with the VTIMEZONE of the IANA zone `name`, as CalDAV's calendar-timezone holds it."""
+    cal = icalendar.Calendar()
+    cal.add("prodid", PRODID)
+    cal.add("version", "2.0")
+    cal.add_component(icalendar.Timezone.from_tzid(name, last_date=VTIMEZONE_UNTIL))
+    return cal.to_ical().decode()
+
+
+def _dav_name(calendar: Calendar, home: User) -> str:
+    """A calendar's path segment in the user's calendar home: the name a client gave it in its owner's
+    home (names are the owner's own), the id everywhere else."""
+    if calendar.dav_name and calendar.owner_id == home.id:
+        return calendar.dav_name
+    return str(calendar.id)
 
 
 def user_by_email(email: str) -> User | None:
     return once_per_request(("user", email.lower()), lambda: User.objects.filter(email__iexact=email).first())
 
 
-def calendar_by_dav_name(calendars, name: str) -> Calendar | None:
-    """The calendar a path segment names: its id, else the client's name for it."""
-    return calendars.filter(id=name).first() or calendars.filter(dav_name=name).first()
+def calendar_in_home(home: User, name: str, calendars=None) -> Calendar | None:
+    """The calendar a path segment in the user's calendar home names: its id, else the name a client
+    gave one of the user's own calendars (clients pick names like UUIDs, too)."""
+    calendars = Calendar.objects.all() if calendars is None else calendars
+    calendar_id = as_uuid(name)
+    by_id = calendars.filter(id=calendar_id).first() if calendar_id else None
+    return by_id or calendars.filter(owner=home, dav_name=name).first()
 
 
 class _Item(radicale_item.Item):
@@ -140,6 +160,9 @@ class Collection(storage.BaseCollection):
         self._calendar = calendar
         self._user = user
         self._is_principal = is_principal
+        # Who the request runs for, remembered: Radicale builds parts of its answer (PROPFIND's
+        # properties) after it has let go of the storage (acquire_lock), when that is forgotten.
+        self._login = _acting_login.get()
         # Radicale asks for both several times per request (e.g. a PROPFIND lists all items three times).
         self._state_cache: tuple[int, str] | None = None
         self._items_cache: list[radicale_item.Item] | None = None
@@ -204,6 +227,10 @@ class Collection(storage.BaseCollection):
                 "C:supported-calendar-component-set": "VEVENT",
                 "ICAL:calendar-color": self._calendar.event_color,
             }
+            # The zone clients read times without one in (RFC 4791 5.2.2): the viewer's, as the app has it.
+            viewer = self._viewer()
+            if viewer is not None and viewer.timezone:
+                meta["C:calendar-timezone"] = calendar_timezone(viewer.timezone)
         if key is None:
             return meta
         return meta.get(key)
@@ -268,7 +295,7 @@ class Collection(storage.BaseCollection):
 
     def _viewer(self) -> User | None:
         """The user the request runs for; each user's reminders are written as their alarms."""
-        login = _acting_login.get()
+        login = _acting_login.get() or self._login
         return user_by_email(login) if login else None
 
     def _events(self):
@@ -575,7 +602,7 @@ class Storage(storage.BaseStorage):
             user = user_by_email(parts[0])
             if user is None:
                 return None
-            calendar = calendar_by_dav_name(accessible_calendars(user), parts[1])
+            calendar = calendar_in_home(user, parts[1], accessible_calendars(user))
             if calendar is None:
                 return None
             return Collection(self.configuration, path, calendar=calendar)
@@ -607,7 +634,7 @@ class Storage(storage.BaseStorage):
                 for calendar in sidebar_calendars(coll._user).order_by("name"):
                     yield Collection(
                         self.configuration,
-                        f"/{coll._user.email}/{_dav_name(calendar)}",
+                        f"/{coll._user.email}/{_dav_name(calendar, coll._user)}",
                         calendar=calendar,
                     )
             return
@@ -649,7 +676,10 @@ class Storage(storage.BaseStorage):
         if owner is None or owner.email.lower() != parts[0].lower():
             raise _forbidden("Calendars are created in your own calendar home only")
         # Nor may the name be another calendar's id, which names that calendar in every path.
-        if Calendar.objects.filter(Q(dav_name=parts[1]) | Q(id=parts[1])).exists():
+        # Names are the owner's own; nor may one be another calendar's id, which names it in every home.
+        if Calendar.objects.filter(owner=owner, dav_name=parts[1]).exists() or (
+            as_uuid(parts[1]) and Calendar.objects.filter(id=as_uuid(parts[1])).exists()
+        ):
             raise pathutils.CollidingPathError(href)
         calendar = create_calendar(
             owner,

@@ -12,7 +12,7 @@ from django.db import transaction
 from ninja import Router
 from ninja.errors import HttpError
 
-from core.models import CalendarMember, Folder
+from core.models import CalendarMember, Folder, as_uuid
 from core.realtime import broadcast
 from core.schemas import (
     FolderCreate,
@@ -27,7 +27,9 @@ router = Router()
 
 
 def _folder_parents(user) -> dict[str, str | None]:
-    return {str(id): parent for id, parent in Folder.objects.filter(user=user).values_list("id", "parent_id")}
+    """Each of the user's folders' parent, by id; ids as strings, as requests name them."""
+    rows = Folder.objects.filter(user=user).values_list("id", "parent_id")
+    return {str(id): str(parent) if parent else None for id, parent in rows}
 
 
 def _require_own_folder(parents: dict[str, str | None], folder_id: str | None) -> None:
@@ -97,6 +99,8 @@ def update_layout_items(request, payload: LayoutItemsUpdate):
     if _has_cycle(parents):
         raise HttpError(400, "A folder cannot be moved into itself")
     for item in payload.items:
+        if as_uuid(item.id) is None:
+            continue  # names nothing, like an item that is gone
         if item.type == "folder":
             Folder.objects.filter(id=item.id, user=user).update(position=item.position, parent_id=item.parent_id)
         else:

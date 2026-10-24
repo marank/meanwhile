@@ -49,7 +49,7 @@ async def connected(team) -> WebsocketCommunicator:
 
 
 async def subscribe(communicator, *calendar_ids) -> list[str]:
-    await communicator.send_json_to({"type": "subscribe", "calendars": list(calendar_ids)})
+    await communicator.send_json_to({"type": "subscribe", "calendars": [str(i) for i in calendar_ids]})
     reply = await communicator.receive_json_from()
     assert reply["type"] == "subscribed"
     return reply["calendars"]
@@ -79,7 +79,7 @@ async def test_pages_of_other_sites_cannot_connect(team):
 
 async def test_only_readable_calendars_are_followed(team):
     communicator = await connected(team)
-    assert await subscribe(communicator, team["calendar"].id, team["private"].id, "nonsense") == [team["calendar"].id]
+    assert await subscribe(communicator, team["calendar"].id, team["private"].id, "nonsense") == [str(team["calendar"].id)]
     await communicator.disconnect()
 
 
@@ -88,7 +88,7 @@ async def test_changes_of_followed_calendars_arrive(team):
     await subscribe(communicator, team["calendar"].id)
 
     await create_event(team["calendar"])
-    assert await communicator.receive_json_from() == {"type": "events.changed", "calendar_id": team["calendar"].id}
+    assert await communicator.receive_json_from() == {"type": "events.changed", "calendar_id": str(team["calendar"].id)}
 
     await create_event(team["private"])
     assert await communicator.receive_nothing()

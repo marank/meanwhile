@@ -5,7 +5,7 @@ Radicale rights plugin backed by Django calendar memberships.
 from radicale import rights as base_rights
 
 from core.caldav.request import once_per_request
-from core.caldav.storage import calendar_by_dav_name, user_by_email
+from core.caldav.storage import calendar_in_home, user_by_email
 from core.models import Calendar
 from core.models.base import Role
 from core.services.permissions import get_membership
@@ -35,7 +35,8 @@ class Rights(base_rights.BaseRights):
             return ""
 
         home_email, name = parts[0], parts[1]
-        calendar = calendar_by_dav_name(Calendar.objects.select_related("owner"), name)
+        home = user_by_email(home_email)
+        calendar = calendar_in_home(home, name, Calendar.objects.select_related("owner")) if home else None
         if calendar is None:
             # A new calendar may be created in the user's own home (lowercase: calendars only, no folders).
             if len(parts) == 2 and home_email.lower() == user.lower():

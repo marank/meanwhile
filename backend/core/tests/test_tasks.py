@@ -8,7 +8,7 @@ import pytest
 from django.core import mail as outbox
 from django.utils import timezone
 
-from core.models import DeletedEvent
+from core.models import DeletedEvent, new_uuid7
 from core.services import mail
 from core.tasks import clean_up, send_email
 from core.tests.helpers import BASE, iso
@@ -52,8 +52,8 @@ def test_a_failing_mail_server_fails_the_job_so_that_it_is_tried_again(world, se
 
 
 def test_clean_up_removes_old_records_only(task_queue):
-    old = DeletedEvent.objects.create(calendar_id="c", href="old.ics")
+    old = DeletedEvent.objects.create(calendar_id=new_uuid7(), href="old.ics")
     DeletedEvent.objects.filter(pk=old.pk).update(deleted_at=timezone.now() - timedelta(days=91))
-    recent = DeletedEvent.objects.create(calendar_id="c", href="recent.ics")
+    recent = DeletedEvent.objects.create(calendar_id=new_uuid7(), href="recent.ics")
     clean_up(timestamp=0)
     assert list(DeletedEvent.objects.values_list("pk", flat=True)) == [recent.pk]

@@ -1,4 +1,12 @@
-from core.models.base import EventStatus, MembershipSource, ParticipantStatus, Role, default_weekend_days, new_uuid7
+from core.models.base import (
+    EventStatus,
+    MembershipSource,
+    ParticipantStatus,
+    Role,
+    as_uuid,
+    default_weekend_days,
+    new_uuid7,
+)
 from core.models.calendars import (
     Calendar,
     CalendarApprover,
@@ -27,6 +35,7 @@ __all__ = [
     "EventStatus",
     "ParticipantStatus",
     "new_uuid7",
+    "as_uuid",
     "default_weekend_days",
     "User",
     "UserGroup",

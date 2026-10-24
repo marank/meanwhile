@@ -28,7 +28,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.sessions.backends.base import SessionBase
 
-from core.models import Calendar, User
+from core.models import Calendar, User, as_uuid
 from core.realtime.broadcast import calendar_group, user_group
 from core.services.permissions import memberships_of
 
@@ -45,7 +45,9 @@ MAX_MESSAGE_BYTES = 16 * 1024
 def _readable_calendars(user: User, calendar_ids: list[str]) -> set[str]:
     if not user.is_active:
         return set()
-    return set(memberships_of(user, Calendar.objects.filter(id__in=calendar_ids)))
+    # Ids as the client sends them (strings); ones that aren't UUIDs name no calendar.
+    valid = [calendar_id for calendar_id in calendar_ids if as_uuid(calendar_id)]
+    return {str(calendar_id) for calendar_id in memberships_of(user, Calendar.objects.filter(id__in=valid))}
 
 
 @database_sync_to_async

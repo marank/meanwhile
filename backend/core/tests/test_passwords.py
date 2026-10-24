@@ -1,5 +1,5 @@
 """
-Passwords: changed in the account settings, or set anew with a code sent by email.
+Passwords: changed in the account settings, or set anew from a link sent by email.
 """
 
 import re
@@ -31,53 +31,53 @@ def test_users_change_their_password_and_stay_signed_in():
     assert client.get("/api/users/me").status_code == 200
 
 
-def request_code(client: Client, email: str) -> str | None:
-    res = post(client, "/api/auth/v1/auth/password/request", {"email": email})
-    # 401: the reset by code is under way and waits for the code.
-    assert res.status_code == 401, res.content
+def request_link(email: str) -> str | None:
+    """The key in the link mailed for `email`, if one was."""
+    res = post(Client(), "/api/auth/v1/auth/password/request", {"email": email})
+    assert res.status_code == 200, res.content
     if not mail.outbox:
         return None
     message = mail.outbox[-1]
     # From the app, not the Django site.
     assert "example.com" not in message.subject + message.body
-    # The code stands on a line of its own after the request to enter it.
-    return re.search(r"browser window\.\s+(\S+)", message.body).group(1)
+    return re.search(r"https?://\S+/reset-password/(\S+)", message.body).group(1)
 
 
-def test_a_forgotten_password_is_set_anew_with_the_code(settings):
+def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings):
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     user = make_user("someone")
-    client = Client()
-
-    code = request_code(client, "SOMEONE@example.test")
+    key = request_link("SOMEONE@example.test")
     assert mail.outbox[0].to == ["someone@example.test"]
-    res = post(client, "/api/auth/v1/auth/password/reset", {"key": code, "password": "N3w-secret!"})
+    assert settings.HEADLESS_FRONTEND_URLS["account_reset_password_from_key"].split("{")[0] in mail.outbox[0].body
+
+    # In another browser than the one that asked for it.
+    other = Client()
+    assert other.get("/api/auth/v1/auth/password/reset", HTTP_X_PASSWORD_RESET_KEY=key).status_code == 200
+    res = post(other, "/api/auth/v1/auth/password/reset", {"key": key, "password": "N3w-secret!"})
     assert res.status_code in (200, 401), res.content  # 401: done, now sign in
     user.refresh_from_db()
     assert user.check_password("N3w-secret!")
+    # The link works once.
+    assert post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "An0ther-one!"}).status_code == 400
 
 
-def test_wrong_codes_and_other_sessions_change_nothing(settings):
-    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+def test_made_up_keys_change_nothing(settings):
     user = make_user("someone")
-    client = Client()
-    code = request_code(client, "someone@example.test")
-
-    assert post(Client(), "/api/auth/v1/auth/password/reset", {"key": code, "password": "N3w-secret!"}).status_code >= 400
-    assert post(client, "/api/auth/v1/auth/password/reset", {"key": "WRONG1", "password": "N3w-secret!"}).status_code == 400
+    for key in ("nonsense", f"{user.pk.hex}-abc-def", "x-y"):
+        assert post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "N3w-secret!"}).status_code == 400
     user.refresh_from_db()
     assert user.check_password("x")
 
 
 def test_unknown_addresses_get_no_mail_and_the_same_answer(settings):
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-    assert request_code(Client(), "nobody@example.test") is None
+    assert request_link("nobody@example.test") is None
 
 
-def test_the_code_comes_in_the_accounts_language(settings):
+def test_the_link_comes_in_the_accounts_language(settings):
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     user = make_user("someone")
     user.language = "de"
     user.save()
-    post(Client(), "/api/auth/v1/auth/password/request", {"email": "someone@example.test"})
+    request_link("someone@example.test")
     assert "Passwort" in mail.outbox[0].subject

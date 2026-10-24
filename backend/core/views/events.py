@@ -112,9 +112,9 @@ def _occurrences(
     can_decide: dict[tuple, bool] = {}
     out = []
     for event, occ_start, occ_end in expand_events(events, range_start, range_end):
-        if event.status in hidden and str(event.creator_id) != user_id:
+        if event.status in hidden and str(event.creator_id) != str(user_id):
             continue
-        if event.status == EventStatus.PENDING and str(event.creator_id) != user_id and event.id not in invited_to:
+        if event.status == EventStatus.PENDING and str(event.creator_id) != str(user_id) and event.id not in invited_to:
             # Pending bookings are only shown to the requester, participants and approvers.
             # The pool is the same for the same bookings of a calendar (its owner always decides).
             key = (event.calendar_id, *sorted(str(i) for i in event.awaiting_approval or []))

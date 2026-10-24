@@ -878,3 +878,38 @@ def test_xml_with_entities_is_a_bad_request(team):
         '<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
     )
     assert dav("PROPFIND", team["path"], team["users"]["owner"], body, DEPTH="0")[0] == 400
+
+
+def test_principals_name_their_email_address_and_no_address_books(team):
+    owner = team["users"]["owner"]
+    body = (
+        '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" '
+        'xmlns:cr="urn:ietf:params:xml:ns:carddav"><d:prop><c:calendar-user-address-set/>'
+        "<cr:addressbook-home-set/><c:calendar-home-set/></d:prop></d:propfind>"
+    )
+    status, content, headers = dav("PROPFIND", f"/caldav/{owner.email}/", owner, body, DEPTH="0")
+    assert status == 207, content
+    assert "mailto:owner@example.test" in content and "addressbook-home-set" not in content
+    assert "addressbook" not in dav("OPTIONS", "/caldav/", owner)[2]["DAV"]
+
+
+def test_calendars_tell_the_viewers_zone(team):
+    owner = team["users"]["owner"]
+    owner.timezone = "Europe/Berlin"
+    owner.save()
+    body = (
+        '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+        "<d:prop><c:calendar-timezone/></d:prop></d:propfind>"
+    )
+    content = dav("PROPFIND", team["path"], owner, body, DEPTH="0")[1]
+    assert "TZID:Europe/Berlin" in content
+
+
+def test_calendar_names_are_each_owners_own(team):
+    own, owner = team["users"]["own"], team["users"]["owner"]
+    assert mkcalendar(owner, f"/caldav/{owner.email}/work/") == 201
+    # Another user may use the same name in their own home, and finds out nothing about the other.
+    assert mkcalendar(own, f"/caldav/{own.email}/work/") == 201
+    mine = Calendar.objects.get(owner=own, dav_name="work")
+    assert dav("PUT", f"/caldav/{own.email}/work/e.ics", own, ics("e"), content_type="text/calendar")[0] == 201
+    assert Event.objects.get(uid="e").calendar == mine

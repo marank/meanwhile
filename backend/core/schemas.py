@@ -2,6 +2,7 @@
 Request and response schemas of the API. Ninja's Schema reads attributes, so models can be returned as they are.
 """
 
+import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -29,6 +30,9 @@ def _known_zone(name: str) -> str:
 
 TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
 
+# Ids are UUIDs in the database and strings in the API; objects given to a response carry UUIDs.
+Id = Annotated[str, BeforeValidator(lambda value: str(value) if isinstance(value, uuid.UUID) else value)]
+
 
 def _single_address(value: str) -> str:
     # One plain address, as invitations are mailed to it: no names, lists or line breaks.
@@ -52,7 +56,7 @@ Text = Annotated[str, BeforeValidator(lambda value: "" if value is None else val
 
 
 class UserOut(Schema):
-    id: str
+    id: Id
     email: str
     display_name: str
     is_admin: bool
@@ -181,20 +185,20 @@ class AppPasswordCreate(Schema):
 
 
 class AppPasswordOut(Schema):
-    id: str
+    id: Id
     label: str
     last_used_at: datetime | None = None
     created_at: datetime
 
 
 class AppPasswordCreated(Schema):
-    id: str
+    id: Id
     label: str
     password: str
 
 
 class SearchResult(Schema):
-    id: str
+    id: Id
     type: str
     label: str
     subtitle: str | None = None
@@ -202,14 +206,14 @@ class SearchResult(Schema):
 
 
 class GroupOut(Schema):
-    id: str
+    id: Id
     name: str
     description: str = ""
     member_count: int = 0
 
 
 class GroupMemberOut(Schema):
-    id: str
+    id: Id
     email: str
     display_name: str
 
@@ -221,18 +225,18 @@ class GroupDetailOut(GroupOut):
 class GroupCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
     description: Text = ""
-    member_ids: list[str] = []
+    member_ids: list[Id] = []
 
 
 class GroupUpdate(Schema):
     name: str | None = Field(None, min_length=1, max_length=255)
     description: Text = ""
     # Replaces the member list when given.
-    member_ids: list[str] | None = None
+    member_ids: list[Id] | None = None
 
 
 class AdminUserOut(Schema):
-    id: str
+    id: Id
     email: str
     display_name: str
     is_admin: bool
@@ -248,7 +252,7 @@ class AdminUserCreate(Schema):
     password: str = Field(..., min_length=8)
     is_admin: bool = False
     is_active: bool = True
-    group_ids: list[str] | None = None
+    group_ids: list[Id] | None = None
 
 
 class AdminUserUpdate(Schema):
@@ -257,7 +261,7 @@ class AdminUserUpdate(Schema):
     password: str | None = Field(None, min_length=8)
     is_admin: bool | None = None
     is_active: bool | None = None
-    group_ids: list[str] | None = None
+    group_ids: list[Id] | None = None
 
 
 class AdminPasswordResetOut(Schema):
@@ -292,20 +296,20 @@ class AppSettingsUpdate(Schema):
 
 class FolderCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
-    parent_id: str | None = None
+    parent_id: Id | None = None
     position: int = 0
 
 
 class FolderUpdate(Schema):
     name: str | None = Field(None, min_length=1, max_length=255)
-    parent_id: str | None = None
+    parent_id: Id | None = None
     position: int | None = None
 
 
 class FolderOut(Schema):
-    id: str
+    id: Id
     name: str
-    parent_id: str | None
+    parent_id: Id | None
     position: int
 
 
@@ -315,7 +319,7 @@ class FolderOut(Schema):
 
 
 class CalendarMemberCreate(Schema):
-    user_id: str
+    user_id: Id
     role: Role = Role.READ
 
 
@@ -324,11 +328,11 @@ class CalendarMemberUpdate(Schema):
 
 
 class CalendarMemberBatchOut(Schema):
-    id: str
-    calendar_id: str
-    user_id: str
+    id: Id
+    calendar_id: Id
+    user_id: Id
     role: str
-    folder_id: str | None
+    folder_id: Id | None
     position: int
 
 
@@ -392,7 +396,7 @@ class CalendarUpdate(Schema):
 
 
 class CalendarOut(WeekLayoutOut):
-    id: str
+    id: Id
     name: str
     description: str = ""
     url_path: str | None
@@ -411,7 +415,7 @@ class CalendarOut(WeekLayoutOut):
     dark_outer_border_color: str
     is_public: bool
     public_role: str
-    owner_id: str
+    owner_id: Id
     created_at: datetime
     updated_at: datetime
     my_membership: CalendarMemberOut | None = None
@@ -427,7 +431,7 @@ class CalendarListOut(Schema):
 class PublicCalendarOut(Schema):
     """A public calendar to add to the sidebar."""
 
-    id: str
+    id: Id
     name: str
     description: str = ""
     owner_name: str
@@ -440,18 +444,18 @@ class PublicCalendarOut(Schema):
 
 
 class CalendarGroupLinkGroupInfo(Schema):
-    id: str
+    id: Id
     name: str
 
 
 class CalendarGroupLinkMember(Schema):
-    id: str
+    id: Id
     email: str
     display_name: str
 
 
 class CalendarGroupLinkOut(Schema):
-    id: str
+    id: Id
     group: CalendarGroupLinkGroupInfo
     role: str
     # Everyone in the group, who therefore has the role in this calendar.
@@ -459,7 +463,7 @@ class CalendarGroupLinkOut(Schema):
 
 
 class CalendarGroupLinkCreate(Schema):
-    group_id: str
+    group_id: Id
     role: Literal["read", "own", "full", "manage"] = "read"
 
 
@@ -475,11 +479,11 @@ class CalendarGroupLinkUpdate(Schema):
 class ApproversIn(Schema):
     """The complete list of approvers; whoever is not in it is no approver any more."""
 
-    user_ids: list[str]
+    user_ids: list[Id]
 
 
 class ApproverOut(Schema):
-    user_id: str
+    user_id: Id
     email: str
     display_name: str
 
@@ -509,8 +513,8 @@ class ResourceUpdate(Schema):
 
 
 class ResourceOut(Schema):
-    id: str
-    calendar_id: str
+    id: Id
+    calendar_id: Id
     name: str
     description: str = ""
     color: str
@@ -544,8 +548,8 @@ class CategoryUpdate(Schema):
 
 
 class CategoryOut(Schema):
-    id: str
-    calendar_id: str
+    id: Id
+    calendar_id: Id
     name: str
     description: str = ""
     color: str
@@ -559,7 +563,7 @@ class CategoryOut(Schema):
 
 
 class EventParticipantInvite(Schema):
-    user_id: str | None = None
+    user_id: Id | None = None
     email: EmailAddress | None = None
     status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
@@ -575,15 +579,15 @@ class EventCreate(Schema):
     description: Text = ""
     location: str | None = Field(default=None, max_length=255)
     # A resource marked as location to book; the location then is its name.
-    location_resource_id: str | None = None
+    location_resource_id: Id | None = None
     start: datetime
     end: datetime
     all_day: bool = False
     timezone: TimeZoneName | None = None
     show_recurrence_count: bool = False
     rrule: RRule | None = None
-    category_id: str | None = None
-    resource_id: str | None = None
+    category_id: Id | None = None
+    resource_id: Id | None = None
     participants: list[EventParticipantInvite] | None = None
 
 
@@ -591,19 +595,19 @@ class EventUpdate(Schema):
     title: str | None = Field(None, max_length=255)
     description: Text = ""
     location: str | None = Field(None, max_length=255)
-    location_resource_id: str | None = None
+    location_resource_id: Id | None = None
     start: datetime | None = None
     end: datetime | None = None
     all_day: bool | None = None
     timezone: TimeZoneName | None = None
     show_recurrence_count: bool | None = None
     rrule: RRule | None = None
-    category_id: str | None = None
-    resource_id: str | None = None
+    category_id: Id | None = None
+    resource_id: Id | None = None
 
 
 class EventParticipantCreate(Schema):
-    user_id: str | None = None
+    user_id: Id | None = None
     email: EmailAddress | None = None
     status: ParticipantStatus | None = ParticipantStatus.NEEDS_ACTION
 
@@ -628,9 +632,9 @@ class EventParticipantUpdate(Schema):
 
 
 class EventParticipantOut(Schema):
-    id: str
-    event_id: str
-    user_id: str | None
+    id: Id
+    event_id: Id
+    user_id: Id | None
     email: str
     display_name: str | None
     status: str
@@ -639,15 +643,15 @@ class EventParticipantOut(Schema):
 
 
 class EventOut(Schema):
-    id: str
-    calendar_id: str
-    creator_id: str
+    id: Id
+    calendar_id: Id
+    creator_id: Id
     creator_name: str | None = None
     creator_email: str | None = None
     title: str
     description: str = ""
     location: str = ""
-    location_resource_id: str | None = None
+    location_resource_id: Id | None = None
     location_resource_name: str | None = None
     start: datetime
     end: datetime
@@ -659,12 +663,12 @@ class EventOut(Schema):
     rdates: list[datetime] = []
     uid: str
     # Set when the event is a changed occurrence of the series parent_id.
-    parent_id: str | None = None
+    parent_id: Id | None = None
     recurrence_id: datetime | None = None
-    category_id: str | None
+    category_id: Id | None
     category_name: str | None
     category_color: str | None
-    resource_id: str | None
+    resource_id: Id | None
     resource_name: str | None
     status: str
     # Names of the booked resources a pending event still waits to have approved.
@@ -682,9 +686,9 @@ OccurrenceScope = Literal["this", "following", "all"]
 
 
 class OccurrenceOut(Schema):
-    event_id: str
+    event_id: Id
     # Clients take the event colors from the calendar, so they follow color changes right away.
-    calendar_id: str
+    calendar_id: Id
     title: str
     description: str = ""
     start: datetime
@@ -692,21 +696,21 @@ class OccurrenceOut(Schema):
     all_day: bool
     recurrence_count: int | None
     status: str
-    category_id: str | None
+    category_id: Id | None
     category_name: str | None
     category_color: str | None
-    resource_id: str | None
+    resource_id: Id | None
     resource_name: str | None
     resource_icon: str = ""
     location: str = ""
-    location_resource_id: str | None = None
+    location_resource_id: Id | None = None
     location_resource_icon: str = ""
-    creator_id: str
+    creator_id: Id
     can_edit: bool
     is_recurring: bool
     # For occurrences of a series: the series and the occurrence's original start, which
     # identify it in /events/{series_id}/occurrences/{recurrence_id}.
-    series_id: str | None = None
+    series_id: Id | None = None
     recurrence_id: datetime | None = None
 
 
@@ -720,18 +724,18 @@ class CommentCreate(Schema):
 
 
 class CommentOut(Schema):
-    id: str
-    event_id: str
-    author_id: str
+    id: Id
+    event_id: Id
+    author_id: Id
     author_name: str
     body: str
     created_at: datetime
 
 
 class ActivityOut(Schema):
-    id: str
-    event_id: str
-    actor_id: str | None
+    id: Id
+    event_id: Id
+    actor_id: Id | None
     actor_name: str | None
     action: str
     details: dict | None
@@ -744,12 +748,12 @@ class ActivityOut(Schema):
 
 
 class NotificationOut(Schema):
-    id: str
+    id: Id
     type: str
-    actor_id: str | None
+    actor_id: Id | None
     actor_name: str | None
-    calendar_id: str | None
-    event_id: str | None
+    calendar_id: Id | None
+    event_id: Id | None
     title: str
     data: dict | None
     read_at: datetime | None
@@ -796,10 +800,10 @@ class FeedTokenRotateOut(Schema):
 
 
 class LayoutItem(Schema):
-    id: str
+    id: Id
     type: Literal["calendar", "folder"]
     position: int
-    parent_id: str | None = None
+    parent_id: Id | None = None
 
 
 class LayoutItemsUpdate(Schema):
@@ -826,10 +830,10 @@ class AvailabilityIn(Schema):
 
     start: datetime
     end: datetime
-    user_ids: list[str] = []
-    resource_ids: list[str] = []
+    user_ids: list[Id] = []
+    resource_ids: list[Id] = []
     # An event being edited doesn't count as taking its own time.
-    exclude_event_id: str | None = None
+    exclude_event_id: Id | None = None
 
 
 class BusyPeriod(Schema):
@@ -840,7 +844,7 @@ class BusyPeriod(Schema):
 
 
 class AvailabilityEntry(Schema):
-    id: str
+    id: Id
     name: str
     busy: list[BusyPeriod]
 

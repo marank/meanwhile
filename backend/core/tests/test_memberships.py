@@ -46,7 +46,7 @@ def test_joining_a_group_gives_its_calendars_and_leaving_takes_them(setup):
     CalendarGroup.objects.create(calendar=setup["calendar"], group=setup["group"], role="own")
     setup["me"].groups.add(setup["group"])
     assert access(setup) == ("group", "own")
-    assert sidebar(setup["my"])[setup["calendar"].id]["access"] == "group"
+    assert sidebar(setup["my"])[str(setup["calendar"].id)]["access"] == "group"
 
     setup["me"].groups.remove(setup["group"])
     assert membership(setup) is None
@@ -82,12 +82,12 @@ def test_a_direct_membership_wins_and_falls_back_to_the_group_keeping_its_place(
     cal = setup["calendar"].id
 
     # Granted directly: the group's membership becomes the direct one, in the same place.
-    res = setup["api"].post(f"/api/calendars/{cal}/members", {"user_id": setup["me"].id, "role": "full"}, content_type="application/json")
+    res = setup["api"].post(f"/api/calendars/{cal}/members", {"user_id": str(setup["me"].id), "role": "full"}, content_type="application/json")
     assert res.status_code == 200, res.content
     assert (membership(setup).source, membership(setup).role, membership(setup).folder_id) == ("direct", "full", folder.id)
     assert [m["user_id"] for m in setup["api"].get(f"/api/calendars/{cal}/members").json()] == [
-        setup["owner"].id,
-        setup["me"].id,
+        str(setup["owner"].id),
+        str(setup["me"].id),
     ]
     # A changed group role doesn't touch it.
     CalendarGroup.objects.filter(group=setup["group"]).update(role="own")
@@ -98,7 +98,7 @@ def test_a_direct_membership_wins_and_falls_back_to_the_group_keeping_its_place(
     # Taken away again, what the group gives remains, still in the folder.
     assert setup["api"].delete(f"/api/calendars/{cal}/members/{setup['me'].id}").status_code == 200
     assert (access(setup), membership(setup).folder_id) == (("group", "own"), folder.id)
-    assert [m["user_id"] for m in setup["api"].get(f"/api/calendars/{cal}/members").json()] == [setup["owner"].id]
+    assert [m["user_id"] for m in setup["api"].get(f"/api/calendars/{cal}/members").json()] == [str(setup["owner"].id)]
 
 
 def test_an_added_public_calendar_follows_its_public_role_and_leaves_when_private(setup):

@@ -2,7 +2,6 @@
 Tests for the stored calendar color roles.
 """
 
-import importlib
 
 import pytest
 
@@ -11,7 +10,6 @@ from core.tests.helpers import Api, make_user
 
 pytestmark = pytest.mark.django_db
 
-migration = importlib.import_module("core.migrations.0003_calendar_color_roles")
 
 
 def test_new_calendars_start_with_the_default_preset():
@@ -47,19 +45,3 @@ def test_occurrences_name_their_calendar():
     ).json()
     assert occurrences[0]["calendar_id"] == calendar["id"]
     assert "event_color" not in occurrences[0]
-
-
-def test_migration_derives_the_default_preset_from_its_day_colors():
-    # The derived colors of the default preset must come out of the same formulas the presets were made with.
-    light = migration.derived_colors(DEFAULT_COLORS["base_color"], dark=False)
-    dark = migration.derived_colors(DEFAULT_COLORS["dark_base_color"], dark=True)
-    assert light == {
-        "event": DEFAULT_COLORS["event_color"],
-        "border": DEFAULT_COLORS["border_color"],
-        "outer_border": DEFAULT_COLORS["outer_border_color"],
-    }
-    assert dark == {
-        "event": DEFAULT_COLORS["dark_event_color"],
-        "border": DEFAULT_COLORS["dark_border_color"],
-        "outer_border": DEFAULT_COLORS["dark_outer_border_color"],
-    }

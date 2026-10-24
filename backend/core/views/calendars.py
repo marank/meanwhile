@@ -18,6 +18,7 @@ from core.models import (
     ResourceApprover,
     User,
     UserGroup,
+    as_uuid,
 )
 from core.models.base import MembershipSource, Role
 from core.models.calendar_colors import COLOR_FIELDS
@@ -199,7 +200,7 @@ def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
             raise HttpError(422, "This calendar URL is reserved")
         if Calendar.objects.exclude(id=calendar.id).filter(url_path=url_path).exists():
             raise HttpError(409, "This calendar URL is already in use")
-        if Calendar.objects.exclude(id=calendar.id).filter(id=url_path).exists():
+        if as_uuid(url_path) and Calendar.objects.exclude(id=calendar.id).filter(id=as_uuid(url_path)).exists():
             raise HttpError(409, "This calendar URL is already in use")
     for attr, value in data.items():
         setattr(calendar, attr, value)

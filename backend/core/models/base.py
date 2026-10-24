@@ -2,18 +2,31 @@
 Base model helpers and shared enums.
 """
 
+import uuid
+
 import uuid_utils
 from django.db import models
 
 
-def new_uuid7() -> str:
-    return str(uuid_utils.uuid7())
+def new_uuid7() -> uuid.UUID:
+    return uuid.UUID(bytes=uuid_utils.uuid7().bytes)
+
+
+def as_uuid(value) -> uuid.UUID | None:
+    """The UUID a string spells, or None: for values that may be an id or a name (a calendar's URL
+    path, a CalDAV path segment), as looking up a UUID field with anything else fails."""
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except ValueError:
+        return None
 
 
 class UUIDModel(models.Model):
-    """A model whose primary key is a UUIDv7 string, which sorts by creation time."""
+    """A model whose primary key is a UUIDv7, which sorts by creation time."""
 
-    id = models.CharField(primary_key=True, max_length=36, default=new_uuid7, editable=False)
+    id = models.UUIDField(primary_key=True, default=new_uuid7, editable=False)
 
     class Meta:
         abstract = True

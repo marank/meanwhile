@@ -89,6 +89,10 @@ The tests need the PostgreSQL of `docker-compose.dev.yml`, too:
 uv run pytest
 ```
 
+They run in parallel, one process per CPU (pytest-xdist); `uv run pytest -n 0` runs them in one,
+e.g. to debug with `-s` or `--pdb`. The test settings (`config/settings_test.py`) use a fast password
+hasher and no delay for wrong CalDAV passwords.
+
 ### Superusers (Django admin)
 
 Superusers may sign in to the Django admin (`/admin/`) and do everything there. The app doesn't

@@ -35,6 +35,14 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      // The link in the email allauth sends (HEADLESS_FRONTEND_URLS); the key authorizes the reset.
+      path: '/reset-password/:resetKey',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      props: true,
+      meta: { anyone: true },
+    },
+    {
       // Answering an invitation from the link in its email; the token is the key.
       path: '/rsvp/:token',
       name: 'rsvp',

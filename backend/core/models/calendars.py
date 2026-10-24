@@ -47,7 +47,9 @@ class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
     description = models.TextField(blank=True, default="")
     force_all_day = models.BooleanField(default=False)
     # Path name a CalDAV client chose when it created the calendar; the id serves as path otherwise.
-    dav_name = models.CharField(max_length=255, unique=True, blank=True, null=True)
+    # Unique per owner (Meta.constraints): each user names the calendars in their own home. Null, not
+    # "", for none, so that the constraint leaves the many without one alone.
+    dav_name = models.CharField(max_length=255, blank=True, null=True)  # noqa: DJ001
     url_path = models.CharField(max_length=100, unique=True, blank=True, null=True)
     is_public = models.BooleanField(default=False)
     public_role = models.CharField(
@@ -59,6 +61,7 @@ class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
 
     class Meta:
         db_table = "calendars"
+        constraints = [models.UniqueConstraint(fields=["owner", "dav_name"], name="uq_calendar_dav_name")]
 
     def __str__(self) -> str:
         return self.name

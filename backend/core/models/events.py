@@ -126,7 +126,7 @@ class DeletedEvent(models.Model):
     """Where a deleted event was, so CalDAV clients learn about the deletion when they sync."""
 
     # No foreign key: the record of an event outlives it, and a deleted calendar takes its records along.
-    calendar_id = models.CharField(max_length=36, db_index=True)
+    calendar_id = models.UUIDField(db_index=True)
     href = models.CharField(max_length=255)
     deleted_at = models.DateTimeField(auto_now_add=True, db_index=True)
 

@@ -1,38 +1,37 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as api from '@/api'
 import AppLogo from '@/components/AppLogo.vue'
 import { errorMessage } from '@/services/errors'
 import { useSettingsStore } from '@/stores/settings'
 
+/** Without a key: asking for the link by email. With the key from that link: setting the new password. */
+const props = defineProps<{ resetKey?: string }>()
+
 const settings = useSettingsStore()
 const { t } = useI18n()
 
-/** First the email address, then the code from the email with the new password, then done. The code
- * works in this browser session only, so both steps happen on this page. */
-const step = ref<'email' | 'code' | 'done'>('email')
+const settingNew = computed(() => !!props.resetKey)
+
 const email = ref('')
-const code = ref('')
 const password = ref('')
 const error = ref('')
 const busy = ref(false)
+/** The link was sent, or the password set. */
+const done = ref(false)
 
 async function submit() {
   error.value = ''
   busy.value = true
   try {
-    if (step.value === 'email') {
-      await api.requestPasswordReset(email.value)
-      step.value = 'code'
-    } else {
-      await api.resetPassword(code.value.trim(), password.value)
-      step.value = 'done'
-    }
+    if (settingNew.value) await api.resetPassword(props.resetKey!, password.value)
+    else await api.requestPasswordReset(email.value)
+    done.value = true
   } catch (e) {
-    // allauth answers a wrong or expired code with an error on the field "key".
-    const badCode = e instanceof api.ApiError && JSON.stringify(e.detail).includes('"param":"key"')
-    error.value = badCode ? t('auth.resetInvalid') : errorMessage(e, t('app.actionFailed'))
+    // allauth answers an unknown, used or expired key with an error on the field "key".
+    const badKey = e instanceof api.ApiError && JSON.stringify(e.detail).includes('"param":"key"')
+    error.value = badKey ? t('auth.resetInvalid') : errorMessage(e, t('app.actionFailed'))
   } finally {
     busy.value = false
   }
@@ -49,10 +48,26 @@ async function submit() {
 
       <h2 class="text-lg font-medium text-gray-700 mb-4 text-center">{{ $t('auth.resetTitle') }}</h2>
 
-      <p v-if="step === 'done'" class="text-sm text-gray-700" role="status">{{ $t('auth.resetDone') }}</p>
+      <p v-if="done" class="text-sm text-gray-700" role="status">
+        {{ settingNew ? $t('auth.resetDone') : $t('auth.resetSent') }}
+      </p>
 
       <form v-else class="space-y-4" @submit.prevent="submit">
-        <template v-if="step === 'email'">
+        <div v-if="settingNew">
+          <label for="new-password" class="block text-sm font-medium text-gray-700 mb-1">
+            {{ $t('auth.newPassword') }}
+          </label>
+          <input
+            id="new-password"
+            v-model="password"
+            type="password"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            class="w-full px-3 py-2 border border-line rounded-lg"
+          />
+        </div>
+        <template v-else>
           <p class="text-sm text-gray-600">{{ $t('auth.resetRequestHelp') }}</p>
           <div>
             <label for="reset-email" class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.email') }}</label>
@@ -62,36 +77,6 @@ async function submit() {
               type="email"
               autocomplete="email"
               required
-              class="w-full px-3 py-2 border border-line rounded-lg"
-            />
-          </div>
-        </template>
-        <template v-else>
-          <p class="text-sm text-gray-600" role="status">{{ $t('auth.resetSent') }}</p>
-          <div>
-            <label for="reset-code" class="block text-sm font-medium text-gray-700 mb-1">
-              {{ $t('auth.resetCode') }}
-            </label>
-            <input
-              id="reset-code"
-              v-model="code"
-              type="text"
-              autocomplete="one-time-code"
-              required
-              class="w-full px-3 py-2 border border-line rounded-lg font-mono tracking-widest"
-            />
-          </div>
-          <div>
-            <label for="new-password" class="block text-sm font-medium text-gray-700 mb-1">
-              {{ $t('auth.newPassword') }}
-            </label>
-            <input
-              id="new-password"
-              v-model="password"
-              type="password"
-              autocomplete="new-password"
-              required
-              minlength="8"
               class="w-full px-3 py-2 border border-line rounded-lg"
             />
           </div>
@@ -106,7 +91,7 @@ async function submit() {
           :disabled="busy"
           class="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {{ step === 'email' ? $t('auth.resetSend') : $t('auth.setPassword') }}
+          {{ settingNew ? $t('auth.setPassword') : $t('auth.resetSend') }}
         </button>
       </form>
 

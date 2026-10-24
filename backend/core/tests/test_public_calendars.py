@@ -56,7 +56,7 @@ def test_an_added_calendar_is_placed_like_any_other(world, public):
     res = api.patch("/layout/items", {"items": [{"type": "calendar", "id": public, "parent_id": folder.id, "position": 3}]})
     assert res.status_code == 200, res.content
     membership = listed(world)[public]["membership"]
-    assert (membership["folder_id"], membership["position"]) == (folder.id, 3)
+    assert (membership["folder_id"], membership["position"]) == (str(folder.id), 3)
 
 
 def test_only_public_calendars_can_be_added(world):

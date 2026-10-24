@@ -217,6 +217,8 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ADMIN_NAME = os.environ.get("ADMIN_NAME", "")
 BASE_URL = os.environ.get("BASE_URL", "")
 CALDAV_PATH = os.environ.get("CALDAV_PATH", "/caldav")
+# Seconds before CalDAV answers a wrong password (Radicale's auth delay).
+CALDAV_FAILED_LOGIN_DELAY = 1
 
 
 # ---------------------------------------------------------------------------
@@ -282,12 +284,11 @@ EMAIL_SEND_IN_BACKGROUND = _bool_env("EMAIL_SEND_IN_BACKGROUND", True)
 # Address of the app for links in emails; BASE_URL, or in development the Vite dev server.
 APP_URL = (BASE_URL or ("http://localhost:6326" if ENVIRONMENT == "development" else "")).rstrip("/")
 
-# Forgotten passwords: allauth mails a code, which the app's page (ResetPasswordView) takes along
-# with the new password, in the same browser session. A code rather than a link: allauth's link keys
-# can't carry user ids with hyphens (ours are UUIDs). Only addresses with an account get one; the
+# Forgotten passwords: allauth mails a link to the app's page that sets a new one (ResetPasswordView);
+# the key in it works once, for PASSWORD_RESET_TIMEOUT. Only addresses with an account get one; the
 # answer is the same either way, so it tells nothing.
-ACCOUNT_PASSWORD_RESET_BY_CODE_ENABLED = True
-ACCOUNT_PASSWORD_RESET_BY_CODE_TIMEOUT = 15 * 60
+if APP_URL:
+    HEADLESS_FRONTEND_URLS = {"account_reset_password_from_key": f"{APP_URL}/reset-password/{{key}}"}
 ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS = False
 
 # iMIP: invitations name this mailbox as organizer, so participants' mail programs send their

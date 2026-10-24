@@ -23,7 +23,7 @@ def test_unknown_ids_are_not_found(world, method, path):
 
 
 def test_not_found_names_what_is_missing(world):
-    res = world["api"]["owner"].get("/calendars/unknown")
+    res = world["api"]["owner"].get("/calendars/01a16fd9-0000-7000-8000-000000000000")
     assert res.json() == {"detail": "Calendar not found"}
 
 
