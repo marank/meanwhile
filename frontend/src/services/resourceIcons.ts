@@ -77,7 +77,7 @@ import {
 } from 'lucide-vue-next'
 
 /** The icons a resource can have, by the name stored with it (the lucide name in kebab case). */
-export const RESOURCE_ICONS: Record<string, Component> = {
+const RESOURCE_ICONS: Record<string, Component> = {
   'door-open': DoorOpen,
   'building-2': Building2,
   warehouse: Warehouse,

@@ -16,7 +16,7 @@ const appPasswords = ref<api.AppPassword[]>([])
 const newLabel = ref('')
 const createdPassword = ref<string | null>(null)
 
-const { loading: loading } = useLoader(loadAppPasswords)
+const { loading } = useLoader(loadAppPasswords)
 
 async function loadAppPasswords() {
   appPasswords.value = await api.listAppPasswords()

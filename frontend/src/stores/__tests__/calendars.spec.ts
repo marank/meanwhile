@@ -13,7 +13,11 @@ function folder(id: string, parent_id: string | null = null): api.Folder {
   return { id, name: id, parent_id, position: 0 }
 }
 
-function calendarItem(id: string, folder_id: string | null = null, url_path: string | null = null): api.CalendarListItem {
+function calendarItem(
+  id: string,
+  folder_id: string | null = null,
+  url_path: string | null = null,
+): api.CalendarListItem {
   return {
     calendar: { id, name: id, url_path } as api.Calendar,
     membership: { folder_id, position: 0, role: 'owner' } as api.CalendarMember,

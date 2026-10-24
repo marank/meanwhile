@@ -4,14 +4,14 @@ Vue 3 single-page app of Meanwhile. See the [project README](../README.md) for s
 
 ## Scripts
 
-| Command           | Purpose                                   |
-| ----------------- | ----------------------------------------- |
-| `pnpm dev`        | Dev server with hot reload                |
-| `pnpm build`      | Type-check and build for production       |
-| `pnpm test:unit`  | Unit tests (Vitest, in `__tests__` dirs)  |
-| `pnpm lint`       | ESLint, fixing what it can                |
-| `pnpm format`     | Prettier                                  |
-| `pnpm type-check` | vue-tsc                                   |
+| Command           | Purpose                                  |
+| ----------------- | ---------------------------------------- |
+| `pnpm dev`        | Dev server with hot reload               |
+| `pnpm build`      | Type-check and build for production      |
+| `pnpm test:unit`  | Unit tests (Vitest, in `__tests__` dirs) |
+| `pnpm lint`       | ESLint, fixing what it can               |
+| `pnpm format`     | Prettier                                 |
+| `pnpm type-check` | vue-tsc                                  |
 
 ## Layout
 

@@ -10,7 +10,7 @@ export const MAX_REMINDERS = 10
 
 export type ReminderUnit = 'minutes' | 'hours' | 'days' | 'weeks'
 
-export const UNIT_MINUTES: Record<ReminderUnit, number> = { minutes: 1, hours: 60, days: DAY, weeks: 7 * DAY }
+const UNIT_MINUTES: Record<ReminderUnit, number> = { minutes: 1, hours: 60, days: DAY, weeks: 7 * DAY }
 
 /** A reminder as the editor shows it: an amount of a unit before a timed event … */
 export interface TimedReminder {

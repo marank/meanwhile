@@ -2,7 +2,7 @@ import { reactive, ref } from 'vue'
 
 type DialogKind = 'alert' | 'confirm' | 'prompt' | 'choice'
 
-export interface DialogChoice {
+interface DialogChoice {
   value: string
   label: string
 }

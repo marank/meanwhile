@@ -107,9 +107,9 @@ export const useCalendarStore = defineStore('calendars', () => {
 
   /** Only the calendar view calls this, from its URL; everyone else navigates to `selectionPath(id)`. */
   function select(idOrPath: string) {
-    selectedId.value = items.value.find(
-      (item) => item.calendar.id === idOrPath || item.calendar.url_path === idOrPath,
-    )?.calendar.id ?? idOrPath
+    selectedId.value =
+      items.value.find((item) => item.calendar.id === idOrPath || item.calendar.url_path === idOrPath)?.calendar.id ??
+      idOrPath
   }
 
   /** The URL that shows a calendar, a folder, or all calendars. */

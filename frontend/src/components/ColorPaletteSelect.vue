@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import AppSelect from '@/components/AppSelect.vue'
 
-export interface ColorPaletteOption {
+interface ColorPaletteOption {
   id: string
   label: string
   colors: string[]

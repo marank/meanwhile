@@ -3,7 +3,7 @@ import type { LayoutItem } from '@/api'
 export type NodeType = 'folder' | 'calendar'
 
 /** A folder or calendar of the user's sidebar tree. */
-export interface TreeNode {
+interface TreeNode {
   id: string
   parentId: string | null
   position: number

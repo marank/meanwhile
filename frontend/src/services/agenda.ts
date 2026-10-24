@@ -1,7 +1,7 @@
 import type { Occurrence } from '@/api'
 
 /** Which part of an occurrence a day shows: all of it, or its first, a middle or its last day. */
-export type AgendaSpan = 'single' | 'first' | 'middle' | 'last'
+type AgendaSpan = 'single' | 'first' | 'middle' | 'last'
 
 export interface AgendaEntry {
   occurrence: Occurrence
@@ -40,7 +40,7 @@ function utcDay(value: string): Date {
 }
 
 /** The first and the last local day an occurrence touches. A timed event ending at midnight ends the day before. */
-export function occurrenceDays(occ: Occurrence): [Date, Date] {
+function occurrenceDays(occ: Occurrence): [Date, Date] {
   if (occ.all_day) {
     const first = utcDay(occ.start)
     const last = addDays(utcDay(occ.end), -1)

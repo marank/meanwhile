@@ -15,7 +15,7 @@ Meanwhile is a self-hosted calendar application with a Django backend and a Vue 
 
 ## Tech stack
 
-- **Backend**: Python 3.12, Django 5.1, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI (daphne in development, uvicorn in production).
+- **Backend**: Python 3.14, Django 6.0, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI (daphne in development, uvicorn in production).
 - **Frontend**: Vue 3, Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS.
 - **Database**: PostgreSQL, in development too; it also holds the task queue (procrastinate).
 - **Package managers**: `uv` (backend), `pnpm` (frontend).
@@ -27,10 +27,11 @@ calendar/
   backend/            Django backend
   backend_fastapi/    Reference FastAPI implementation
   frontend/           Vue SPA
-  docker/             nginx, supervisord and entrypoint of the production image
+  docker/             nginx, supervisord, entrypoint, healthcheck and backup script of the production image
   Dockerfile          Production image (frontend + backend in one container)
-  docker-compose.yml  Production: PostgreSQL, Redis, app
-  docker-compose.dev.yml  Development stack with live reload
+  compose.yml         Production: PostgreSQL, Redis, app, nightly backups
+  compose.dev.yml     Development stack with live reload
+  .gitea/workflows/   CI (checks, image build, smoke test, scans, push) and Renovate
   BACKLOG.md          Feature backlog and known limitations
 ```
 
@@ -41,7 +42,7 @@ task queue's worker and the Vite dev server.
 
 ```bash
 cp .env.example .env     # once; ADMIN_EMAIL and ADMIN_PASSWORD give you a user to sign in with
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f compose.dev.yml up --build
 ```
 
 The app is at http://localhost:6326, the backend at http://localhost:8000, the emails at
@@ -53,37 +54,38 @@ Migrations run on every start (service `migrate`), followed by `manage.py ensure
 Commands run in the backend's container:
 
 ```bash
-docker compose -f docker-compose.dev.yml exec backend pytest
-docker compose -f docker-compose.dev.yml exec backend python manage.py fetch_imip --mailpit http://mailpit:8025
+docker compose -f compose.dev.yml exec backend pytest
+docker compose -f compose.dev.yml exec backend python manage.py fetch_imip --mailpit http://mailpit:8025
 ```
 
 All setups read the `.env` of the project root (template: `.env.example`).
-`docker-compose.dev.yml` sets the database, Redis and Mailpit addresses itself, overriding it.
+`compose.dev.yml` sets the database, Redis and Mailpit addresses itself, overriding it.
 
 ## Backend development
 
 Without Docker for the app itself, only the services next to it:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d postgres redis mailpit   # the default DATABASE_URL, Redis, Mailpit
-cp .env.example .env     # once, in the project root; uncomment ENVIRONMENT=development there
+docker compose -f compose.dev.yml up -d postgres redis mailpit   # the default database, Redis, Mailpit
+cp .env.example .env     # once, in the project root; set DEBUG=true there
 cd backend
 uv sync
-DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py migrate
-DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py runserver 0.0.0.0:8000
+uv run python manage.py migrate
+uv run python manage.py runserver 0.0.0.0:8000
 ```
 
-Without `ENVIRONMENT=development` the backend runs as in production: it refuses to start with the
-development `SECRET_KEY`. The tests always use development settings (`config/settings_test.py`).
+Without `DEBUG=true` the backend runs as in production: it refuses to start without a real
+`SECRET_KEY` and `DB_PASSWORD`. The tests always use development settings (`config/settings_test.py`).
+In VS Code, the tasks `dev: services` and `dev` do the same.
 
 In a second terminal, the worker of the task queue: it sends emails, delivers reminders and runs
 the other regular jobs (`core/tasks.py`).
 
 ```bash
-DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py procrastinate worker
+uv run python manage.py procrastinate worker
 ```
 
-The tests need the PostgreSQL of `docker-compose.dev.yml`, too:
+The tests need the PostgreSQL of `compose.dev.yml`, too:
 
 ```bash
 uv run pytest
@@ -104,16 +106,27 @@ uv run python manage.py set_superuser someone@example.com --revoke
 ```
 
 In the Docker setups: `docker compose exec app python manage.py set_superuser ...` (production),
-`docker compose -f docker-compose.dev.yml exec backend python manage.py set_superuser ...`
+`docker compose -f compose.dev.yml exec backend python manage.py set_superuser ...`
 (development).
 
-### System checks
+### Checks
 
-Run system checks:
+The VS Code task `check` runs everything CI runs (`.gitea/workflows/build.yaml`); keep both in
+sync. Without VS Code, in `backend/` (with `DEBUG=true` and the services above running):
 
 ```bash
-DJANGO_SETTINGS_MODULE=config.settings uv run python manage.py check
+uv run ruff check . && uv run ruff format --check .
+uv run mypy .
+uv run deptry .
+uv run python manage.py makemigrations --check --dry-run
+uv run python manage.py check --fail-level WARNING
+uv run pytest -q --cov --cov-fail-under=90
 ```
+
+And in `frontend/`: `pnpm check` (Prettier, oxlint, ESLint, knip, vue-tsc, Vitest with its coverage
+minimum), `pnpm build-only && pnpm size` (bundle budget) and `pnpm check:licenses`.
+
+Fast checks before each commit: `uv tool run pre-commit install` once.
 
 ## Frontend development
 
@@ -133,12 +146,14 @@ Checks:
 
 ```bash
 pnpm test:unit      # Vitest
-pnpm lint           # ESLint (fixes what it can)
+pnpm lint           # oxlint, ESLint, knip (unused files, exports, dependencies)
+pnpm lint:fix       # oxlint and ESLint, fixing what they can
 pnpm format         # Prettier
 pnpm type-check     # vue-tsc
 ```
 
-The Vite dev proxy forwards `/api`, `/ics`, `/caldav` and `/ws` to `http://localhost:8000` (`BACKEND_URL` changes it).
+The Vite dev proxy forwards `/api`, `/admin`, `/django-static`, `/ics`, `/caldav` and `/ws` to
+`http://localhost:8000` (`BACKEND_URL` changes it), keeping the browser's `Host`.
 
 ## Configuration
 
@@ -146,20 +161,21 @@ Backend settings are read from environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://meanwhile:meanwhile@localhost:5432/meanwhile` | PostgreSQL only (the one of `docker-compose.dev.yml` by default) |
-| `ENVIRONMENT` | `production` | `development` for running the backend without Docker: DEBUG, the dev `SECRET_KEY`, the defaults marked as such below. |
-| `SECRET_KEY` | dev key | Change in production (>= 32 bytes). |
-| `ALLOW_REGISTRATION` | `true` in development, `false` otherwise | Whether anyone may sign up. Signed-in users can look each other up (by name and email) to share calendars, so only open it to people who may see each other. |
+| `APP_URLS` | `http://localhost:6326` | Every URL the app is opened under, comma separated. Allowed hosts and CSRF trusted origins come from it; the first is the app's address in emails and feed links. With https URLs only, cookies are secure and plain http is redirected to https. In DEBUG the dev servers are added. |
+| `DEBUG` | `false` | `true` for running the backend without Docker: DEBUG, the dev `SECRET_KEY` and database password, the defaults marked as such below. |
+| `SECRET_KEY` | dev key in DEBUG | At least 40 random characters; the app refuses to start with a placeholder. |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | `meanwhile`, `meanwhile`, `meanwhile` in DEBUG, `localhost`, `5432` | PostgreSQL only (the one of `compose.dev.yml` by default). |
+| `ADMIN_ENABLED` | value of `DEBUG` | Serve the Django admin under `/admin/`. |
+| `TIME_ZONE`, `LANGUAGE_CODE` | `UTC`, `en-us` | Server defaults; users choose their own zone and language in the app. |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `DATA_DIR` | `backend/data` | Writable data directory; `/data` in the container. |
+| `ALLOW_REGISTRATION` | value of `DEBUG` | Whether anyone may sign up. Signed-in users can look each other up (by name and email) to share calendars, so only open it to people who may see each other. |
 | `ADMIN_EMAIL` | - | The admin user. `manage.py ensure_admin` (run on every start of the Docker setups) creates it or makes the existing user of that address admin (who then loses their sessions and app passwords to `ADMIN_PASSWORD`). Signing up never makes anyone admin; without Docker, run `manage.py ensure_admin` once. |
-| `ADMIN_PASSWORD` | - | Password of the admin user; needed to create it or make an existing user admin, set again when it differs (which signs the admin out). Empty: an existing admin keeps their password. |
+| `ADMIN_PASSWORD` | - | Password of the admin user; needed to create it or make an existing user admin, set again when it differs (which signs the admin out). Empty: an existing admin keeps their password. Outside DEBUG it must pass the password rules and must not be a placeholder. |
 | `ADMIN_NAME` | - | Display name of the admin user. |
 | `CALDAV_PATH` | `/caldav` | URL prefix for the embedded CalDAV server. |
 | `REDIS_URL` | - | e.g. `redis://redis:6379/0`. Required with more than one server process, so that live updates reach every process's WebSockets. Without it they stay within one process (fine for development). |
-| `BEHIND_PROXY` | `false` | Trust the reverse proxy's `X-Forwarded-Proto`/`-Host`. Only when the backend is reachable through the proxy alone. |
-| `SECURE_COOKIES` | `true` outside development | Session and CSRF cookies over HTTPS only. |
-| `CSRF_TRUSTED_ORIGINS` | Vite dev servers | The public origin(s), e.g. `https://meanwhile.example.com`. |
 | `WEBSOCKET_PATH` | `/ws/` | Path of the live update WebSocket. |
-| `BASE_URL` | - | Public address of the app, e.g. `https://meanwhile.example.com`; used for feed URLs and links in emails (in development, links point to the Vite dev server). |
 | `EMAIL_HOST`, `EMAIL_PORT` | -, `587` | SMTP server. Without it, emails are printed to the console in development and not sent otherwise. |
 | `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | - | SMTP login. |
 | `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | `false` | STARTTLS (usually port 587) / implicit TLS (usually 465). |
@@ -170,7 +186,7 @@ Backend settings are read from environment variables:
 
 ## Authentication
 
-The SPA uses session-cookie authentication via `django-allauth` headless browser endpoints mounted at `/api/auth/v1/auth/`. The frontend fetches a CSRF cookie from `/api/auth/csrf/` before login/register requests.
+The SPA uses session-cookie authentication via `django-allauth` headless browser endpoints mounted at `/api/auth/v1/auth/`. The frontend fetches a CSRF cookie from `/api/auth/csrf` before login/register requests.
 
 ## CalDAV
 
@@ -220,10 +236,10 @@ uv run python manage.py fetch_imip
 [Mailpit](https://mailpit.axllent.org/) catches every email and shows it in the browser:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d mailpit   # SMTP on 1025, web UI on http://localhost:8025
+docker compose -f compose.dev.yml up -d mailpit   # SMTP on 1025, web UI on http://localhost:8025
 ```
 
-`docker-compose.dev.yml` sends the backend's emails there by itself. A backend run without Docker
+`compose.dev.yml` sends the backend's emails there by itself. A backend run without Docker
 needs `EMAIL_HOST=localhost`, `EMAIL_PORT=1025`, `EMAIL_USE_TLS=false` and
 `IMIP_ADDRESS=meanwhile@localhost` in `.env`.
 
@@ -265,39 +281,84 @@ server passes `/ws` on.
 ## Deployment with Docker
 
 ```bash
-cp .env.example .env     # fill in; SECRET_KEY and POSTGRES_PASSWORD e.g. with `openssl rand -hex 32`
+cp .env.example .env     # fill in; SECRET_KEY and DB_PASSWORD as described there
 docker compose up -d --build
 ```
 
-This starts PostgreSQL, Redis and the `app` container, built by the `Dockerfile`:
+This starts PostgreSQL, Redis, the `app` container, built by the `Dockerfile`, and `backup`:
 
-- On every start, `docker/entrypoint.sh` applies the migrations first and creates or updates
-  the admin user of `ADMIN_EMAIL` (`manage.py ensure_admin`).
+- On every start, `docker/entrypoint.sh` checks the production settings
+  (`manage.py check --deploy`), applies the migrations and creates or updates the admin user of
+  `ADMIN_EMAIL` (`manage.py ensure_admin`).
 - Then supervisord (`docker/supervisord.conf`) runs, like everything in the container, as the
   unprivileged user `app`:
-  - nginx (`docker/nginx.conf`, port 8080 inside the container), which serves the built frontend and Django admin's static files
-    and passes `/api`, `/admin`, `/ics`, `/caldav`, `/.well-known/caldav` and the WebSocket `/ws/`
-    on;
+  - nginx (`docker/app.conf.template`, port 8080 inside the container), which serves the built
+    frontend and Django admin's static files and passes `/api`, `/ics`, `/caldav`,
+    `/.well-known/caldav` and the WebSocket `/ws/` on (`/admin` only with `ADMIN_ENABLED=true`);
   - uvicorn, with `WEB_WORKERS` processes;
   - the task queue's worker. It sends emails, delivers reminders, reads participants' answers
     from the iMIP mailbox (with `IMIP_ADDRESS` and the IMAP settings) and cleans up. Jobs wait in
     the database, so none is lost while it restarts.
+  If one of them keeps failing, the container stops and Docker restarts it.
 
-`.env` holds the domain, the secrets, the mail settings and a few optional values; see
-`.env.example`. `docker-compose.yml` derives `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` and
-`BASE_URL` from `DOMAIN` and sets the wiring itself: `ENVIRONMENT=production`, `DATABASE_URL`,
-`REDIS_URL` and `BEHIND_PROXY=true`.
+The app, Redis and backup containers are hardened: read-only root filesystem, no capabilities,
+no privilege escalation, unprivileged users. The app writes only to `/tmp` (tmpfs) and `/data`
+(volume). Anything new that needs to write goes there, rather than loosening `compose.yml`.
+
+`.env` holds the URLs, the secrets, the mail settings and a few optional values; see
+`.env.example`. `compose.yml` sets the wiring itself: `DEBUG=false`, `DB_HOST`, `REDIS_URL`.
 
 The container serves HTTP on `APP_BIND` (`127.0.0.1:6326` by default). Put a proxy in front that
 terminates HTTPS, passes everything on, including WebSocket upgrades, and sets
-`X-Forwarded-Proto` and `X-Forwarded-For`. Only that proxy should reach the port, because the app
-trusts its forwarded headers.
+`X-Forwarded-Proto` and `X-Forwarded-For` (and keeps `Host`, or sets `X-Forwarded-Host`). The app
+sends no HSTS header; set it at that proxy if you want it.
 
-The client's address is taken from `X-Forwarded-For` only when the request comes from one of
+nginx in the container believes those headers only when the request comes from one of
 `TRUSTED_PROXIES` (default: the private networks `10.0.0.0/8`, `172.16.0.0/12`,
 `192.168.0.0/16`, `fc00::/7`, which covers a proxy on the host reaching the container through
-Docker's network). Failed logins are limited per client address, so a proxy elsewhere has to be
-listed there, e.g. `TRUSTED_PROXIES=203.0.113.10`; `none` trusts no proxy.
+Docker's network); from anyone else they are ignored. With `https://` in `APP_URLS`, plain http
+is redirected, so the proxy must be listed, or every request ends in a redirect loop. Failed logins
+are limited per client address (by nginx, 10 per minute, and by allauth), so a proxy elsewhere has
+to be listed there too, e.g. `TRUSTED_PROXIES=203.0.113.10`; `none` trusts no proxy.
+
+### Backups
+
+The `backup` service dumps the database every night at `BACKUP_TIME` (in `TIME_ZONE`) into the
+`backups` volume and keeps `BACKUP_KEEP_DAYS` days. Dumps on the same host don't protect against
+losing the host, so copy them off regularly:
+
+```bash
+docker compose exec backup sh /backup.sh now                                   # a dump right now
+docker compose cp backup:/var/lib/postgresql/backups ./backups                 # copy all off the container
+docker compose exec -T backup sh -c 'pg_restore --clean --if-exists -d "$PGDATABASE"' < file.dump   # restore
+```
+
+### Upgrading an existing installation
+
+The configuration changed: in `.env`, rename `POSTGRES_PASSWORD` to `DB_PASSWORD` and replace
+`DOMAIN=meanwhile.example.com` with `APP_URLS=https://meanwhile.example.com`. `ENVIRONMENT`,
+`BEHIND_PROXY`, `SECURE_COOKIES`, `BASE_URL`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` and
+`CORS_ORIGINS` are gone (`DEBUG` and `APP_URLS` replace them). `SECRET_KEY` must be at least 40
+characters, and `ADMIN_PASSWORD` must pass the password rules. The database volume keeps its name.
+
+### CI and Renovate (Gitea)
+
+`.gitea/workflows/build.yaml` checks backend and frontend, scans the repository (Trivy), builds
+the image, starts it hardened against a throwaway PostgreSQL, scans it and pushes it to the Gitea
+registry of this instance (`latest` and `sha-…` from `main`, versions from `v1.2.3` tags).
+`renovate.yaml` runs Renovate daily (`renovate.json`): minor and patch updates merge themselves
+once CI is green, majors wait for a look.
+
+Set up once in Gitea:
+
+1. **Branch protection on `main` with required status checks** `backend`, `frontend`,
+   `repository` and `image`. Renovate's automerge waits for them; without required checks Gitea
+   merges right away, even with red CI.
+2. Actions enabled for the repository, and a runner with Docker.
+3. Secrets: `REGISTRY_USER` and `REGISTRY_TOKEN` (scope `write:package`) for the image;
+   `RENOVATE_TOKEN` (`write:repository`, `write:issue`, `read:organization`, `read:user`,
+   `read:package`) and optionally `GH_COM_TOKEN` (a read-only github.com token, for release notes)
+   for Renovate.
 
 Caddy (obtains the certificate itself):
 

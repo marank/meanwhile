@@ -43,7 +43,7 @@ export function parseDate(value: string | undefined): Date | undefined {
 }
 
 /** The Monday of ISO week `week` of `year`, if the year has that week (some have 52, some 53). */
-export function isoWeekStart(year: number, week: number): Date | undefined {
+function isoWeekStart(year: number, week: number): Date | undefined {
   const january4 = new Date(year, 0, 4)
   const start = new Date(year, 0, 4 - ((january4.getDay() + 6) % 7) + (week - 1) * 7)
   const thursday = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 3)

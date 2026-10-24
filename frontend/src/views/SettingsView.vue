@@ -79,12 +79,7 @@ function goBackToCalendar() {
         />
         <CalendarCategories v-else-if="tab === 'categories'" :calendar-id="calendar.id" :can-manage="canManage" />
         <CalendarResources v-else-if="tab === 'resources'" :calendar-id="calendar.id" :can-manage="canManage" />
-        <CalendarShareSettings
-          v-else
-          :calendar="calendar"
-          :can-manage="canManage"
-          @updated="calendar = $event"
-        />
+        <CalendarShareSettings v-else :calendar="calendar" :can-manage="canManage" @updated="calendar = $event" />
       </KeepAlive>
     </div>
   </SettingsPage>

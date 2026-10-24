@@ -522,7 +522,7 @@ export interface BusyPeriod {
 }
 
 /** When a user or resource is taken; no titles or details. */
-export interface AvailabilityEntry {
+interface AvailabilityEntry {
   id: string
   name: string
   busy: BusyPeriod[]
