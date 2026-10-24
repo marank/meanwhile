@@ -157,7 +157,7 @@ export const useCalendarStore = defineStore('calendars', () => {
   }
 
   async function createCalendar(name: string): Promise<api.Calendar> {
-    const calendar = await api.createCalendar(name)
+    const calendar = await api.createCalendar({ name })
     await load()
     return calendar
   }
@@ -195,13 +195,13 @@ export const useCalendarStore = defineStore('calendars', () => {
       if (update.type === 'folder') {
         const folder = folders.value.find((f) => f.id === update.id)
         if (folder) {
-          folder.parent_id = update.parent_id
+          folder.parent_id = update.parent_id ?? null
           folder.position = update.position
         }
       } else {
         const item = items.value.find((i) => i.calendar.id === update.id)
         if (item) {
-          item.membership.folder_id = update.parent_id
+          item.membership.folder_id = update.parent_id ?? null
           item.membership.position = update.position
         }
       }

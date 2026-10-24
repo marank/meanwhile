@@ -8,7 +8,9 @@ import type {
   AdminUserCreate,
   AdminUserUpdate,
   AppNotification,
+  AdminPasswordReset,
   AppPassword,
+  AppPasswordCreated,
   AppSettings,
   AppSettingsUpdate,
   Approver,
@@ -17,9 +19,11 @@ import type {
   CalendarGroupLinkCreate,
   CalendarGroupLinkUpdate,
   CalendarMember,
+  CalendarCreate,
   CalendarUpdate,
   Category,
   CategoryInput,
+  CategoryUpdate,
   Event,
   EventActivity,
   EventComment,
@@ -27,19 +31,27 @@ import type {
   EventParticipant,
   EventParticipantCreate,
   EventParticipantUpdate,
+  EventReminders,
+  EventUpdate,
+  FeedUrl,
   Folder,
+  FolderUpdate,
   GrantableRole,
   Invitation,
+  InvitationAnswer,
+  NotificationCounts,
   NotificationGroup,
   Availability,
   Occurrence,
   OccurrenceScope,
+  Ok,
   OverviewSettings,
-  ParticipantStatus,
+  OverviewSettingsUpdate,
   ProfileUpdate,
   Resource,
   PublicCalendar,
   ResourceInput,
+  ResourceUpdate,
   SearchEntity,
   SearchResult,
   Layout,
@@ -127,7 +139,7 @@ export const searchEntities = (
 export const listAppPasswords = () => api<AppPassword[]>('/api/users/me/app-passwords')
 
 export const createAppPassword = (label: string) =>
-  api<AppPassword>('/api/users/me/app-passwords', { method: 'POST', body: { label } })
+  api<AppPasswordCreated>('/api/users/me/app-passwords', { method: 'POST', body: { label } })
 
 export const deleteAppPassword = (id: string) => api<void>(`/api/users/me/app-passwords/${id}`, { method: 'DELETE' })
 
@@ -135,20 +147,19 @@ export const updateProfile = (data: ProfileUpdate) => api<User>('/api/users/me',
 
 // Answering an invitation from the link in its email; the token is the key, no session needed.
 export const getInvitation = (token: string) => api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`)
-export const answerInvitation = (token: string, status: Exclude<ParticipantStatus, 'needs_action'>) =>
+export const answerInvitation = (token: string, status: InvitationAnswer) =>
   api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`, { method: 'POST', body: { status } })
 
 export const getOverviewSettings = () => api<OverviewSettings>('/api/users/me/settings')
 
-export const updateOverviewSettings = (data: Partial<OverviewSettings>) =>
+export const updateOverviewSettings = (data: OverviewSettingsUpdate) =>
   api<OverviewSettings>('/api/users/me/settings', { method: 'PATCH', body: data })
 
 // Calendars
 
 export const getCalendar = (id: string) => api<Calendar>(`/api/calendars/${id}`)
 
-export const createCalendar = (name: string, description?: string, color?: string) =>
-  api<Calendar>('/api/calendars', { method: 'POST', body: { name, description, color } })
+export const createCalendar = (data: CalendarCreate) => api<Calendar>('/api/calendars', { method: 'POST', body: data })
 
 export const updateCalendar = (id: string, data: CalendarUpdate) =>
   api<Calendar>(`/api/calendars/${id}`, { method: 'PATCH', body: data })
@@ -206,7 +217,7 @@ export const updateLayoutItems = (items: LayoutItem[]) =>
 export const createFolder = (name: string, parent_id?: string | null) =>
   api<Folder>('/api/layout/folders', { method: 'POST', body: { name, parent_id } })
 
-export const updateFolder = (id: string, data: Partial<Folder>) =>
+export const updateFolder = (id: string, data: FolderUpdate) =>
   api<Folder>(`/api/layout/folders/${id}`, { method: 'PATCH', body: data })
 
 export const deleteFolder = (id: string) => api<void>(`/api/layout/folders/${id}`, { method: 'DELETE' })
@@ -217,7 +228,7 @@ export const listCategories = (calendarId: string) => api<Category[]>(`/api/cale
 export const createCategory = (calendarId: string, data: CategoryInput) =>
   api<Category>(`/api/calendars/${calendarId}/categories`, { method: 'POST', body: data })
 
-export const updateCategory = (calendarId: string, id: string, data: CategoryInput) =>
+export const updateCategory = (calendarId: string, id: string, data: CategoryUpdate) =>
   api<Category>(`/api/calendars/${calendarId}/categories/${id}`, { method: 'PATCH', body: data })
 
 export const deleteCategory = (calendarId: string, id: string) =>
@@ -229,7 +240,7 @@ export const listResources = (calendarId: string) => api<Resource[]>(`/api/calen
 export const createResource = (calendarId: string, data: ResourceInput) =>
   api<Resource>(`/api/calendars/${calendarId}/resources`, { method: 'POST', body: data })
 
-export const updateResource = (calendarId: string, id: string, data: Partial<ResourceInput>) =>
+export const updateResource = (calendarId: string, id: string, data: ResourceUpdate) =>
   api<Resource>(`/api/calendars/${calendarId}/resources/${id}`, { method: 'PATCH', body: data })
 
 export const deleteResource = (calendarId: string, id: string) =>
@@ -261,7 +272,7 @@ export const getEvent = (eventId: string) => api<Event>(`/api/events/${eventId}`
 export const createEvent = (calendarId: string, data: EventInput) =>
   api<Event>(`/api/calendars/${calendarId}/events`, { method: 'POST', body: data })
 
-export const updateEvent = (eventId: string, data: Partial<EventInput>) =>
+export const updateEvent = (eventId: string, data: EventUpdate) =>
   api<Event>(`/api/events/${eventId}`, { method: 'PATCH', body: data })
 
 export const deleteEvent = (eventId: string) => api<void>(`/api/events/${eventId}`, { method: 'DELETE' })
@@ -270,12 +281,8 @@ const occurrencePath = (seriesId: string, recurrenceId: string, scope: Occurrenc
   `/api/events/${seriesId}/occurrences/${encodeURIComponent(recurrenceId)}?scope=${scope}`
 
 /** Changes one occurrence of a series, it and the later ones, or all; start and end are the occurrence's. */
-export const updateOccurrence = (
-  seriesId: string,
-  recurrenceId: string,
-  scope: OccurrenceScope,
-  data: Partial<EventInput>,
-) => api<Event>(occurrencePath(seriesId, recurrenceId, scope), { method: 'PATCH', body: data })
+export const updateOccurrence = (seriesId: string, recurrenceId: string, scope: OccurrenceScope, data: EventUpdate) =>
+  api<Event>(occurrencePath(seriesId, recurrenceId, scope), { method: 'PATCH', body: data })
 
 /**
  * When the users and resources are taken in [start, end); `excludeEventId` doesn't count.
@@ -294,10 +301,10 @@ export const getAvailability = (
   })
 
 /** The current user's own reminders, in minutes before each occurrence. */
-export const getReminders = (eventId: string) => api<{ minutes: number[] }>(`/api/events/${eventId}/reminders`)
+export const getReminders = (eventId: string) => api<EventReminders>(`/api/events/${eventId}/reminders`)
 
 export const setReminders = (eventId: string, minutes: number[]) =>
-  api<{ minutes: number[] }>(`/api/events/${eventId}/reminders`, { method: 'PUT', body: { minutes } })
+  api<EventReminders>(`/api/events/${eventId}/reminders`, { method: 'PUT', body: { minutes } })
 
 export const deleteOccurrence = (seriesId: string, recurrenceId: string, scope: OccurrenceScope) =>
   api<void>(occurrencePath(seriesId, recurrenceId, scope), { method: 'DELETE' })
@@ -342,13 +349,12 @@ export const listNotifications = (group?: NotificationGroup, limit = 50) => {
 }
 
 /** The numbers shown as badges: unread notifications, and requests still waiting for the user. */
-export const getNotificationCounts = () =>
-  api<{ unread: number; approvals: number; invitations: number }>('/api/notifications/counts')
+export const getNotificationCounts = () => api<NotificationCounts>('/api/notifications/counts')
 
 export const markNotificationRead = (id: string) =>
   api<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST' })
 
-export const markAllNotificationsRead = () => api<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST' })
+export const markAllNotificationsRead = () => api<Ok>('/api/notifications/read-all', { method: 'POST' })
 
 export const deleteNotification = (id: string) => api<void>(`/api/notifications/${id}`, { method: 'DELETE' })
 
@@ -360,10 +366,10 @@ export const rejectEvent = (eventId: string, note?: string) =>
   api<Event>(`/api/events/${eventId}/reject`, { method: 'POST', body: { note } })
 
 // Feed
-export const getFeedUrl = (calendarId: string) => api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-url`)
+export const getFeedUrl = (calendarId: string) => api<FeedUrl>(`/api/calendars/${calendarId}/feed-url`)
 
 export const rotateFeedToken = (calendarId: string) =>
-  api<{ feed_url: string }>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST' })
+  api<FeedUrl>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST' })
 
 // App settings (public: app name, logo, favicon, calendar defaults)
 export const getAppSettings = () => api<AppSettings>('/api/settings')
@@ -383,7 +389,7 @@ export const updateAdminUser = (userId: string, data: AdminUserUpdate) =>
 export const deleteAdminUser = (userId: string) => api<void>(`/api/admin/users/${userId}`, { method: 'DELETE' })
 
 export const resetAdminUserPassword = (userId: string) =>
-  api<{ password: string }>(`/api/admin/users/${userId}/reset-password`, { method: 'POST' })
+  api<AdminPasswordReset>(`/api/admin/users/${userId}/reset-password`, { method: 'POST' })
 
 // Admin user groups
 export const listUserGroups = () => api<UserGroup[]>('/api/groups')

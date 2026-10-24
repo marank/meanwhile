@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { AppSettingsUpdate } from '@/api'
+import type { AppSettings } from '@/api'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import WeekLayoutFields from '@/components/WeekLayoutFields.vue'
 import ImageUploadField from './ImageUploadField.vue'
@@ -12,7 +12,8 @@ import { useSettingsStore } from '@/stores/settings'
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const { busy, run } = useAction()
-const form = ref<Required<AppSettingsUpdate> | null>(null)
+// Everything but the id, all of it sent back on saving.
+const form = ref<Omit<AppSettings, 'id'> | null>(null)
 
 const { loading } = useLoader(async () => {
   await settingsStore.load()

@@ -20,6 +20,7 @@ from core.schemas import (
     FolderUpdate,
     LayoutItemsUpdate,
     LayoutOut,
+    OkOut,
 )
 from core.views.calendars import sidebar_calendars_of
 
@@ -79,13 +80,13 @@ def update_folder(request, folder_id: str, payload: FolderUpdate):
     return folder
 
 
-@router.delete("/layout/folders/{folder_id}")
+@router.delete("/layout/folders/{folder_id}", response=OkOut)
 def delete_folder(request, folder_id: str):
     Folder.objects.filter(id=folder_id, user=request.user).delete()
     return {"ok": True}
 
 
-@router.patch("/layout/items")
+@router.patch("/layout/items", response=OkOut)
 @transaction.atomic
 def update_layout_items(request, payload: LayoutItemsUpdate):
     """Sets parent folder and position of folders and calendars; ones that are gone meanwhile are skipped."""

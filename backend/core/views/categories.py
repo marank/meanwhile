@@ -6,7 +6,7 @@ from ninja import Router
 
 from core.models import Category
 from core.models.base import Role
-from core.schemas import CategoryCreate, CategoryOut, CategoryUpdate
+from core.schemas import CategoryCreate, CategoryOut, CategoryUpdate, OkOut
 from core.services.permissions import get_member_calendar
 
 router = Router()
@@ -39,7 +39,7 @@ def update_category(request, calendar_id: str, category_id: str, payload: Catego
     return category
 
 
-@router.delete("/calendars/{calendar_id}/categories/{category_id}")
+@router.delete("/calendars/{calendar_id}/categories/{category_id}", response=OkOut)
 def delete_category(request, calendar_id: str, category_id: str):
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     Category.objects.filter(id=category_id, calendar=calendar).delete()

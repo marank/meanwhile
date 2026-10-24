@@ -9,12 +9,20 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from ninja import Field, Schema
-from pydantic import AfterValidator, BeforeValidator, model_validator
+from ninja import Field
+from ninja import Schema as NinjaSchema
+from pydantic import AfterValidator, BeforeValidator, ConfigDict, WithJsonSchema, model_validator
 
-from core.models.base import ParticipantStatus, Role
+from core.models.base import EventStatus, ParticipantStatus, Role
 from core.models.users import get_or_create_app_settings
 from core.services.recurrence import validate_rrule
+
+
+class Schema(NinjaSchema):
+    # The OpenAPI schema (and the frontend's types generated from it) marks response fields with a
+    # default as always present, as they are; request fields with one stay optional.
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
 
 Weekday = Annotated[int, Field(ge=0, le=6)]
 Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
@@ -31,7 +39,11 @@ def _known_zone(name: str) -> str:
 TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
 
 # Ids are UUIDs in the database and strings in the API; objects given to a response carry UUIDs.
-Id = Annotated[str, BeforeValidator(lambda value: str(value) if isinstance(value, uuid.UUID) else value)]
+Id = Annotated[
+    str,
+    BeforeValidator(lambda value: str(value) if isinstance(value, uuid.UUID) else value),
+    WithJsonSchema({"type": "string", "format": "uuid"}),
+]
 
 
 def _single_address(value: str) -> str:
@@ -47,7 +59,36 @@ EmailAddress = Annotated[str, Field(max_length=254), AfterValidator(_single_addr
 RRule = Annotated[str, AfterValidator(validate_rrule)]
 
 # Text that clients may also send as null for "none"; it is stored as "".
-Text = Annotated[str, BeforeValidator(lambda value: "" if value is None else value)]
+Text = Annotated[
+    str,
+    BeforeValidator(lambda value: "" if value is None else value),
+    WithJsonSchema({"anyOf": [{"type": "string"}, {"type": "null"}]}, mode="validation"),
+]
+
+TimeFormat = Literal["auto", "24h", "12h"]
+DateFormat = Literal["auto", "dmy", "mdy", "ymd"]
+# The roles a group or the public can be given; ownership is never granted.
+GrantableRole = Literal["read", "own", "full", "manage"]
+# Never "manage": managing the calendar is only for people it was granted to.
+PublicRole = Literal["read", "own", "full"]
+NotificationType = Literal[
+    "approval_requested",
+    "booking_approved",
+    "booking_rejected",
+    "booking_cancelled",
+    "participant_added",
+    "member_added",
+    "member_role_changed",
+    "comment_added",
+    "event_reminder",
+    "participant_replied",
+]
+
+
+class OkOut(Schema):
+    """The answer of endpoints that only do something, such as deleting."""
+
+    ok: bool
 
 
 # ---------------------------------------------------------------------------
@@ -61,8 +102,8 @@ class UserOut(Schema):
     display_name: str
     is_admin: bool
     is_active: bool
-    time_format: str
-    date_format: str
+    time_format: TimeFormat
+    date_format: DateFormat
     # IANA zone of the user's browser; empty until the app reported it.
     timezone: str = ""
     # Language of the app, for emails; empty until the app reported it.
@@ -98,8 +139,8 @@ class ProfileOut(UserOut):
 
 class UserUpdate(Schema):
     display_name: str | None = Field(None, min_length=1, max_length=255)
-    time_format: Literal["auto", "24h", "12h"] | None = None
-    date_format: Literal["auto", "dmy", "mdy", "ymd"] | None = None
+    time_format: TimeFormat | None = None
+    date_format: DateFormat | None = None
     timezone: TimeZoneName | None = None
     language: Literal["en", "de"] | None = None
     email_notifications: EmailNotificationsUpdate | None = None
@@ -331,7 +372,7 @@ class CalendarMemberBatchOut(Schema):
     id: Id
     calendar_id: Id
     user_id: Id
-    role: str
+    role: Role
     folder_id: Id | None
     position: int
 
@@ -391,8 +432,7 @@ class CalendarUpdate(Schema):
     dark_border_color: Color | None = None
     dark_outer_border_color: Color | None = None
     is_public: bool | None = None
-    # Never "manage": managing the calendar is only for people it was granted to.
-    public_role: Literal["read", "own", "full"] | None = None
+    public_role: PublicRole | None = None
 
 
 class CalendarOut(WeekLayoutOut):
@@ -414,7 +454,7 @@ class CalendarOut(WeekLayoutOut):
     dark_border_color: str
     dark_outer_border_color: str
     is_public: bool
-    public_role: str
+    public_role: PublicRole
     owner_id: Id
     created_at: datetime
     updated_at: datetime
@@ -457,18 +497,18 @@ class CalendarGroupLinkMember(Schema):
 class CalendarGroupLinkOut(Schema):
     id: Id
     group: CalendarGroupLinkGroupInfo
-    role: str
+    role: GrantableRole
     # Everyone in the group, who therefore has the role in this calendar.
     members: list[CalendarGroupLinkMember]
 
 
 class CalendarGroupLinkCreate(Schema):
     group_id: Id
-    role: Literal["read", "own", "full", "manage"] = "read"
+    role: GrantableRole = "read"
 
 
 class CalendarGroupLinkUpdate(Schema):
-    role: Literal["read", "own", "full", "manage"] | None = None
+    role: GrantableRole | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -637,7 +677,7 @@ class EventParticipantOut(Schema):
     user_id: Id | None
     email: str
     display_name: str | None
-    status: str
+    status: ParticipantStatus
     created_at: datetime
     updated_at: datetime
 
@@ -670,7 +710,7 @@ class EventOut(Schema):
     category_color: str | None
     resource_id: Id | None
     resource_name: str | None
-    status: str
+    status: EventStatus
     # Names of the booked resources a pending event still waits to have approved.
     awaiting_approval: list[str] = []
     decided_by: str | None
@@ -695,7 +735,7 @@ class OccurrenceOut(Schema):
     end: datetime
     all_day: bool
     recurrence_count: int | None
-    status: str
+    status: EventStatus
     category_id: Id | None
     category_name: str | None
     category_color: str | None
@@ -749,7 +789,7 @@ class ActivityOut(Schema):
 
 class NotificationOut(Schema):
     id: Id
-    type: str
+    type: NotificationType
     actor_id: Id | None
     actor_name: str | None
     calendar_id: Id | None
@@ -759,9 +799,16 @@ class NotificationOut(Schema):
     read_at: datetime | None
     created_at: datetime
     # Current status of the linked event and, for invitations, the user's own answer.
-    event_status: str | None = None
-    response_status: str | None = None
+    event_status: EventStatus | None = None
+    response_status: ParticipantStatus | None = None
     deletable: bool = True
+
+
+class NotificationCountsOut(Schema):
+    unread: int
+    # Pending bookings this user may decide, and invitations they haven't answered.
+    approvals: int
+    invitations: int
 
 
 class NotificationUpdate(Schema):
@@ -870,7 +917,7 @@ class RsvpOut(Schema):
     rrule: str | None = None
     organizer_name: str
     email: str
-    status: str
+    status: ParticipantStatus
     # Cancelled or rejected: there is nothing to answer any more.
     cancelled: bool
 

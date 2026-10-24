@@ -15,7 +15,7 @@ Vue 3 single-page app of Meanwhile. See the [project README](../README.md) for s
 
 ## Layout
 
-- `api/` – typed API client (`types.ts` for the payloads, `index.ts` for the endpoints)
+- `api/` – typed API client (`schema.d.ts` generated from the backend's `openapi.json` with `pnpm api:types`, `types.ts` naming its payloads, `index.ts` for the endpoints)
 - `stores/` – Pinia stores for shared state (session, calendars, events, notifications, settings, theme)
 - `composables/` – reusable component logic (`useAction`, `useLoader`, `useQueryTab`, …)
 - `services/` – framework-free helpers (dates, colors, recurrence rules, error messages, dialogs, toasts)

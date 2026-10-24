@@ -14,6 +14,7 @@ from core.schemas import (
     AppPasswordCreated,
     AppPasswordOut,
     EmailNotifications,
+    OkOut,
     OverviewSettingsOut,
     OverviewSettingsUpdate,
     ProfileOut,
@@ -104,7 +105,7 @@ def create_app_password(request, payload: AppPasswordCreate):
     }
 
 
-@router.delete("/users/me/app-passwords/{password_id}")
+@router.delete("/users/me/app-passwords/{password_id}", response=OkOut)
 def delete_app_password(request, password_id: str):
     request.user.app_passwords.filter(id=password_id).delete()
     return {"ok": True}
