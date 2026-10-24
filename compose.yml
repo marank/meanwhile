@@ -1,0 +1,95 @@
+# Production: `docker compose up -d --build`, configured through .env (template: .env.example).
+# The app container serves the frontend and the backend on APP_BIND over HTTP; HTTPS is
+# terminated in front of it (see README, "Deployment with Docker").
+name: meanwhile
+
+# Unprivileged, without any capabilities, and nothing writable but /tmp (and the volumes).
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-meanwhile}
+      POSTGRES_USER: ${DB_USER:-meanwhile}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      # Postgres 17 keeps its data here; from 18 on the volume goes on /var/lib/postgresql.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Passes live updates between the uvicorn processes and the worker; holds no data.
+  redis:
+    <<: *hardened
+    image: redis:7-alpine
+    restart: unless-stopped
+    user: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  # nginx (frontend, proxy), uvicorn and the task queue's worker under supervisord (Dockerfile).
+  app:
+    <<: *hardened
+    build: .
+    image: meanwhile-app
+    restart: unless-stopped
+    env_file: .env
+    # Fixed by this setup; the rest comes from .env.
+    environment:
+      DEBUG: "false"
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${APP_BIND:-127.0.0.1:6326}:8080"
+    volumes:
+      - app_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Nightly pg_dump into the "backups" volume (docker/backup.sh). Manual dump:
+  #   docker compose exec backup sh /backup.sh now
+  # Restore (into an empty database):
+  #   docker compose exec -T backup sh -c 'pg_restore --clean --if-exists -d "$PGDATABASE"' < file.dump
+  # Copy dumps off the host: docker compose cp backup:/var/lib/postgresql/backups ./backups
+  backup:
+    <<: *hardened
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup.sh"]
+    user: postgres
+    environment:
+      PGHOST: db
+      PGDATABASE: ${DB_NAME:-meanwhile}
+      PGUSER: ${DB_USER:-meanwhile}
+      PGPASSWORD: ${DB_PASSWORD}
+      TZ: ${TIME_ZONE:-UTC}
+      BACKUP_TIME: ${BACKUP_TIME:-02:30}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./docker/backup.sh:/backup.sh:ro
+      # Mounted on the image's postgres-owned home, so the new volume is writable for the
+      # postgres user without any capabilities.
+      - backups:/var/lib/postgresql
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  app_data:
+  backups:

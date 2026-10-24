@@ -1,4 +1,4 @@
-# The whole development stack: `docker compose -f docker-compose.dev.yml up --build`
+# The whole development stack: `docker compose -f compose.dev.yml up --build`
 # App at http://localhost:6326 (Vite), API at http://localhost:8000, emails at http://localhost:8025.
 # The source is mounted into the containers: the backend, the worker and Vite reload on changes.
 # Only the services next to the app (`... up -d postgres redis mailpit`) for running it outside Docker.
@@ -16,8 +16,13 @@ x-backend: &backend
     - path: .env
       required: false
   environment: &backend-environment
-    ENVIRONMENT: development
-    DATABASE_URL: postgresql://meanwhile:meanwhile@postgres:5432/meanwhile
+    DEBUG: "true"
+    DB_HOST: postgres
+    DB_NAME: meanwhile
+    DB_USER: meanwhile
+    DB_PASSWORD: meanwhile
+    # Links in emails point to Vite; the dev database's password is the one above.
+    APP_URLS: http://localhost:6326
     REDIS_URL: redis://redis:6379/0
     EMAIL_HOST: mailpit
     EMAIL_PORT: "1025"
@@ -27,7 +32,7 @@ x-backend: &backend
     IMIP_ADDRESS: meanwhile@localhost
 
 services:
-  # The development database (the backend's default DATABASE_URL); the task queue needs PostgreSQL.
+  # The development database (the backend's default in DEBUG); the task queue needs PostgreSQL.
   postgres:
     image: postgres:17-alpine
     environment:
@@ -35,7 +40,7 @@ services:
       POSTGRES_PASSWORD: meanwhile
       POSTGRES_DB: meanwhile
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -49,7 +54,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   # Catches every email the backend sends (SMTP on 1025) and shows it at http://localhost:8025.
   mailpit:
@@ -96,7 +101,7 @@ services:
       mailpit:
         condition: service_started
 
-  # Vite with hot module replacement; passes /api, /caldav, /ics and /ws on to the backend.
+  # Vite with hot module replacement; passes the backend's paths on to it (vite.config.ts).
   frontend:
     image: meanwhile-dev-frontend
     build:

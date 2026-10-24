@@ -9,3 +9,7 @@
 **/*.db
 frontend/dist
 backend/staticfiles
+**/.mypy_cache
+**/.coverage
+**/coverage
+backend/data

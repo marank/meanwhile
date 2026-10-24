@@ -1,6 +1,7 @@
+# syntax=docker/dockerfile:1
 # Production image: nginx serves the frontend and passes the backend's paths on to uvicorn;
-# supervisord runs nginx, uvicorn and the task queue's worker. The migrations run on every start
-# (docker/entrypoint.sh), before any of them.
+# supervisord (PID 1) runs nginx, uvicorn and the task queue's worker. Built for a read-only root
+# filesystem (compose.yml): everything runs as "app" and writes only to /tmp and /data.
 
 # --- Frontend ---------------------------------------------------------------------------------
 FROM node:24-alpine AS frontend
@@ -12,45 +13,52 @@ COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY frontend/ ./
-RUN pnpm build
+RUN pnpm build-only
 
 # --- App --------------------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm
+FROM python:3.14-slim-trixie
+COPY --from=ghcr.io/astral-sh/uv:0.13 /uv /usr/local/bin/uv
 
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    PYTHONDONTWRITEBYTECODE=1 \
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    HOME=/tmp \
+    DATA_DIR=/data
 
-# Everything runs as "app", nginx included: it listens on 8080 and keeps its pid, temporary files,
-# logs and the list of trusted proxies (written on start) where that user may write.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx supervisor libxml2-dev libxslt1-dev \
-    && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
-    && useradd --system --no-create-home app \
-    && sed -i -e '/^user /d' -e 's|^pid .*|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
-    && touch /etc/nginx/trusted-proxies.conf \
-    && chown -R app /var/lib/nginx /var/log/nginx /etc/nginx/trusted-proxies.conf
+ && apt-get install -y --no-install-recommends nginx gettext-base \
+ && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled /etc/nginx/conf.d \
+ # supervisord lives outside the app's venv; it's infrastructure, not an app dependency.
+ && pip install --no-cache-dir --root-user-action=ignore supervisor \
+ && groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
+ && mkdir -p /data && chown app:app /data
 
 WORKDIR /app
-
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY backend/ ./
-# Django admin's static files, served by nginx. The settings need a SECRET_KEY outside development;
-# collecting files uses none, the real one comes with the container's environment.
-RUN SECRET_KEY=collectstatic-only python manage.py collectstatic --no-input
+# The app's own modules too: the root filesystem is read-only at runtime.
+RUN python -m compileall -q config core \
+ # collectstatic needs settings to import; a throwaway key and password are enough at build time.
+ && SECRET_KEY="build-only-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" DB_PASSWORD=unused \
+    python manage.py collectstatic --noinput
 
-COPY --from=frontend /frontend/dist /srv/frontend
-COPY docker/nginx.conf /etc/nginx/conf.d/app.conf
-COPY docker/security-headers.conf /etc/nginx/security-headers.conf
-COPY docker/supervisord.conf /etc/supervisor/app.conf
-COPY docker/entrypoint.sh docker/trusted-proxies.sh /usr/local/bin/
+COPY --from=frontend /frontend/dist /srv/spa
+COPY docker/nginx.conf docker/django_proxy.conf docker/security_headers.conf /etc/nginx/
+COPY docker/app.conf.template /etc/nginx/app.conf.template
+COPY docker/supervisord.conf /etc/supervisord.conf
+COPY docker/entrypoint.sh docker/start-nginx docker/exit-on-fatal docker/healthcheck /usr/local/bin/
 
+# Everything above is owned by root and read-only for "app"; only /data and /tmp are written.
 USER app
 EXPOSE 8080
-
-ENTRYPOINT ["entrypoint.sh"]
-CMD ["supervisord", "-c", "/etc/supervisor/app.conf"]
+VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+  CMD ["python", "/usr/local/bin/healthcheck"]
+ENTRYPOINT ["sh", "/usr/local/bin/entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]
