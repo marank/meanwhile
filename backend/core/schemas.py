@@ -495,7 +495,7 @@ ResourceIconName = Annotated[str, Field(max_length=40, pattern=r"^[a-z0-9]+(-[a-
 class ResourceCreate(Schema):
     name: str = Field(..., min_length=1, max_length=255)
     description: Text = ""
-    color: str | None = "#f59e0b"
+    color: Color = "#f59e0b"
     icon: ResourceIconName = ""
     requires_approval: bool = False
     is_location: bool = False
@@ -505,11 +505,19 @@ class ResourceCreate(Schema):
 class ResourceUpdate(Schema):
     name: str | None = Field(None, min_length=1, max_length=255)
     description: Text = ""
-    color: str | None = None
+    color: Color | None = None
     icon: ResourceIconName | None = None
     requires_approval: bool | None = None
     is_location: bool | None = None
     is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def refuse_nulls(self) -> ResourceUpdate:
+        # A field left out keeps its value; null would empty a column that can't be empty.
+        nulls = sorted(name for name in self.model_fields_set if getattr(self, name) is None)
+        if nulls:
+            raise ValueError(f"May not be null: {', '.join(nulls)}")
+        return self
 
 
 class ResourceOut(Schema):

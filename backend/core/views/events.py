@@ -484,8 +484,12 @@ def update_occurrence(
             record_activity(series, str(request.user.id), "occurrence_changed", _occurrence_details(rid))
             return EventOut.model_validate(serialize_event(override))
         index = occurrence_index(series, rid) if scope == "following" else 0
-        # _series_occurrence found the occurrence, so the rule has one then.
-        assert index is not None
+        if index is None:
+            # A changed occurrence at a time the rule doesn't produce (a CalDAV client may store
+            # one): there is no "following" to split off from it.
+            raise HttpError(
+                422, "This occurrence is no longer part of the series' rule; change it alone or the whole series"
+            )
         if scope == "following" and index > 0:
             following = split(series, rid)
             record_activity(following, str(request.user.id), "created")

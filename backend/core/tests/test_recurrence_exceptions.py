@@ -217,3 +217,27 @@ def test_approving_a_series_approves_its_waiting_occurrences(world):
     assert override["status"] == "pending"
     world["api"]["owner"].post(f"/events/{series['id']}/approve")
     assert Event.objects.get(id=override["id"]).status == "approved"
+
+
+def test_following_from_a_changed_occurrence_the_rule_no_longer_has_is_refused(world, series):
+    """A CalDAV client may store a changed occurrence at a time the rule doesn't produce."""
+    stray = BASE + 2 * DAY + timedelta(hours=3)
+    parent = Event.objects.get(id=series["id"])
+    Event.objects.create(
+        calendar=parent.calendar,
+        creator=parent.creator,
+        parent=parent,
+        recurrence_id=stray,
+        title="Moved by a client",
+        start=stray,
+        end=stray + timedelta(hours=1),
+        timezone="UTC",
+    )
+    owner = world["api"]["owner"]
+
+    res = owner.patch(occurrence_url(series, stray, "following"), {"title": "Later"})
+
+    assert res.status_code == 422, res.content
+    assert Event.objects.get(id=series["id"]).rrule == "FREQ=DAILY;COUNT=5"
+    # On its own it can still be changed.
+    assert owner.patch(occurrence_url(series, stray, "this"), {"title": "Later"}).status_code == 200
