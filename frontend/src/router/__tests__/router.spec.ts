@@ -1,0 +1,94 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { fakeBackend, type FakeBackend } from '@/__tests__/fakeBackend'
+import type { User } from '@/api'
+import { makeUser, sessionRoutes, stubBrowser } from '@/views/__tests__/session'
+import router from '../index'
+
+// The pages themselves are tested on their own; navigating only needs something to show.
+vi.mock('@/views/CalendarView.vue', () => ({ default: { render: () => null } }))
+vi.mock('@/views/SettingsView.vue', () => ({ default: { render: () => null } }))
+vi.mock('@/views/AccountView.vue', () => ({ default: { render: () => null } }))
+vi.mock('@/views/AdminView.vue', () => ({ default: { render: () => null } }))
+vi.mock('@/views/NotificationsView.vue', () => ({ default: { render: () => null } }))
+
+let backend: FakeBackend
+let start = 0
+
+/** A fresh session (signed in as `user`, or signed out), starting from a page that doesn't care. */
+async function session(user: User | null) {
+  setActivePinia(createPinia())
+  backend = fakeBackend(sessionRoutes(user))
+  await router.replace(`/rsvp/start-${start++}`)
+}
+
+const visit = async (path: string) => {
+  await router.push(path)
+  return router.currentRoute.value.fullPath
+}
+
+beforeEach(() => {
+  stubBrowser()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('router', () => {
+  describe('signed out', () => {
+    beforeEach(() => session(null))
+
+    it.each(['/', '/calendar', '/calendar/c1', '/notifications', '/settings/c1', '/account', '/admin'])(
+      'sends %s to the login',
+      async (path) => {
+        expect(await visit(path)).toBe('/login')
+      },
+    )
+
+    it.each(['/login', '/register', '/forgot-password'])('shows %s', async (path) => {
+      expect(await visit(path)).toBe(path)
+    })
+  })
+
+  describe('signed in', () => {
+    beforeEach(() => session(makeUser()))
+
+    it.each(['/login', '/register', '/forgot-password'])('sends %s to the calendar', async (path) => {
+      expect(await visit(path)).toBe('/calendar')
+    })
+
+    it('opens the calendar at the start page', async () => {
+      expect(await visit('/')).toBe('/calendar')
+    })
+
+    it.each(['/calendar/c1', '/calendar/folder/f1', '/notifications', '/settings/c1', '/account'])(
+      'shows %s',
+      async (path) => {
+        expect(await visit(path)).toBe(path)
+      },
+    )
+
+    it('keeps the administration from users who are no administrators', async () => {
+      expect(await visit('/admin')).toBe('/calendar')
+    })
+
+    it('restores the session only once', async () => {
+      await visit('/account')
+      await visit('/notifications')
+      expect(backend.calls('GET /api/auth/csrf')).toHaveLength(1)
+      expect(backend.calls('GET /api/users/me')).toHaveLength(1)
+    })
+  })
+
+  it('shows the administration to administrators', async () => {
+    await session(makeUser({ is_admin: true }))
+    expect(await visit('/admin')).toBe('/admin')
+  })
+
+  it.each([null, makeUser()])('shows invitation and password links to anyone (user %#)', async (user) => {
+    await session(user)
+    expect(await visit('/rsvp/token-1?answer=accepted')).toBe('/rsvp/token-1?answer=accepted')
+    expect(await visit('/reset-password/key-1')).toBe('/reset-password/key-1')
+  })
+})
