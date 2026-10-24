@@ -6223,16 +6223,10 @@
             "title": "Description"
           },
           "color": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "default": "#f59e0b",
-            "title": "Color"
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color",
+            "type": "string"
           },
           "icon": {
             "default": "",
@@ -6293,6 +6287,7 @@
           "color": {
             "anyOf": [
               {
+                "pattern": "^#[0-9a-fA-F]{6}$",
                 "type": "string"
               },
               {

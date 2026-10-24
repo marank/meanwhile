@@ -1991,7 +1991,7 @@ export interface components {
        * Color
        * @default #f59e0b
        */
-      color?: string | null
+      color?: string
       /**
        * Icon
        * @default
