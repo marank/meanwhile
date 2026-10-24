@@ -229,8 +229,9 @@ def _reply(vevent, sender: str | None) -> list[str]:
         if status is None:
             results.append(f"{uid}: {address}: unsupported answer {params.get('PARTSTAT')!r}")
             continue
-        # Only the participant answers for themselves (or whoever they let send for them).
-        if sender is not None and sender not in (address, _address(params.get("SENT-BY"))):
+        # Only the participant answers for themselves. SENT-BY is written by whoever sends the mail,
+        # so it proves nothing; someone answering for them uses the link in the invitation.
+        if sender is not None and sender != address:
             results.append(f"{uid}: {address}: ignored, sent by {sender}")
             continue
         participants = EventParticipant.objects.select_related("event", "user").filter(

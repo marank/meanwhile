@@ -181,8 +181,10 @@ const fcEvents = computed(() =>
     return {
       id: `${occ.event_id}-${occ.start}`,
       title: eventLabel(occ),
-      start: occ.start,
-      end: occ.end,
+      // All-day occurrences come as UTC midnights; as dates, so FullCalendar doesn't move them
+      // to the day before in zones west of UTC.
+      start: occ.all_day ? occ.start.slice(0, 10) : occ.start,
+      end: occ.all_day ? occ.end.slice(0, 10) : occ.end,
       allDay: occ.all_day,
       startEditable: occ.can_edit,
       durationEditable: occ.can_edit,
@@ -559,7 +561,10 @@ async function handleEventChange(info: EventDropInfo | EventResizeDoneInfo) {
   if (event.allDay) {
     // All-day events are stored as UTC midnights; FullCalendar's end is exclusive, the API's inclusive.
     start = `${toDateInputValue(event.start)}T00:00:00.000Z`
-    end = event.end ? `${toDateInputValue(new Date(event.end.getTime() - DAY_MS))}T00:00:00.000Z` : start
+    // The day before by the calendar, not 24 hours earlier: the night clocks spring forward has 23.
+    const lastDay = event.end ? new Date(event.end) : null
+    lastDay?.setDate(lastDay.getDate() - 1)
+    end = lastDay ? `${toDateInputValue(lastDay)}T00:00:00.000Z` : start
   } else {
     start = event.start.toISOString()
     end = (event.end ?? new Date(event.start.getTime() + HOUR_MS)).toISOString()

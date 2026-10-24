@@ -206,7 +206,10 @@ def build_event_ical(
         vevent.add("sequence", sequence)
     vevent.add("status", _map_status(event.status))
     if event.rrule:
-        vevent.add("rrule", icalendar.vRecur.from_ical(normalized_rrule(event)))
+        try:
+            vevent.add("rrule", icalendar.vRecur.from_ical(normalized_rrule(event)))
+        except ValueError:
+            pass  # stored before rules were validated; the app shows the series as its first occurrence too
     if is_series(event):
         for start in sorted(parse_exdates(event.rdates)):
             vevent.add("rdate", _ical_time(event, start))

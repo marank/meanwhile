@@ -11,6 +11,7 @@ from pydantic import AfterValidator, BeforeValidator, model_validator
 
 from core.models.base import ParticipantStatus, Role
 from core.models.users import get_or_create_app_settings
+from core.services.recurrence import validate_rrule
 
 Weekday = Annotated[int, Field(ge=0, le=6)]
 Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
@@ -25,6 +26,7 @@ def _known_zone(name: str) -> str:
 
 
 TimeZoneName = Annotated[str, AfterValidator(_known_zone)]
+RRule = Annotated[str, AfterValidator(validate_rrule)]
 
 # Text that clients may also send as null for "none"; it is stored as "".
 Text = Annotated[str, BeforeValidator(lambda value: "" if value is None else value)]
@@ -565,7 +567,7 @@ class EventCreate(Schema):
     all_day: bool = False
     timezone: TimeZoneName | None = None
     show_recurrence_count: bool = False
-    rrule: str | None = None
+    rrule: RRule | None = None
     category_id: str | None = None
     resource_id: str | None = None
     participants: list[EventParticipantInvite] | None = None
@@ -581,7 +583,7 @@ class EventUpdate(Schema):
     all_day: bool | None = None
     timezone: TimeZoneName | None = None
     show_recurrence_count: bool | None = None
-    rrule: str | None = None
+    rrule: RRule | None = None
     category_id: str | None = None
     resource_id: str | None = None
 

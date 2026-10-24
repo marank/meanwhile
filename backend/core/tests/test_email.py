@@ -236,9 +236,14 @@ def test_replies_count_only_from_the_participant_themselves(world):
     result = process_email(reply(GUEST, event["uid"], "DECLINED", sender="mallory@elsewhere.test"))
     assert result == [f"{event['uid']}: {GUEST}: ignored, sent by mallory@elsewhere.test"]
     assert status_of(event) == "needs_action"
-    # Unless they let someone answer for them.
-    process_email(reply(GUEST, event["uid"], "DECLINED", sender="assistant@elsewhere.test", **{"SENT-BY": "mailto:assistant@elsewhere.test"}))
-    assert status_of(event) == "declined"
+    # SENT-BY is the sender's own claim and doesn't let anyone answer for the participant.
+    process_email(reply(GUEST, event["uid"], "DECLINED", sender="mallory@elsewhere.test", **{"SENT-BY": "mailto:mallory@elsewhere.test"}))
+    assert status_of(event) == "needs_action"
+    # Nor does a message without a sender, whatever SENT-BY says.
+    anonymous = reply(GUEST, event["uid"], "DECLINED", **{"SENT-BY": "mailto:"}).replace(f"From: {GUEST}\n".encode(), b"")
+    assert b"From:" not in anonymous
+    process_email(anonymous)
+    assert status_of(event) == "needs_action"
 
 
 def test_replies_for_unknown_invitations_change_nothing(world):

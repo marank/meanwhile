@@ -5,6 +5,7 @@ Calendar resource endpoints.
 from django.db import transaction
 from django.utils import timezone
 from ninja import Router
+from ninja.errors import HttpError
 
 from core.models import Resource, ResourceApprover
 from core.models.base import Role
@@ -15,7 +16,7 @@ from core.schemas import (
     ResourceOut,
     ResourceUpdate,
 )
-from core.services.permissions import get_member_calendar
+from core.services.permissions import can_manage, get_member_calendar
 from core.views.common import approvers_of, replace_approvers
 
 router = Router()
@@ -51,9 +52,13 @@ def create_resource(request, calendar_id: str, payload: ResourceCreate):
 @router.patch("/calendars/{calendar_id}/resources/{resource_id}", response=ResourceOut)
 @transaction.atomic
 def update_resource(request, calendar_id: str, resource_id: str, payload: ResourceUpdate):
-    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
+    calendar, membership = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     data = payload.dict(exclude_unset=True)
+    # Whether bookings need approval is the approvers' business, as are the approvers themselves.
+    if "requires_approval" in data and data["requires_approval"] != resource.requires_approval:
+        if not can_manage(membership):
+            raise HttpError(403, "Only who manages the calendar can change whether bookings need approval")
     for attr, value in data.items():
         setattr(resource, attr, value)
     resource.save()
@@ -85,7 +90,9 @@ def list_resource_approvers(request, calendar_id: str, resource_id: str):
 @transaction.atomic
 def set_resource_approvers(request, calendar_id: str, resource_id: str, payload: ApproversIn):
     """Sets the resource's own approvers; without any, the calendar's default approvers decide."""
-    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
+    calendar, _ = get_member_calendar(
+        calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage approvers"
+    )
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     replace_approvers(ResourceApprover, "resource", resource, calendar.id, payload.user_ids)
     return approvers_of(ResourceApprover, resource=resource)

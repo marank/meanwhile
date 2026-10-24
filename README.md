@@ -280,8 +280,14 @@ This starts PostgreSQL, Redis and the `app` container, built by the `Dockerfile`
 
 The container serves HTTP on `APP_BIND` (`127.0.0.1:6326` by default). Put a proxy in front that
 terminates HTTPS, passes everything on, including WebSocket upgrades, and sets
-`X-Forwarded-Proto`. Only that proxy should reach the port, because the app trusts its forwarded
-headers.
+`X-Forwarded-Proto` and `X-Forwarded-For`. Only that proxy should reach the port, because the app
+trusts its forwarded headers.
+
+The client's address is taken from `X-Forwarded-For` only when the request comes from one of
+`TRUSTED_PROXIES` (default: the private networks `10.0.0.0/8`, `172.16.0.0/12`,
+`192.168.0.0/16`, `fc00::/7`, which covers a proxy on the host reaching the container through
+Docker's network). Failed logins are limited per client address, so a proxy elsewhere has to be
+listed there, e.g. `TRUSTED_PROXIES=203.0.113.10`; `none` trusts no proxy.
 
 Caddy (obtains the certificate itself):
 

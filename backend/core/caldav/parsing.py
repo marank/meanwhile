@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import vobject
 
-from core.services.recurrence import iana_zone_name, zone
+from core.services.recurrence import iana_zone_name, validate_rrule, zone
 
 # Longest title the database keeps; longer ones are cut.
 TITLE_MAX_LENGTH = 255
@@ -136,7 +136,7 @@ def component_data(vevent, floating: str) -> dict:
         "end": end,
         "all_day": all_day,
         "timezone": event_timezone,
-        "rrule": str(vevent.rrule.value) if hasattr(vevent, "rrule") else None,
+        "rrule": validate_rrule(str(vevent.rrule.value)) if hasattr(vevent, "rrule") else None,
         "uid": str(vevent.uid.value) if hasattr(vevent, "uid") else None,
         "recurrence_id": recurrence_id,
         "exdates": _times(vevent, "exdate", floating),

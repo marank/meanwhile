@@ -3,7 +3,7 @@ Recurrence expansion and conflict detection.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
-from itertools import islice
+from itertools import islice, takewhile
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rruleset, rrulestr
@@ -62,6 +62,23 @@ def format_rrule(parts: dict[str, str]) -> str:
     return ";".join(f"{name}={value}" for name, value in parts.items())
 
 
+# Finer rules would make every expansion of the series run through millions of occurrences.
+ALLOWED_FREQUENCIES = {"YEARLY", "MONTHLY", "WEEKLY", "DAILY", "HOURLY"}
+
+
+def validate_rrule(rule: str) -> str:
+    """The RRULE value if dateutil can expand it and it repeats at most hourly; raises ValueError otherwise."""
+    parts = rrule_parts(rule)
+    if parts.get("FREQ", "").upper() not in ALLOWED_FREQUENCIES:
+        raise ValueError(f"Unsupported repeat frequency {parts.get('FREQ')!r}")
+    # UNTIL is checked by itself: dateutil only takes the type that matches DTSTART (normalized_rrule).
+    until = parts.pop("UNTIL", None)
+    if until is not None:
+        _parse_until(until)
+    rrulestr(format_rrule(parts), dtstart=datetime(2000, 1, 1))
+    return rule
+
+
 def _parse_until(value: str) -> date | datetime:
     """An UNTIL value: a date, a UTC date-time ("...Z") or a floating date-time."""
     if "T" not in value:
@@ -115,8 +132,9 @@ class _UtcRule:
     def __iter__(self):
         return (dt.replace(tzinfo=UTC) for dt in self._rule)
 
-    def xafter(self, after: datetime):
-        return (dt.replace(tzinfo=UTC) for dt in self._rule.xafter(after.astimezone(UTC).replace(tzinfo=None)))
+    def xafter(self, after: datetime, inc: bool = False):
+        naive = self._rule.xafter(after.astimezone(UTC).replace(tzinfo=None), inc=inc)
+        return (dt.replace(tzinfo=UTC) for dt in naive)
 
 
 def _rule(event: Event, event_start: datetime):
@@ -133,9 +151,13 @@ def _rule(event: Event, event_start: datetime):
 
     rule = rruleset()
     rrule = normalized_rrule(event)
-    if rrule:
-        rule.rrule(rrulestr(rrule, dtstart=local(event_start)))
-    else:
+    try:
+        if rrule:
+            rule.rrule(rrulestr(rrule, dtstart=local(event_start)))
+    except ValueError:
+        # Stored before rules were validated (validate_rrule): the series is its first occurrence.
+        rrule = None
+    if not rrule:
         # Without a rule, the series is its first occurrence and the extra dates.
         rule.rdate(local(event_start))
     for extra in parse_exdates(event.rdates):
@@ -194,9 +216,10 @@ def expand_event(
     if exclude is None:
         exclude = exception_starts(event)
     rule = _rule(event, event_start)
-    starts = rule.between(range_start - duration, range_end, inc=True)
+    # Lazily, so that only up to max_occurrences of a dense series are worked out.
+    starts = takewhile(lambda start: start <= range_end, rule.xafter(range_start - duration, inc=True))
     occurrences = []
-    for start in starts[:max_occurrences]:
+    for start in islice(starts, max_occurrences):
         occ_start = as_utc(start)
         occ_end = occ_start + duration
         if occ_end > range_start and occ_start not in exclude:

@@ -333,11 +333,17 @@ async function submit(action: () => Promise<unknown>, done: () => void) {
   }
 }
 
-/** Sends the participants added and removed in the dialog (of a series: for all occurrences). */
+/** Sends the participants added and removed in the dialog (of a series: for all occurrences).
+ * Each one leaves its list once sent, so saving again after a failure sends only the rest. */
 async function saveParticipants(eventId: string) {
-  for (const id of removedParticipantIds.value) await api.removeEventParticipant(eventId, id)
-  for (const { user_id, email, status } of pendingParticipants.value) {
+  for (const id of [...removedParticipantIds.value]) {
+    await api.removeEventParticipant(eventId, id)
+    removedParticipantIds.value = removedParticipantIds.value.filter((removed) => removed !== id)
+  }
+  for (const pending of [...pendingParticipants.value]) {
+    const { user_id, email, status } = pending
     await api.addEventParticipant(eventId, user_id ? { user_id, status } : { email, status })
+    pendingParticipants.value = pendingParticipants.value.filter((p) => p !== pending)
   }
 }
 
@@ -385,6 +391,10 @@ async function save() {
           ...eventInput(),
           participants: pendingParticipants.value.map(({ user_id, email, status }) => ({ user_id, email, status })),
         })
+        // From now on the dialog edits the created event, so saving again after a failed step
+        // below doesn't create it twice.
+        event.value = created
+        pendingParticipants.value = []
         await saveReminders(created.id)
       }
     },

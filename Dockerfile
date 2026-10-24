@@ -40,7 +40,7 @@ RUN python manage.py collectstatic --no-input
 COPY --from=frontend /frontend/dist /srv/frontend
 COPY docker/nginx.conf /etc/nginx/conf.d/app.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/app.conf
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/entrypoint.sh docker/trusted-proxies.sh /usr/local/bin/
 
 EXPOSE 80
 

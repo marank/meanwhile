@@ -65,3 +65,19 @@ def test_full_access_does_not_manage(world):
     cal = world["cal"]["id"]
     assert full.patch(f"/calendars/{cal}", {"name": "Renamed"}).status_code == 403
     assert full.patch(f"/calendars/{cal}/members/{world['users']['other'].id}", {"role": "full"}).status_code == 403
+
+
+def test_only_managers_change_how_resources_are_approved(world, manager):
+    cal = world["cal"]["id"]
+    room = world["resource"]("Room")
+    full = world["api"]["full"]
+    url = f"/calendars/{cal}/resources/{room['id']}"
+
+    # Full access edits the resource, but neither turns approval off nor picks the approvers.
+    assert full.patch(url, {"name": "Big room"}).status_code == 200
+    assert full.patch(url, {"requires_approval": True}).status_code == 200
+    assert full.patch(url, {"requires_approval": False}).status_code == 403
+    assert full.put(f"{url}/approvers", {"user_ids": [str(world["users"]["full"].id)]}).status_code == 403
+
+    assert manager.patch(url, {"requires_approval": False}).status_code == 200
+    assert manager.put(f"{url}/approvers", {"user_ids": [str(world["users"]["approver"].id)]}).status_code == 200
