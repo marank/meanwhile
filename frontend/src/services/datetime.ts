@@ -47,6 +47,12 @@ export function formatDate(value: string | Date): string {
   return formatter({ year: 'numeric', month: 'numeric', day: 'numeric' }).format(date)
 }
 
+/** The day an all-day value names (midnight UTC, or a bare date), the same in every time zone. */
+export function formatCalendarDate(value: string): string {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  return formatDate(new Date(year!, month! - 1, day))
+}
+
 export function formatTime(value: string | Date): string {
   return formatter({ hour: 'numeric', minute: '2-digit', hour12: hour12() }).format(toDate(value))
 }

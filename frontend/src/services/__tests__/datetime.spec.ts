@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { User } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import { formatDate, toDateInputValue, toTimeInputValue } from '../datetime'
+import { formatCalendarDate, formatDate, toDateInputValue, toTimeInputValue } from '../datetime'
 
 describe('date input values', () => {
   it('use the local date and time', () => {
@@ -26,5 +26,13 @@ describe('formatDate', () => {
       auth.user = { date_format: format } as User
       expect(formatDate(date)).toBe(expected)
     }
+  })
+})
+
+describe('formatCalendarDate', () => {
+  it('shows the day an all-day value names, whatever the time zone', () => {
+    // formatDate of a local date that the UTC midnight would shift west of UTC.
+    expect(formatCalendarDate('2026-01-05T00:00:00Z')).toBe(formatDate(new Date(2026, 0, 5)))
+    expect(formatCalendarDate('2026-01-05')).toBe(formatDate(new Date(2026, 0, 5)))
   })
 })

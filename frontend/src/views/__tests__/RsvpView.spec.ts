@@ -82,11 +82,13 @@ describe('RsvpView', () => {
   })
 
   it('shows all-day events by their dates', async () => {
-    backend.on('GET /api/rsvp/*', invitation({ all_day: true, start: '2026-01-05', end: '2026-01-05' }))
+    // As the backend sends them: midnight UTC, the end inclusive.
+    const day = (date: string) => `${date}T00:00:00Z`
+    backend.on('GET /api/rsvp/*', invitation({ all_day: true, start: day('2026-01-05'), end: day('2026-01-05') }))
     await render()
     expect(wrapper.find('dd').text()).toBe('2026-01-05')
     wrapper.unmount()
-    backend.on('GET /api/rsvp/*', invitation({ all_day: true, start: '2026-01-05', end: '2026-01-07' }))
+    backend.on('GET /api/rsvp/*', invitation({ all_day: true, start: day('2026-01-05'), end: day('2026-01-07') }))
     await render()
     expect(wrapper.find('dd').text()).toBe('2026-01-05 – 2026-01-07')
   })

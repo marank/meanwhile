@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import * as api from '@/api'
 import AppLogo from '@/components/AppLogo.vue'
-import { formatDate, formatDateTime, formatTime } from '@/services/datetime'
+import { formatCalendarDate, formatDate, formatDateTime, formatTime } from '@/services/datetime'
 import { errorMessage } from '@/services/errors'
 import { participantStatusLabel } from '@/services/labels'
 import { useSettingsStore } from '@/stores/settings'
@@ -41,8 +41,9 @@ const when = computed(() => {
   const event = invitation.value
   if (!event) return ''
   if (event.all_day) {
-    const first = formatDate(event.start)
-    const last = formatDate(event.end)
+    // The backend's all-day start and (inclusive) end are midnight UTC: the days, not times.
+    const first = formatCalendarDate(event.start)
+    const last = formatCalendarDate(event.end)
     return first === last ? first : `${first} – ${last}`
   }
   const sameDay = formatDate(event.start) === formatDate(event.end)

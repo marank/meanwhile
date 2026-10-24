@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Translation as I18nT, useI18n } from 'vue-i18n'
 import AppSelect from '@/components/AppSelect.vue'
 import NumberListInput from '@/components/NumberListInput.vue'
@@ -39,7 +39,8 @@ const ORDINAL_KEYS: Record<number, string> = { 1: 'first', 2: 'second', 3: 'thir
 
 const startDate = computed(() => new Date(`${props.start}T00:00:00`))
 const defaults = computed(() => recurrenceDefaults(startDate.value))
-// Opened explicitly, the custom editor stays open even while the rule matches a preset.
+// Once open, the custom editor stays open even while the rule matches a preset: edits mustn't
+// close it under the user's hands.
 const customOpen = ref(false)
 
 const choice = computed<Choice>(() => {
@@ -48,6 +49,15 @@ const choice = computed<Choice>(() => {
   if (customOpen.value) return 'custom'
   return matchingPreset(rule.value, defaults.value) ?? 'custom'
 })
+// Also when it opened for a loaded rule that matches no preset; choosing "Custom…" again then
+// changes nothing the select would report.
+watch(
+  choice,
+  (value) => {
+    if (value === 'custom') customOpen.value = true
+  },
+  { immediate: true },
+)
 
 const choices = computed(() => {
   const { weekday, monthDay, ordinal } = defaults.value

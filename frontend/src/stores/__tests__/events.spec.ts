@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api'
+import { realtime } from '@/services/realtime'
 import { useCalendarStore } from '../calendars'
 import { useEventStore } from '../events'
 import { deferred } from './deferred'
@@ -18,6 +19,9 @@ describe('event store', () => {
     vi.mocked(api.listEvents).mockReset()
     useCalendarStore().items = [{ calendar: { id: 'c1' }, membership: { folder_id: null } } as api.CalendarListItem]
   })
+
+  // The realtime client is shared; a store left behind would go on listening to it.
+  afterEach(() => useEventStore().$dispose())
 
   it('ignores a slow answer for a range that is no longer shown', async () => {
     const events = useEventStore()
@@ -53,5 +57,42 @@ describe('event store', () => {
     await useEventStore().load(new Date(2026, 0, 1), new Date(2026, 1, 1))
     expect(api.listEvents).toHaveBeenCalledOnce()
     expect(vi.mocked(api.listEvents).mock.calls[0]![0]).toEqual(['c1', 'c2'])
+  })
+})
+
+describe('event store live updates', () => {
+  /** Delivers a message to the listeners of the shared realtime client, as the socket would. */
+  function receive(message: { type: string; calendar_id?: string }) {
+    const emit = (realtime as unknown as { emit(message: object): void }).emit.bind(realtime)
+    emit(message)
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    vi.mocked(api.listEvents).mockReset()
+    vi.mocked(api.listEvents).mockResolvedValue([])
+  })
+
+  afterEach(() => {
+    useEventStore().$dispose()
+    vi.useRealTimers()
+  })
+
+  it('loads the range again when events change, and stops listening once disposed', async () => {
+    useCalendarStore().items.push({ calendar: { id: 'c1' }, membership: { folder_id: null } } as api.CalendarListItem)
+    const store = useEventStore()
+    await store.load(new Date(2026, 2, 1), new Date(2026, 3, 1))
+    expect(api.listEvents).toHaveBeenCalledTimes(1)
+
+    receive({ type: 'events.changed', calendar_id: 'c1' })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(api.listEvents).toHaveBeenCalledTimes(2)
+
+    store.$dispose()
+    receive({ type: 'events.changed', calendar_id: 'c1' })
+    receive({ type: 'reconnected' })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(api.listEvents).toHaveBeenCalledTimes(2)
   })
 })

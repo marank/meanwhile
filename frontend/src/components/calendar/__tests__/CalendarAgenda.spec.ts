@@ -154,6 +154,19 @@ describe('CalendarAgenda', () => {
     ])
   })
 
+  it('draws the "now" line after the last event once everything today is over', () => {
+    const wrapper = render([
+      occurrence({ event_id: 'a', title: 'Morning', start: at(2026, 10, 14, 7), end: at(2026, 10, 14, 8) }),
+      occurrence({ event_id: 'b', title: 'Lunch', start: at(2026, 10, 14, 11), end: at(2026, 10, 14, 11, 30) }),
+    ])
+    const items = wrapper.findAll('.agenda-day-today .agenda-entries > li')
+    expect(items.map((item) => (item.classes('agenda-now') ? 'now' : item.find('.agenda-title').text()))).toEqual([
+      'Morning',
+      'Lunch',
+      'now',
+    ])
+  })
+
   it('finds events by what they say, and clears the search', async () => {
     const wrapper = render([
       occurrence({ event_id: 'a', title: 'Dentist' }),

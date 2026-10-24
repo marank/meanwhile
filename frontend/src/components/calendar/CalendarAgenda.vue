@@ -311,6 +311,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </button>
             </li>
           </template>
+          <!-- Everything today is over: the line goes after the last event. -->
+          <li v-if="nowIndex(day) === day.entries.length" class="agenda-now" aria-hidden="true">
+            <span>{{ $t('agenda.now') }}</span>
+          </li>
         </ul>
       </section>
     </div>

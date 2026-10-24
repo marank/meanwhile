@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import * as api from '@/api'
 import { i18n } from '@/i18n'
 import { errorMessage } from '@/services/errors'
@@ -62,10 +62,16 @@ export const useEventStore = defineStore('events', () => {
     (ids) => realtime.setCalendars(ids),
     { immediate: true },
   )
-  realtime.on('events.changed', (message) => {
-    if (calendars.selectedCalendarIds.includes(String(message.calendar_id))) refresh()
+  const stopListening = [
+    realtime.on('events.changed', (message) => {
+      if (calendars.selectedCalendarIds.includes(String(message.calendar_id))) refresh()
+    }),
+    realtime.on('reconnected', refresh),
+  ]
+  onScopeDispose(() => {
+    stopListening.forEach((stop) => stop())
+    clearTimeout(refreshTimer)
   })
-  realtime.on('reconnected', refresh)
 
   function reset() {
     loadVersion++

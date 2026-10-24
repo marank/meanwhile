@@ -141,6 +141,18 @@ describe('EventRecurrenceTab', () => {
     expect((wrapper.get('input[aria-label="Days of the month"]').element as HTMLInputElement).value).toBe('1, 15')
   })
 
+  it('keeps the editor of a loaded custom rule open when an edit makes it match a preset', async () => {
+    render({ rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH' })
+    expect(combobox().text()).toBe('Custom…')
+
+    await wrapper.get('[role="group"] button[title="Thursday"]').trigger('click')
+
+    // Every other Tuesday is a preset now, but the user is still editing.
+    expect(rrule()).toBe('FREQ=WEEKLY;INTERVAL=2;BYDAY=TU')
+    expect(combobox().text()).toBe('Custom…')
+    expect(wrapper.find('input[aria-label="Every"]').exists()).toBe(true)
+  })
+
   it('edits a custom monthly rule by date or by weekday', async () => {
     render()
     await pick(combobox(), 'Custom…')
