@@ -1088,7 +1088,10 @@ export interface components {
       /** Reminders */
       reminders: boolean
     }
-    /** ProfileOut */
+    /**
+     * ProfileOut
+     * @description The signed-in user, as /users/me and the login and signup answers (core.headless_adapter) show them.
+     */
     ProfileOut: {
       /**
        * Id
@@ -3360,7 +3363,7 @@ export interface operations {
   core_views_search_search: {
     parameters: {
       query: {
-        entity: string
+        entity: 'users' | 'members' | 'groups' | 'resources' | 'locations' | 'categories'
         q?: string
         limit?: number
         calendar_id?: string | null
@@ -4562,7 +4565,7 @@ export interface operations {
     parameters: {
       query?: {
         limit?: number
-        group?: string | null
+        group?: ('approvals' | 'invitations') | null
       }
       header?: never
       path?: never

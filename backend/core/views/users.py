@@ -13,12 +13,10 @@ from core.schemas import (
     AppPasswordCreate,
     AppPasswordCreated,
     AppPasswordOut,
-    EmailNotifications,
     OkOut,
     OverviewSettingsOut,
     OverviewSettingsUpdate,
     ProfileOut,
-    UserOut,
     UserUpdate,
 )
 from core.services.notifications import email_preferences
@@ -27,14 +25,9 @@ from core.services.reminders import reminders_changed
 router = Router()
 
 
-def _profile(user: User) -> ProfileOut:
-    data = UserOut.model_validate(user).dict()
-    return ProfileOut(**data, email_notifications=EmailNotifications.model_validate(email_preferences(user)))
-
-
 @router.get("/users/me", response=ProfileOut)
 def me(request):
-    return _profile(request.user)
+    return request.user
 
 
 @router.patch("/users/me", response=ProfileOut)
@@ -53,7 +46,7 @@ def update_me(request, payload: UserUpdate):
             **{kind: value for kind, value in choices.items() if value is not None},
         }
     user.save()
-    return _profile(user)
+    return user
 
 
 def _overview_settings(user: User) -> OverviewSettings:

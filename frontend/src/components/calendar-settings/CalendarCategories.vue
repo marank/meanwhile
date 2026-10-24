@@ -38,13 +38,13 @@ function startAdd() {
 }
 
 function startEdit(category: api.Category) {
-  form.value = { id: category.id, name: category.name, description: category.description || '', color: category.color }
+  form.value = { id: category.id, name: category.name, description: category.description, color: category.color }
 }
 
 async function save() {
   const value = form.value
   if (!value?.name) return
-  const data = { name: value.name, description: value.description || null, color: value.color }
+  const data = { name: value.name, description: value.description, color: value.color }
   const saved = await run(
     async () => {
       if (value.id) await api.updateCategory(props.calendarId, value.id, data)

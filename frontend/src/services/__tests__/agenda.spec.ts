@@ -7,7 +7,7 @@ function occurrence(fields: Partial<Occurrence>): Occurrence {
     event_id: fields.title ?? 'event',
     calendar_id: 'cal',
     title: 'Event',
-    description: null,
+    description: '',
     start: '',
     end: '',
     all_day: false,

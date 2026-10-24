@@ -99,9 +99,10 @@ export type EventParticipantUpdate = Schemas['EventParticipantUpdate']
 export type Invitation = Schemas['RsvpOut']
 export type InvitationAnswer = Schemas['RsvpAnswer']['status']
 
-// Query parameters the backend takes as plain strings.
-export type SearchEntity = 'users' | 'members' | 'groups' | 'resources' | 'locations' | 'categories'
-export type NotificationGroup = 'approvals' | 'invitations'
+export type SearchEntity = paths['/api/search']['get']['parameters']['query']['entity']
+export type NotificationGroup = NonNullable<
+  NonNullable<paths['/api/notifications']['get']['parameters']['query']>['group']
+>
 
 export type SearchResult = Schemas['SearchResult']
 

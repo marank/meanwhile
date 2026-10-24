@@ -46,6 +46,8 @@ def test_the_admin_can_sign_in(admin_env):
     )
     assert res.status_code == 200, res.content
     assert SESSION_KEY in client.session
+    # The login answers with the user as the app reads them everywhere else.
+    assert res.json()["data"]["user"] == client.get("/api/users/me").json()
 
 
 def test_promotes_an_existing_user_and_updates_password_and_name(admin_env):

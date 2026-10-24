@@ -2,6 +2,7 @@
 Notification endpoints.
 """
 
+from typing import Literal
 from uuid import UUID
 
 from django.db.models import Q
@@ -57,12 +58,10 @@ MAX_NOTIFICATIONS = 200
 
 
 @router.get("/notifications", response=list[NotificationOut])
-def list_notifications(request, limit: int = 50, group: str | None = None):
+def list_notifications(request, limit: int = 50, group: Literal["approvals", "invitations"] | None = None):
     limit = max(1, min(limit, MAX_NOTIFICATIONS))
     query = Notification.objects.filter(user=request.user)
     if group is not None:
-        if group not in TYPE_GROUPS:
-            raise HttpError(422, "Unknown notification group")
         query = query.filter(type__in=TYPE_GROUPS[group])
     notifications = list(query.select_related("actor", "event").order_by("-created_at")[:limit])
     responses = _my_responses(request.user, notifications)

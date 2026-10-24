@@ -15,6 +15,7 @@ from pydantic import AfterValidator, BeforeValidator, ConfigDict, WithJsonSchema
 
 from core.models.base import EventStatus, ParticipantStatus, Role
 from core.models.users import get_or_create_app_settings
+from core.services.notifications import email_preferences
 from core.services.recurrence import validate_rrule
 
 
@@ -134,7 +135,14 @@ class EmailNotificationsUpdate(Schema):
 
 
 class ProfileOut(UserOut):
+    """The signed-in user, as /users/me and the login and signup answers (core.headless_adapter) show them."""
+
     email_notifications: EmailNotifications
+
+    @staticmethod
+    def resolve_email_notifications(obj):
+        # What the user chose, completed with the defaults of the kinds they never chose.
+        return email_preferences(obj)
 
 
 class UserUpdate(Schema):

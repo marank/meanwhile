@@ -75,6 +75,7 @@ def test_searches_list_no_more_than_a_dropdown_shows(world):
     res = world["api"]["owner"].get("/search?entity=users&q=person&limit=100000")
     assert res.status_code == 200 and len(res.json()) == MAX_LIMIT
     assert world["api"]["owner"].get("/search?entity=users&q=person&limit=-1").status_code == 200
+    assert world["api"]["owner"].get("/search?entity=nope&q=person").status_code == 422
 
 
 def test_participants_of_hidden_bookings_stay_hidden(world):

@@ -159,7 +159,7 @@ function startEdit(resource: api.Resource) {
   form.value = {
     id: resource.id,
     name: resource.name,
-    description: resource.description || '',
+    description: resource.description,
     color: resource.color,
     icon: resource.icon,
     requires_approval: resource.requires_approval,
@@ -190,7 +190,7 @@ async function save() {
   const ownApprovers = value.requires_approval && value.approval_mode === 'custom'
   const data: api.ResourceInput = {
     name: value.name,
-    description: value.description || null,
+    description: value.description,
     color: value.color,
     icon: value.icon,
     requires_approval: value.requires_approval,

@@ -931,6 +931,14 @@
             "in": "query",
             "name": "entity",
             "schema": {
+              "enum": [
+                "users",
+                "members",
+                "groups",
+                "resources",
+                "locations",
+                "categories"
+              ],
               "title": "Entity",
               "type": "string"
             },
@@ -3090,6 +3098,10 @@
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "approvals",
+                    "invitations"
+                  ],
                   "type": "string"
                 },
                 {
@@ -3593,6 +3605,7 @@
         "type": "object"
       },
       "ProfileOut": {
+        "description": "The signed-in user, as /users/me and the login and signup answers (core.headless_adapter) show them.",
         "properties": {
           "id": {
             "format": "uuid",
