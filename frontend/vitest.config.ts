@@ -15,7 +15,7 @@ export default mergeConfig(
         include: ['src/**'],
         exclude: ['src/main.ts', '**/*.d.ts', 'src/**/__tests__/**'],
         // The level reached so far, so it can only go up; the goal is 90 %.
-        thresholds: { lines: 40, statements: 40, functions: 36, branches: 30 },
+        thresholds: { lines: 98, statements: 97, functions: 96, branches: 93 },
       },
     },
   }),
