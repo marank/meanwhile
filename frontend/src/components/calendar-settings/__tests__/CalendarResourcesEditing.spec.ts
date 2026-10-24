@@ -26,13 +26,15 @@ const resource = (id: string, name: string, overrides: Partial<api.Resource> = {
   id,
   calendar_id: 'cal',
   name,
-  description: null,
+  description: '',
   color: '#f59e0b',
   icon: '',
   requires_approval: false,
   is_location: false,
   is_active: true,
   approvers: [],
+  created_at: '2026-03-01T08:00:00.000Z',
+  updated_at: '2026-03-01T08:00:00.000Z',
   ...overrides,
 })
 

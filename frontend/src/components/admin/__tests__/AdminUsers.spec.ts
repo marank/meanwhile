@@ -65,7 +65,10 @@ describe('admin users', () => {
     useAuthStore().user = user({ id: 'ann' })
     backend = fakeBackend({
       'GET /api/admin/users': [
-        adminUser('ann', 'Ann', { is_admin: true, groups: [{ id: 'g1', name: 'Sales', description: null }] }),
+        adminUser('ann', 'Ann', {
+          is_admin: true,
+          groups: [{ id: 'g1', name: 'Sales', description: '', member_count: 1 }],
+        }),
         adminUser('bob', 'Bob', { is_active: false }),
       ],
       'GET /api/search': [],

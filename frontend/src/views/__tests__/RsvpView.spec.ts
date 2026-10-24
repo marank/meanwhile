@@ -19,7 +19,7 @@ const invitation = (overrides: Partial<Invitation> = {}): Invitation => ({
   all_day: false,
   timezone: 'Europe/Berlin',
   location: '',
-  description: null,
+  description: '',
   rrule: null,
   organizer_name: 'Bob',
   email: 'alice@example.com',

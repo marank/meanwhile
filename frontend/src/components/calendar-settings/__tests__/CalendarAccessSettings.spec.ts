@@ -113,7 +113,7 @@ describe('calendar access settings', () => {
   })
 
   it('sends nothing until saved, then only what changed', async () => {
-    backend.on('GET /api/groups/*', { id: 'g-new', name: 'Ops', description: null, members: [person('ed', 'Ed')] })
+    backend.on('GET /api/groups/*', { id: 'g-new', name: 'Ops', description: '', members: [person('ed', 'Ed')] })
     backend.on('PATCH /api/calendars/cal', (req) => calendar(req.body as Partial<api.Calendar>))
     backend.on('DELETE /api/calendars/cal/members/*', undefined)
     backend.on('POST /api/calendars/cal/members', {})

@@ -12,7 +12,7 @@ export function occurrence(overrides: Partial<Occurrence> = {}): Occurrence {
     event_id: 'e1',
     calendar_id: 'c1',
     title: 'Meeting',
-    description: null,
+    description: '',
     start: at(2026, 10, 14, 10),
     end: at(2026, 10, 14, 11),
     all_day: false,
@@ -45,7 +45,7 @@ export function calendar(id: string, overrides: Partial<Calendar> = {}): Calenda
   return {
     id,
     name: `Calendar ${id}`,
-    description: null,
+    description: '',
     url_path: null,
     force_all_day: false,
     first_weekday: 1,

@@ -10,7 +10,7 @@ import PublicCalendarsDialog from '../PublicCalendarsDialog.vue'
 import { calendarItem } from '../calendar/__tests__/calendarFixtures'
 
 function publicCalendar(id: string, overrides: Partial<PublicCalendar> = {}): PublicCalendar {
-  return { id, name: `Public ${id}`, description: null, owner_name: 'Alice', added: false, ...overrides }
+  return { id, name: `Public ${id}`, description: '', owner_name: 'Alice', added: false, ...overrides }
 }
 
 async function render() {

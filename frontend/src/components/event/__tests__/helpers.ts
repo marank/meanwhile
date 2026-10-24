@@ -55,6 +55,7 @@ export function event(extra: Partial<api.Event> = {}): api.Event {
     timezone: 'UTC',
     show_recurrence_count: false,
     rrule: null,
+    rdates: [],
     uid: 'uid1',
     parent_id: null,
     recurrence_id: null,
@@ -67,9 +68,10 @@ export function event(extra: Partial<api.Event> = {}): api.Event {
     awaiting_approval: [],
     decided_by: null,
     decided_at: null,
-    decision_note: null,
+    decision_note: '',
     created_at: '2026-03-01T08:00:00.000Z',
     updated_at: '2026-03-01T08:00:00.000Z',
+    can_decide: false,
     ...extra,
   }
 }

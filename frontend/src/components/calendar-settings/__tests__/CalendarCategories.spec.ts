@@ -6,7 +6,7 @@ import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
 import { answerConfirm, buttonNamed, clearToasts, toastTexts } from '@/components/__tests__/settingsFixtures'
 import CalendarCategories from '../CalendarCategories.vue'
 
-const category = (id: string, name: string, description: string | null = null): api.Category => ({
+const category = (id: string, name: string, description = ''): api.Category => ({
   id,
   calendar_id: 'cal',
   name,
@@ -87,7 +87,7 @@ describe('calendar categories', () => {
     await flushPromises()
     expect(backend.calls('PATCH /api/calendars/cal/categories/c1')[0]!.body).toEqual({
       name: 'Holiday',
-      description: null,
+      description: '',
       color: '#22c55e',
     })
   })

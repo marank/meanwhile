@@ -13,7 +13,7 @@ import {
 } from '@/components/__tests__/settingsFixtures'
 import AdminGroups from '../AdminGroups.vue'
 
-const group = (id: string, name: string, description: string | null, count?: number): api.UserGroup => ({
+const group = (id: string, name: string, description: string, count = 0): api.UserGroup => ({
   id,
   name,
   description,
@@ -41,7 +41,7 @@ describe('admin groups', () => {
     i18n.global.locale.value = 'en'
     clearToasts()
     backend = fakeBackend({
-      'GET /api/groups': [group('g1', 'Sales', 'The sales team', 2), group('g2', 'Ops', null)],
+      'GET /api/groups': [group('g1', 'Sales', 'The sales team', 2), group('g2', 'Ops', '')],
       'GET /api/groups/g1': {
         ...group('g1', 'Sales', 'The sales team', 2),
         members: [{ id: 'bob', display_name: 'Bob', email: 'bob@example.test' }],
@@ -85,7 +85,7 @@ describe('admin groups', () => {
     await flushPromises()
     expect(backend.calls('POST /api/groups')[0]!.body).toEqual({
       name: 'Leads',
-      description: null,
+      description: '',
       member_ids: ['kim'],
     })
     expect(wrapper.find('table').exists()).toBe(true)

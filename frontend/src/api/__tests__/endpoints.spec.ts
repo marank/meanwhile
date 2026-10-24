@@ -51,14 +51,10 @@ const cases: Case[] = [
   ['getCalendar', () => api.getCalendar('c'), 'GET', '/api/calendars/c'],
   [
     'createCalendar',
-    () => api.createCalendar('Team', 'Desc', '#fff'),
+    () => api.createCalendar({ name: 'Team', description: 'Desc' }),
     'POST',
     '/api/calendars',
-    {
-      name: 'Team',
-      description: 'Desc',
-      color: '#fff',
-    },
+    { name: 'Team', description: 'Desc' },
   ],
   ['updateCalendar', () => api.updateCalendar('c', { name: 'X' }), 'PATCH', '/api/calendars/c', { name: 'X' }],
   ['deleteCalendar', () => api.deleteCalendar('c'), 'DELETE', '/api/calendars/c'],

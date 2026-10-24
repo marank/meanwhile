@@ -12,7 +12,7 @@ const settings: api.AppSettings = {
   id: 1,
   app_name: 'Meanwhile',
   logo_url: 'data:image/png;base64,AAAA',
-  favicon_url: null,
+  favicon_url: '',
   default_first_weekday: 1,
   default_show_weekends: true,
   default_weekend_days: [0, 6],

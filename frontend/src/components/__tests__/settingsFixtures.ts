@@ -11,7 +11,7 @@ export function calendar(overrides: Partial<api.Calendar> = {}): api.Calendar {
   return {
     id: 'cal',
     name: 'Team',
-    description: null,
+    description: '',
     url_path: null,
     force_all_day: false,
     first_weekday: 1,
