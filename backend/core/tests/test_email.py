@@ -399,6 +399,27 @@ def test_titles_over_several_lines_make_one_line_subjects() -> None:
     assert "\n" not in sender("Ann\nOther", "App")
 
 
+@pytest.mark.parametrize(
+    ("uploaded", "shown"),
+    [
+        ("", "http://app.test/mail-logo.png"),
+        ("/media/logo.png", "http://app.test/media/logo.png"),
+        ("https://cdn.example.com/logo.png", "https://cdn.example.com/logo.png"),
+        ("data:image/png;base64,AAAA", None),
+    ],
+)
+def test_emails_show_the_logo_mail_programs_can_load(uploaded: str, shown: str | None) -> None:
+    from core.models.users import get_or_create_app_settings
+    from core.services.mail import build_message
+
+    app_settings = get_or_create_app_settings()
+    app_settings.logo_url = uploaded
+    app_settings.save()
+    message = build_message("ann@example.test", "Hello", ["Hi"], "en")
+    html = str(message.alternatives[0][0])
+    assert (f'<img src="{shown}"' in html) if shown else ("<img" not in html)
+
+
 # Occurrences, addresses and answers in detail -----------------------------------------------------
 
 

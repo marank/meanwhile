@@ -91,13 +91,15 @@ describe('App', () => {
     expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')!.getAttribute('href')).toBe('/media/favicon.png')
   })
 
-  it('replaces the favicon the page came with', async () => {
-    const link = document.createElement('link')
-    link.rel = 'icon'
-    link.href = '/favicon.ico'
-    document.head.appendChild(link)
+  it('replaces the favicons the page came with', async () => {
+    document.head.insertAdjacentHTML(
+      'beforeend',
+      '<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+    )
     await render(null, { ...settings, favicon_url: '/media/favicon.png' })
-    expect(document.querySelectorAll('link[rel="icon"]')).toHaveLength(1)
-    expect(link.getAttribute('href')).toBe('/media/favicon.png')
+    const links = document.querySelectorAll('link[rel="icon"]')
+    expect(links).toHaveLength(1)
+    expect(links[0]!.getAttribute('href')).toBe('/media/favicon.png')
+    expect(links[0]!.hasAttribute('type')).toBe(false)
   })
 })

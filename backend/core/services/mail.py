@@ -52,6 +52,15 @@ def app_link(path: str) -> str | None:
     return f"{settings.APP_URL}{path}" if settings.APP_URL else None
 
 
+def logo_link() -> str | None:
+    """The logo at the top of emails: the uploaded one, else ours (a PNG: Gmail and Outlook show no
+    SVG). None for an uploaded data: URL, which mail programs block."""
+    logo = get_or_create_app_settings().logo_url or "/mail-logo.png"
+    if logo.startswith("/"):
+        return app_link(logo)
+    return logo if logo.startswith(("https://", "http://")) else None
+
+
 # Times ----------------------------------------------------------------------------------------
 
 _WEEKDAYS = {
@@ -163,6 +172,7 @@ def _html(
     footer: str,
     app: str,
     language: str,
+    logo: str | None,
 ) -> str:
     """The HTML part: a card on a grey page, with tables and inline styles as mail programs need."""
     body = []
@@ -191,6 +201,13 @@ def _html(
             f'<tr><td style="padding:12px 16px"><table role="presentation" cellpadding="0" cellspacing="0" '
             f'style="font-size:14px;line-height:20px">{rows}</table></td></tr></table>'
         )
+    header = escape(app)
+    if logo:
+        header = (
+            f'<img src="{escape(logo)}" width="32" height="32" alt="" '
+            'style="display:inline-block;width:32px;height:32px;margin-right:10px;border:0;border-radius:7px;'
+            f'vertical-align:middle">{header}'
+        )
     for group in ([link for link in links if link.primary], [link for link in links if not link.primary]):
         if group:
             body.append(f'<div style="margin:0">{"".join(_button(link) for link in group)}</div>')
@@ -207,7 +224,7 @@ def _html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">'
         '<tr><td class="mw-app" '
         f'style="padding:0 4px 12px;font-family:{_FONT};font-size:14px;font-weight:600;color:#6b7280">'
-        f"{escape(app)}</td></tr>"
+        f"{header}</td></tr>"
         '<tr><td class="mw-card" '
         'style="padding:28px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;'
         f'font-family:{_FONT}">{"".join(body)}</td></tr>'
@@ -252,7 +269,8 @@ def build_message(
         to=[to],
         reply_to=[reply_to] if reply_to else None,
     )
-    message.attach_alternative(_html(subject, heading, paragraphs, details, links, footer, app, language), "text/html")
+    html = _html(subject, heading, paragraphs, details, links, footer, app, language, logo_link())
+    message.attach_alternative(html, "text/html")
     return message
 
 

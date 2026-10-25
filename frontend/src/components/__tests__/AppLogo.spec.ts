@@ -16,21 +16,18 @@ beforeEach(() => {
 })
 
 describe('AppLogo', () => {
-  it("shows the app name's initial when there is no logo", async () => {
+  it('shows our logo when none was uploaded', async () => {
     await loadSettings({ app_name: 'team calendar' })
-    const wrapper = mount(AppLogo)
-    expect(wrapper.text()).toBe('T')
-    expect(wrapper.find('img').exists()).toBe(false)
+    expect(mount(AppLogo).get('img').attributes('src')).toBe('/logo.svg')
   })
 
-  it('falls back to the default name before settings are loaded', () => {
-    expect(mount(AppLogo).text()).toBe('M')
+  it('shows our logo before settings are loaded', () => {
+    expect(mount(AppLogo).get('img').attributes('src')).toBe('/logo.svg')
   })
 
-  it('shows the uploaded logo instead of the initial', async () => {
+  it('shows the uploaded logo instead of ours', async () => {
     await loadSettings({ app_name: 'Team', logo_url: '/media/logo.png' })
     const wrapper = mount(AppLogo, { props: { size: 'lg' } })
     expect(wrapper.get('img').attributes('src')).toBe('/media/logo.png')
-    expect(wrapper.text()).toBe('')
   })
 })

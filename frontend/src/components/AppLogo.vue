@@ -7,14 +7,11 @@ const settings = useSettingsStore()
 </script>
 
 <template>
+  <!-- Our logo brings its own rounded tile; an uploaded one gets a surface behind it. -->
   <div
     class="flex shrink-0 items-center justify-center overflow-hidden rounded-lg"
-    :class="[
-      size === 'lg' ? 'h-10 w-10 text-xl' : 'h-8 w-8',
-      settings.logoUrl ? 'bg-surface' : 'bg-blue-600 font-bold text-white',
-    ]"
+    :class="[size === 'lg' ? 'h-10 w-10' : 'h-8 w-8', settings.logoUrl && 'bg-surface']"
   >
-    <img v-if="settings.logoUrl" :src="settings.logoUrl" alt="" class="max-h-full max-w-full object-contain" />
-    <template v-else>{{ settings.appName.charAt(0).toUpperCase() }}</template>
+    <img :src="settings.logoUrl ?? '/logo.svg'" alt="" class="max-h-full max-w-full object-contain" />
   </div>
 </template>

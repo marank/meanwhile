@@ -27,6 +27,8 @@ calendar/
   backend/            Django backend
   backend_fastapi/    Reference FastAPI implementation
   frontend/           Vue SPA
+  branding/           Logo (logo.svg; logo-alt.svg is the spare design) and build.sh, which renders
+                      favicon, email and home screen icons into frontend/public/
   docker/             nginx, supervisord, entrypoint, healthcheck and backup script of the production image
   Dockerfile          Production image (frontend + backend in one container)
   compose.yml         Production: PostgreSQL, Redis, app, nightly backups

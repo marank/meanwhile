@@ -19,13 +19,13 @@ watchEffect(() => {
 watchEffect(() => {
   const url = settings.faviconUrl
   if (!url) return
-  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
-  if (!link) {
-    link = document.createElement('link')
-    link.rel = 'icon'
-    document.head.appendChild(link)
-  }
-  link.href = url
+  // The page comes with ours in two formats; browsers would keep using the SVG one.
+  const [link, ...others] = document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')
+  others.forEach((other) => other.remove())
+  const icon = link ?? document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }))
+  icon.removeAttribute('type')
+  icon.removeAttribute('sizes')
+  icon.href = url
 })
 </script>
 
