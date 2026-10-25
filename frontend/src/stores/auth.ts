@@ -12,6 +12,7 @@ import { useOverviewStore } from './overview'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<api.User | null>(null)
   let initPromise: Promise<void> | null = null
+  let csrfPromise: Promise<unknown> | null = null
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin = computed(() => !!user.value?.is_admin)
@@ -66,10 +67,19 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   /** Restores the session once; later calls wait for the same request. */
+  /** The CSRF cookie, which forms that post need, also without a session. Fetched once per session. */
+  function prepareCsrf(): Promise<unknown> {
+    csrfPromise ??= api.getCsrf().catch((error: unknown) => {
+      csrfPromise = null
+      throw error
+    })
+    return csrfPromise
+  }
+
   function init(): Promise<void> {
     initPromise ??= (async () => {
       try {
-        await api.getCsrf()
+        await prepareCsrf()
         user.value = await api.me()
       } catch {
         user.value = null
@@ -91,6 +101,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     // The next navigation fetches a fresh CSRF token for the new anonymous session.
     initPromise = null
+    csrfPromise = null
     useCalendarStore().reset()
     useEventStore().reset()
     useNotificationsStore().reset()
@@ -110,5 +121,5 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = await api.updateProfile(data)
   }
 
-  return { user, isLoggedIn, isAdmin, init, login, register, logout, clearSession, updateProfile }
+  return { user, isLoggedIn, isAdmin, init, prepareCsrf, login, register, logout, clearSession, updateProfile }
 })

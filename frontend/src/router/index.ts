@@ -93,8 +93,12 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  // Pages open to anyone don't ask for the session (which, signed out, the server answers with 401).
+  if (to.meta.anyone) {
+    await auth.prepareCsrf().catch(() => {})
+    return
+  }
   await auth.init()
-  if (to.meta.anyone) return
   if (!to.meta.public && !auth.isLoggedIn) return '/login'
   if (to.meta.public && auth.isLoggedIn) return '/calendar'
   if (to.meta.admin && !auth.isAdmin) return '/calendar'

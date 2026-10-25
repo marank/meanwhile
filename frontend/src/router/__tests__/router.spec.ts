@@ -86,6 +86,15 @@ describe('router', () => {
     expect(await visit('/admin')).toBe('/admin')
   })
 
+  it('opens invitation links without asking for a session', async () => {
+    setActivePinia(createPinia())
+    backend = fakeBackend(sessionRoutes(null))
+    await router.replace('/rsvp/token-2')
+    expect(backend.calls('GET /api/users/me')).toHaveLength(0)
+    // Answering posts, which needs the CSRF cookie.
+    expect(backend.calls('GET /api/auth/csrf')).toHaveLength(1)
+  })
+
   it.each([null, makeUser()])('shows invitation and password links to anyone (user %#)', async (user) => {
     await session(user)
     expect(await visit('/rsvp/token-1?answer=accepted')).toBe('/rsvp/token-1?answer=accepted')
