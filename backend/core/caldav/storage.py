@@ -666,11 +666,17 @@ class Storage(storage.BaseStorage):
                 yield item
 
     def create_collection(self, href: str, items=None, props=None):
-        """Creates a calendar for a client (MKCALENDAR, or MKCOL from the Radicale web interface)."""
+        """Creates a calendar for a client (MKCALENDAR, or MKCOL from the Radicale web interface).
+
+        Returns it as Radicale expects: with the items it replaced and the hrefs of new ones (none here).
+        """
         parts = [p for p in pathutils.strip_path(href).split("/") if p]
         if len(parts) == 1:
             # Radicale asks for a principal on first login; every user already has one.
-            return self._collection_from_path(href)
+            principal = self._collection_from_path(href)
+            if principal is None:
+                raise _forbidden("Calendar homes are those of users")
+            return principal, {}, []
         props = props or {}
         if len(parts) != 2 or props.get("tag") != "VCALENDAR":
             raise _forbidden("Only calendars can be created, directly in the calendar home")
@@ -695,7 +701,7 @@ class Storage(storage.BaseStorage):
             description=props.get("C:calendar-description") or "",
             dav_name=parts[1],
         )
-        return Collection(self.configuration, href, calendar=calendar)
+        return Collection(self.configuration, href, calendar=calendar), {}, []
 
     def move(self, item, to_collection, to_href: str) -> None:
         """Renames an event or moves it to another calendar, e.g. when a client changes its calendar."""
