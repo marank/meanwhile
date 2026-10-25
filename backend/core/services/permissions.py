@@ -2,10 +2,11 @@
 Permission helpers for calendars and events.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from uuid import UUID
 
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from ninja.errors import HttpError
 
 from core.models.base import EventStatus, MembershipSource, Role
@@ -21,7 +22,7 @@ def role_weight(role: str) -> int:
     return ROLE_ORDER.index(role)
 
 
-def has_at_least_role(member, role: str) -> bool:
+def has_at_least_role(member: MembershipInfo, role: str) -> bool:
     return role_weight(member.role) >= role_weight(role)
 
 
@@ -64,7 +65,7 @@ def get_membership(calendar: Calendar, user: User) -> MembershipInfo | None:
     return memberships_of(user, [calendar]).get(calendar.id)
 
 
-def memberships_of(user: User, calendars) -> dict[UUID, MembershipInfo]:
+def memberships_of(user: User, calendars: Iterable[Calendar]) -> dict[UUID, MembershipInfo]:
     """
     The user's access to each of the calendars they have access to, by calendar id; in at most two queries.
 
@@ -72,11 +73,11 @@ def memberships_of(user: User, calendars) -> dict[UUID, MembershipInfo]:
     public role, is worked out here every time: a membership from a group or a public calendar only
     remembers where it sits in the sidebar, so access never depends on keeping it in step.
     """
-    calendars = {c.id: c for c in calendars}
-    rows = {m.calendar_id: m for m in CalendarMember.objects.filter(calendar_id__in=calendars, user_id=user.id)}
+    by_id = {c.id: c for c in calendars}
+    rows = {m.calendar_id: m for m in CalendarMember.objects.filter(calendar_id__in=by_id, user_id=user.id)}
     direct = {calendar_id for calendar_id, row in rows.items() if row.source == MembershipSource.DIRECT}
     # Groups only matter where the user has no direct membership.
-    others = [calendar_id for calendar_id in calendars if calendar_id not in direct]
+    others = [calendar_id for calendar_id in by_id if calendar_id not in direct]
     group_roles: dict[UUID, str] = {}
     if others:
         links = CalendarGroup.objects.filter(calendar_id__in=others, group__in=user.groups.all())
@@ -84,8 +85,8 @@ def memberships_of(user: User, calendars) -> dict[UUID, MembershipInfo]:
             if calendar_id not in group_roles or role_weight(role) > role_weight(group_roles[calendar_id]):
                 group_roles[calendar_id] = role
 
-    result = {}
-    for calendar_id, calendar in calendars.items():
+    result: dict[UUID, MembershipInfo] = {}
+    for calendar_id, calendar in by_id.items():
         row = rows.get(calendar_id)
         if row is not None and row.source == MembershipSource.DIRECT:
             # Direct memberships always have a role; only the others leave it empty.
@@ -122,11 +123,11 @@ def can_modify_event(event: Event, user_id: str, role: str) -> bool:
     return role_weight(role) >= role_weight(Role.OWN) and str(event.creator_id) == str(user_id)
 
 
-def is_owner(member) -> bool:
+def is_owner(member: MembershipInfo) -> bool:
     return member.role == Role.OWNER
 
 
-def can_manage(member) -> bool:
+def can_manage(member: MembershipInfo) -> bool:
     """Calendar settings, access, feed and approvers; only deleting the calendar stays with its owner."""
     return has_at_least_role(member, Role.MANAGE)
 
@@ -166,7 +167,7 @@ def participant_event_ids(user: User) -> set[UUID]:
     )
 
 
-def can_see_event(event: Event, user: User, membership) -> bool:
+def can_see_event(event: Event, user: User, membership: MembershipInfo) -> bool:
     user_id = str(user.id)
     if str(event.creator_id) == str(user_id):
         return True
@@ -178,14 +179,14 @@ def can_see_event(event: Event, user: User, membership) -> bool:
     return True
 
 
-def accessible_calendars(user: User):
+def accessible_calendars(user: User) -> QuerySet[Calendar]:
     """Calendars the user can read: own, shared directly or via a group, and public ones."""
     return Calendar.objects.filter(
         Q(owner=user) | Q(members__user=user) | Q(calendar_groups__group__in=user.groups.all()) | Q(is_public=True)
     ).distinct()
 
 
-def sidebar_calendars(user: User):
+def sidebar_calendars(user: User) -> QuerySet[Calendar]:
     """The calendars in the user's sidebar (and CalDAV clients): those they have a membership of, from a group,
     added or granted directly. Other public calendars can be read, but have to be added first."""
     return Calendar.objects.filter(Q(owner=user) | Q(members__user=user)).distinct()

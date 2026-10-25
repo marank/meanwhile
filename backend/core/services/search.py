@@ -2,6 +2,8 @@
 Global search across users, groups, resources and categories.
 """
 
+from typing import Any
+
 from django.db.models import Q
 
 from core.models.base import MembershipSource
@@ -11,7 +13,7 @@ from core.models.users import User, UserGroup
 MAX_LIMIT = 20
 
 
-def search_users(q: str, limit: int = MAX_LIMIT):
+def search_users(q: str, limit: int = MAX_LIMIT) -> list[dict[str, Any]]:
     q = q.strip()
     if len(q) < 2:
         return []
@@ -23,7 +25,7 @@ def search_users(q: str, limit: int = MAX_LIMIT):
     return [{"id": u["id"], "type": "user", "label": u["display_name"], "subtitle": u["email"]} for u in users]
 
 
-def search_calendar_members(calendar_id: str, q: str, limit: int = MAX_LIMIT):
+def search_calendar_members(calendar_id: str, q: str, limit: int = MAX_LIMIT) -> list[dict[str, Any]]:
     q = q.strip()
     # Granted members (those approvers are picked from), not those with the calendar from a group or added.
     members = User.objects.filter(memberships__calendar_id=calendar_id, memberships__source=MembershipSource.DIRECT)
@@ -33,7 +35,7 @@ def search_calendar_members(calendar_id: str, q: str, limit: int = MAX_LIMIT):
     return [{"id": u["id"], "type": "user", "label": u["display_name"], "subtitle": u["email"]} for u in users]
 
 
-def search_groups(q: str, limit: int = MAX_LIMIT):
+def search_groups(q: str, limit: int = MAX_LIMIT) -> list[dict[str, Any]]:
     query = UserGroup.objects.all()
     if q.strip():
         query = query.filter(name__icontains=q.strip())
@@ -49,7 +51,7 @@ def search_groups(q: str, limit: int = MAX_LIMIT):
     ]
 
 
-def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT, locations: bool = False):
+def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT, locations: bool = False) -> list[dict[str, Any]]:
     """Bookable resources: places for an event's location field, or the others for its resource field."""
     # Only offer resources that can be booked: active and not archived (deleted).
     query = Resource.objects.filter(
@@ -77,7 +79,7 @@ def search_resources(calendar_id: str, q: str, limit: int = MAX_LIMIT, locations
     ]
 
 
-def search_categories(calendar_id: str, q: str, limit: int = MAX_LIMIT):
+def search_categories(calendar_id: str, q: str, limit: int = MAX_LIMIT) -> list[dict[str, Any]]:
     query = Category.objects.filter(calendar_id=calendar_id)
     if q.strip():
         query = query.filter(name__icontains=q.strip())

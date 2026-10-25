@@ -6,7 +6,9 @@ knows when it is next due, so that a delivery only looks at those due by then; a
 (or the user's zone) has it work that out again.
 """
 
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
@@ -40,7 +42,7 @@ def reminder_minutes(event: Event, user: User) -> list[int]:
     )
 
 
-def allowed_minutes(minutes) -> list[int]:
+def allowed_minutes(minutes: Iterable[int]) -> list[int]:
     """The reminders kept of those asked for, by the app or as CalDAV alarms: within
     MAX_MINUTES_BEFORE, each once, and the MAX_REMINDERS closest to the start."""
     return sorted({m for m in minutes if 0 <= m <= MAX_MINUTES_BEFORE})[:MAX_REMINDERS]
@@ -66,9 +68,9 @@ def _local_start(event: Event, start: datetime, user: User) -> datetime:
     return start
 
 
-def _occurrences(series: Event, user: User, after: datetime, before: datetime):
+def _occurrences(series: Event, user: User, after: datetime, before: datetime) -> list[tuple[Event, datetime]]:
     """(event, start) of the series' occurrences starting in (after, before], changed ones included."""
-    found = []
+    found: list[tuple[Event, datetime]] = []
     # All-day starts move by up to a day with the user's zone; look a day further each way.
     for start, _ in expand_event(series, after - timedelta(days=1), before + timedelta(days=1)):
         found.append((series, _local_start(series, start, user)))
@@ -82,7 +84,7 @@ def _occurrences(series: Event, user: User, after: datetime, before: datetime):
 DELIVERY_RETENTION = timedelta(days=30)
 
 
-def deliver_due_reminders(user: User | None = None, now: datetime | None = None) -> list[dict]:
+def deliver_due_reminders(user: User | None = None, now: datetime | None = None) -> list[dict[str, Any]]:
     """Turns due reminders into notifications, which pop up in the users' open tabs; returns those
     delivered now."""
     now = now or timezone.now()
@@ -94,8 +96,8 @@ def deliver_due_reminders(user: User | None = None, now: datetime | None = None)
     if user is not None:
         reminders = reminders.filter(user=user)
 
-    delivered = []
-    by_user: dict[UUID, list[dict]] = {}
+    delivered: list[dict[str, Any]] = []
+    by_user: dict[UUID, list[dict[str, Any]]] = {}
     for reminder in reminders:
         series, reader = reminder.event, reminder.user
         membership = get_membership(series.calendar, reader)
@@ -103,7 +105,8 @@ def deliver_due_reminders(user: User | None = None, now: datetime | None = None)
         # Occurrences whose reminder time has come, and that haven't long begun.
         due = _occurrences(series, reader, now - LATE_DELIVERY, now + before) if membership else []
         for event, start in due:
-            if event.status in _HIDDEN or not can_see_event(event, reader, membership):
+            # membership is set: without one, nothing is due.
+            if event.status in _HIDDEN or membership is None or not can_see_event(event, reader, membership):
                 continue
             try:
                 with transaction.atomic():

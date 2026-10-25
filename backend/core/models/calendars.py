@@ -54,6 +54,8 @@ class Calendar(UUIDModel, TimestampedModel, CalendarAppearance):
     is_public = models.BooleanField(default=False)
     public_role = models.CharField(max_length=20, choices=Role.choices, default=Role.READ)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="calendars_owned")
+    # Set by core.services.ical while it writes the calendar's events; not a column.
+    _ical_category_names: set[str]
 
     class Meta:
         db_table = "calendars"

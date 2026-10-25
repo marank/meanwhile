@@ -2,20 +2,21 @@
 Resource booking approval/conflict logic.
 """
 
+from collections.abc import Iterable
 from datetime import timedelta
 
 from django.db.models import Q
 from django.utils import timezone
 
 from core.models.base import EventStatus
-from core.models.calendars import CalendarApprover
+from core.models.calendars import Calendar, CalendarApprover
 from core.models.events import Event
 from core.models.resources import Resource
 from core.models.users import User
 from core.services.recurrence import find_conflicts
 
 
-def get_resource_approvers(resource: Resource):
+def get_resource_approvers(resource: Resource) -> list[User]:
     """The resource's own approvers, else the calendar's default approvers; may be empty.
 
     The calendar owner can always decide regardless (see is_in_approver_pool).
@@ -29,7 +30,7 @@ def get_resource_approvers(resource: Resource):
     return [a.user for a in CalendarApprover.objects.filter(calendar=calendar).select_related("user")]
 
 
-def can_decide_booking(calendar, resource: Resource | None, user_id: str) -> bool:
+def can_decide_booking(calendar: Calendar, resource: Resource | None, user_id: str) -> bool:
     """The calendar owner and the resource's approver pool may approve or reject bookings."""
     if str(calendar.owner_id) == str(user_id):
         return True
@@ -64,7 +65,7 @@ def decidable_resources(event: Event, user_id: str) -> list[Resource]:
     return [r for r in awaiting_resources(event) if can_decide_booking(event.calendar, r, user_id)]
 
 
-def approvers_of(resources) -> list[User]:
+def approvers_of(resources: Iterable[Resource]) -> list[User]:
     """Everyone who may decide on any of the resources' bookings, besides the calendar owner."""
     users: dict[str, User] = {}
     for resource in resources:
@@ -107,13 +108,13 @@ def update_booking_status(event: Event, user: User, recheck: list[Resource]) -> 
 
 def find_booking_conflicts(event: Event) -> list[Event]:
     """Approved bookings of any of the event's resources at the same time."""
-    conflicts = []
+    conflicts: list[Event] = []
     for resource in booked_resources(event):
         conflicts += [c for c in find_conflicting_approved_bookings(resource, event) if c not in conflicts]
     return conflicts
 
 
-def find_conflicting_approved_bookings(resource: Resource, event: Event):
+def find_conflicting_approved_bookings(resource: Resource, event: Event) -> list[Event]:
     """Approved bookings of the resource at the same time as the event.
 
     Locks the resource until the caller's transaction ends, so concurrent bookings and approvals of it

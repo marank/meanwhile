@@ -7,11 +7,12 @@ server neither holds up nor fails the request, and the worker tries again until 
 """
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from email.utils import formataddr
 from html import escape
+from typing import Any
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
@@ -188,29 +189,29 @@ def _deliver_logging_failures(messages: list[EmailMultiAlternatives]) -> None:
         logger.exception("Sending %d email(s) failed", len(messages))
 
 
-def _after_commit(callback) -> None:
+def _after_commit(callback: Callable[[], object]) -> None:
     transaction.on_commit(callback)
 
 
-def send(messages) -> None:
+def send(messages: Iterable[EmailMultiAlternatives | None]) -> None:
     """Sends the messages if the current transaction commits.
 
     With EMAIL_SEND_IN_BACKGROUND, each becomes a job of the task queue, saved in the transaction;
     otherwise they go out right after it, and a failure is only logged.
     """
-    messages = [m for m in messages if m is not None]
-    if not messages:
+    to_send = [m for m in messages if m is not None]
+    if not to_send:
         return
     if settings.EMAIL_SEND_IN_BACKGROUND:
         from core.tasks import send_email  # core.tasks uses this module
 
-        for message in messages:
+        for message in to_send:
             send_email.defer(message=message_data(message))
     else:
-        _after_commit(lambda: _deliver_logging_failures(messages))
+        _after_commit(lambda: _deliver_logging_failures(to_send))
 
 
-def message_data(message: EmailMultiAlternatives) -> dict:
+def message_data(message: EmailMultiAlternatives) -> dict[str, Any]:
     """The message as JSON, for a job of the task queue; message_from_data() reads it."""
     return {
         "subject": message.subject,
@@ -223,7 +224,7 @@ def message_data(message: EmailMultiAlternatives) -> dict:
     }
 
 
-def message_from_data(data: dict) -> EmailMultiAlternatives:
+def message_from_data(data: dict[str, Any]) -> EmailMultiAlternatives:
     message = EmailMultiAlternatives(
         subject=data["subject"],
         body=data["body"],

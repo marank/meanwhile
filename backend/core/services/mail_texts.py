@@ -118,6 +118,6 @@ TEXTS = {
 }
 
 
-def text(language: str, key: str, **values) -> str:
+def text(language: str, key: str, **values: object) -> str:
     template = TEXTS.get(language, TEXTS["en"]).get(key) or TEXTS["en"][key]
     return template.format(**values)

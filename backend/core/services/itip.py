@@ -16,12 +16,16 @@ import email
 import email.policy
 import imaplib
 import logging
+from collections.abc import Callable
 from datetime import datetime
+from email.message import Message
 from email.utils import getaddresses
+from typing import Any
 
 import icalendar
 from django.conf import settings
-from django.db.models import Q
+from django.core.mail import EmailMultiAlternatives
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from core.models import Event, EventParticipant
@@ -64,7 +68,8 @@ def _recipients(series: Event, only: list[EventParticipant] | None = None) -> li
         for override in series.overrides.all():
             candidates += list(override.participants.select_related("user"))
     organizer = series.creator.email.lower()
-    found, seen = [], set()
+    found: list[EventParticipant] = []
+    seen: set[str] = set()
     for participant in candidates:
         address = participant.email.lower()
         if address in seen or address == organizer:
@@ -98,7 +103,7 @@ def request_ical(series: Event, occurrences: list[Event] | None = None) -> str:
     return to_ical(cal)
 
 
-def _recurrence_id(component) -> datetime | None:
+def _recurrence_id(component: icalendar.Component) -> datetime | None:
     rid = component.get("RECURRENCE-ID")
     if rid is None:
         return None
@@ -135,7 +140,7 @@ def _message(
     ical_text: str,
     kind: str,
     shown: Event | None = None,
-):
+) -> EmailMultiAlternatives:
     """`kind`: "invite", "update", "cancel" or "removed". `shown`: the occurrence the mail is about,
     if it is about one only."""
     organizer = series.creator
@@ -155,7 +160,7 @@ def _message(
     if shown.description and method == "REQUEST":
         details.append((text(language, "description"), shown.description))
 
-    links = []
+    links: list[mail.Link] = []
     if method == "REQUEST":
         paragraphs.append(text(language, "rsvp_prompt"))
         for answer, label in (("accepted", "accept"), ("tentative", "tentative"), ("declined", "decline")):
@@ -197,7 +202,7 @@ def send_request(event: Event, participants: list[EventParticipant] | None = Non
     on_series = {p.email.lower() for p in series.participants.all()}
     overrides = [o for o in series.overrides.prefetch_related("participants") if o.status not in _GONE]
     series_text = None
-    messages = []
+    messages: list[EmailMultiAlternatives] = []
     for participant in recipients:
         address = participant.email.lower()
         if address in on_series:
@@ -264,24 +269,24 @@ def record_answer(participant: EventParticipant, status: str, name: str | None =
     return True
 
 
-def _address(value) -> str:
+def _address(value: object) -> str:
     return str(value or "").strip().lower().removeprefix("mailto:")
 
 
-def _as_list(value) -> list:
+def _as_list(value: Any) -> list[Any]:
     if value is None:
         return []
     return value if isinstance(value, list) else [value]
 
 
-def _reply(vevent, sender: str | None) -> list[str]:
+def _reply(vevent: icalendar.Component, sender: str | None) -> list[str]:
     uid = str(vevent.get("UID", ""))
     rid = vevent.get("RECURRENCE-ID")
     occurrence = None
     if rid is not None:
         value = rid.dt
         occurrence = as_utc(value if isinstance(value, datetime) else datetime(value.year, value.month, value.day))
-    results = []
+    results: list[str] = []
     for attendee in _as_list(vevent.get("ATTENDEE")):
         address = _address(attendee)
         params = getattr(attendee, "params", {})
@@ -319,8 +324,10 @@ def _reply(vevent, sender: str | None) -> list[str]:
     return results
 
 
-def _occurrence_participants(series_participants, occurrence: datetime) -> list[EventParticipant]:
-    found = []
+def _occurrence_participants(
+    series_participants: QuerySet[EventParticipant], occurrence: datetime
+) -> list[EventParticipant]:
+    found: list[EventParticipant] = []
     for participant in series_participants:
         series = participant.event
         if not is_series(series) or not is_occurrence(series, occurrence):
@@ -330,10 +337,10 @@ def _occurrence_participants(series_participants, occurrence: datetime) -> list[
     return found
 
 
-def _refresh(vevent, sender: str | None) -> list[str]:
+def _refresh(vevent: icalendar.Component, sender: str | None) -> list[str]:
     """A participant asks for the event again."""
     uid = str(vevent.get("UID", ""))
-    results = []
+    results: list[str] = []
     for attendee in _as_list(vevent.get("ATTENDEE")):
         address = _address(attendee)
         if sender is not None and sender != address:
@@ -353,16 +360,17 @@ def process_itip(data: bytes | str, sender: str | None = None) -> list[str]:
     except Exception as exc:
         return [f"unreadable iCalendar: {exc}"]
     method = str(cal.get("METHOD", "")).upper()
-    handler = {"REPLY": _reply, "REFRESH": _refresh}.get(method)
+    handlers: dict[str, Callable[[icalendar.Component, str | None], list[str]]] = {"REPLY": _reply, "REFRESH": _refresh}
+    handler = handlers.get(method)
     if handler is None:
         return [f"method {method or 'none'} ignored"]
-    results = []
+    results: list[str] = []
     for vevent in cal.walk("VEVENT"):
         results += handler(vevent, sender)
     return results
 
 
-def sender_verified(message, sender: str) -> bool:
+def sender_verified(message: Message, sender: str) -> bool:
     """Whether the receiving mail server (IMIP_TRUSTED_AUTHSERV_ID) verified the sender's domain:
     DMARC passed for it, or a DKIM signature of it did. Its Authentication-Results header is the one
     it added; others with another server's name may come from anyone."""
@@ -392,7 +400,8 @@ def process_email(raw: bytes, trust_sender: bool = False) -> list[str]:
     sender = None if trust_sender else (senders[0][1].lower() if senders and senders[0][1] else "")
     if sender and settings.IMIP_TRUSTED_AUTHSERV_ID and not sender_verified(message, sender):
         return [f"ignored: the sender {sender} wasn't verified by {settings.IMIP_TRUSTED_AUTHSERV_ID}"]
-    seen, results = set(), []
+    seen: set[bytes] = set()
+    results: list[str] = []
     for part in message.walk():
         filename = (part.get_filename() or "").lower()
         if part.get_content_type() not in ("text/calendar", "application/ics") and not filename.endswith(".ics"):
@@ -414,7 +423,7 @@ def fetch_mailbox() -> list[str]:
     if not settings.IMIP_IMAP_HOST:
         raise RuntimeError("IMIP_IMAP_HOST is not set")
     connect = imaplib.IMAP4_SSL if settings.IMIP_IMAP_SSL else imaplib.IMAP4
-    results = []
+    results: list[str] = []
     # With a timeout: a server that stops answering would hold up the worker, and every job with it.
     with connect(settings.IMIP_IMAP_HOST, settings.IMIP_IMAP_PORT, timeout=IMAP_TIMEOUT) as imap:
         imap.login(settings.IMIP_IMAP_USER, settings.IMIP_IMAP_PASSWORD)

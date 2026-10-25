@@ -7,12 +7,16 @@ come from changes, and their role is what that gives (see get_membership). A dir
 group, a group over a public calendar.
 """
 
+from collections.abc import Iterable
+from uuid import UUID
+
 from django.db.models import Max
 
 from core.models import Calendar, CalendarGroup, CalendarMember, Folder, MembershipSource, User
+from core.models.base import AnyId
 
 
-def next_sidebar_position(user_id) -> int:
+def next_sidebar_position(user_id: AnyId) -> int:
     """After everything at the top level of the user's sidebar."""
     positions = [
         CalendarMember.objects.filter(user_id=user_id, folder=None).aggregate(top=Max("position"))["top"],
@@ -21,7 +25,7 @@ def next_sidebar_position(user_id) -> int:
     return max((p for p in positions if p is not None), default=-1) + 1
 
 
-def sync_membership(user_id, calendar: Calendar, *, release_direct: bool = False) -> None:
+def sync_membership(user_id: AnyId, calendar: Calendar, *, release_direct: bool = False) -> None:
     """
     Gives the user a membership of the calendar from a group or (one they added) from its being public, or
     takes it away, as their groups and the calendar call for. A direct membership is left as it is, unless
@@ -51,7 +55,7 @@ def sync_membership(user_id, calendar: Calendar, *, release_direct: bool = False
         membership.save(update_fields=["source", "role"])
 
 
-def sync_group_link(calendar_id) -> None:
+def sync_group_link(calendar_id: AnyId) -> None:
     """After a group was given access to a calendar or the access was taken away."""
     calendar = Calendar.objects.filter(id=calendar_id).first()
     if calendar is None:
@@ -66,7 +70,7 @@ def sync_group_link(calendar_id) -> None:
         sync_membership(user_id, calendar)
 
 
-def sync_user_groups(user_id, group_ids=None) -> None:
+def sync_user_groups(user_id: AnyId, group_ids: Iterable[UUID] | None = None) -> None:
     """After the user joined or left groups (`group_ids`; all of their calendars of groups when None)."""
     calendar_ids = set(
         CalendarMember.objects.filter(user_id=user_id, source=MembershipSource.GROUP).values_list(

@@ -2,7 +2,11 @@
 Notification creation helper, and the emails that go out along with notifications.
 """
 
+from collections.abc import Iterable
 from datetime import datetime
+from typing import Any
+
+from django.core.mail import EmailMultiAlternatives
 
 from core.models import Calendar, Event, User
 from core.models.events import Notification
@@ -46,13 +50,13 @@ def wants_email(user: User, kind: str) -> bool:
 
 
 def notify(
-    recipient_ids,
+    recipient_ids: Iterable[str | None],
     type: str,
     actor_id: str | None,
     title: str,
     calendar_id: str | None = None,
     event_id: str | None = None,
-    data: dict | None = None,
+    data: dict[str, Any] | None = None,
 ) -> None:
     seen = [r for r in dict.fromkeys(recipient_ids) if r is not None and r != actor_id]
     Notification.objects.bulk_create(
@@ -84,7 +88,16 @@ def notify(
     mail.send(_notification_email(user, type, actor, title, calendar, event, data or {}, app) for user in recipients)
 
 
-def _notification_email(user, type, actor, title, calendar, event, data, app: str):
+def _notification_email(
+    user: User,
+    type: str,
+    actor: User | None,
+    title: str,
+    calendar: Calendar | None,
+    event: Event | None,
+    data: dict[str, Any],
+    app: str,
+) -> EmailMultiAlternatives:
     language = mail.language_of(user)
     reader = mail.Reader.of(user, language, event.timezone if event else "UTC")
     if actor is not None:

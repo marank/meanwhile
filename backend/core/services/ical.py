@@ -2,7 +2,7 @@
 iCalendar serialization.
 """
 
-from collections.abc import Set
+from collections.abc import Iterable, Set
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -13,6 +13,7 @@ from icalendar import Calendar as ICalCalendar
 from icalendar import Event as ICalEvent
 
 from core.models.base import EventStatus
+from core.models.calendars import Calendar
 from core.models.events import Event, EventParticipant
 from core.models.users import User
 from core.services.recurrence import as_utc, is_series, normalized_rrule, parse_exdates, zone
@@ -87,9 +88,9 @@ def _map_status(status: str) -> str:
     return "CONFIRMED"
 
 
-def _raw_components(event: Event) -> dict:
+def _raw_components(event: Event) -> dict[datetime | None, ICalEvent]:
     """The VEVENTs a client stored with the series, by recurrence id (None for the series itself)."""
-    components: dict[datetime | None, icalendar.Component] = {}
+    components: dict[datetime | None, ICalEvent] = {}
     if not event.raw_ical:
         return components
     try:
@@ -97,6 +98,8 @@ def _raw_components(event: Event) -> dict:
     except Exception:
         return components
     for component in parsed.walk("VEVENT"):
+        if not isinstance(component, ICalEvent):
+            continue  # never: icalendar parses each VEVENT into an Event
         rid = component.get("RECURRENCE-ID")
         key = None
         if rid is not None:
@@ -106,7 +109,7 @@ def _raw_components(event: Event) -> dict:
     return components
 
 
-def _ical_time(event: Event, value: datetime):
+def _ical_time(event: Event, value: datetime) -> date | datetime:
     """A start as written in iCalendar: a date for all-day events, local time with TZID otherwise."""
     if event.all_day:
         return as_utc(value).date()
@@ -187,7 +190,7 @@ def _raw_sequence(raw: ICalEvent | None) -> int:
 def build_event_ical(
     event: Event,
     raw: ICalEvent | None = None,
-    exdates=(),
+    exdates: Iterable[datetime] = (),
     uid: str | None = None,
     audience: Audience = FEED,
     category_names: Set[str] = frozenset(),
@@ -262,7 +265,7 @@ def build_event_ical(
     return vevent
 
 
-def _category_names(calendar) -> set[str]:
+def _category_names(calendar: Calendar) -> set[str]:
     cached = getattr(calendar, "_ical_category_names", None)
     if cached is None:
         cached = {name.lower() for name in calendar.categories.values_list("name", flat=True)}
@@ -326,7 +329,8 @@ def to_ical(cal: ICalCalendar) -> str:
     # Adds the VTIMEZONE definitions for every TZID used, as RFC 5545 requires; up to well beyond
     # 2038 (icalendar's default end), as series may run that long and clients go by these rules.
     cal.add_missing_timezones(last_date=VTIMEZONE_UNTIL)
-    return cal.to_ical().decode("utf-8")
+    data: bytes = cal.to_ical()
+    return data.decode("utf-8")
 
 
 def serialize_event_ical(event: Event, audience: Audience = CALDAV) -> str:
@@ -346,7 +350,7 @@ def event_ical_text(event: Event, viewer: User | None = None) -> str:
 FEED_REFRESH_INTERVAL = timedelta(hours=1)
 
 
-def build_calendar_feed(calendar, events) -> str:
+def build_calendar_feed(calendar: Calendar, events: Iterable[Event]) -> str:
     """`events`: the series and single events of `calendar` that others may see."""
     cal = new_calendar()
     cal.add("calscale", "GREGORIAN")

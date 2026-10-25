@@ -12,7 +12,11 @@ def new_uuid7() -> uuid.UUID:
     return uuid.uuid7()
 
 
-def as_uuid(value) -> uuid.UUID | None:
+# An id as models hold it (a UUID) or as the API and URLs spell it.
+type AnyId = uuid.UUID | str
+
+
+def as_uuid(value: object) -> uuid.UUID | None:
     """The UUID a string spells, or None: for values that may be an id or a name (a calendar's URL
     path, a CalDAV path segment), as looking up a UUID field with anything else fails."""
     if isinstance(value, uuid.UUID):

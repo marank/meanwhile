@@ -2,9 +2,11 @@
 Availability: when people and resources are taken, without saying by what.
 """
 
+from collections.abc import Callable, Iterable
 from datetime import datetime
+from typing import Any
 
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 
 from core.models import Event, EventParticipant, Resource, User
 from core.models.base import EventStatus, ParticipantStatus
@@ -13,7 +15,7 @@ from core.services.recurrence import expand_events
 _TAKEN = {EventStatus.CONFIRMED, EventStatus.APPROVED}
 
 
-def _overlapping(events, start: datetime, end: datetime):
+def _overlapping(events: QuerySet[Event], start: datetime, end: datetime) -> QuerySet[Event]:
     return events.filter(
         Q(start__lt=end),
         Q(rrule__isnull=False) | ~Q(rdates=[]) | Q(all_day=True) | Q(end__gt=start),
@@ -30,7 +32,12 @@ def _merge(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, d
     return merged
 
 
-def _periods(occurrences, start: datetime, end: datetime, tentative) -> list[dict]:
+def _periods(
+    occurrences: Iterable[tuple[Event, datetime, datetime]],
+    start: datetime,
+    end: datetime,
+    tentative: Callable[[Event], bool],
+) -> list[dict[str, Any]]:
     """Busy and tentative periods, each merged; a busy time hides a tentative one at the same time."""
     busy: list[tuple[datetime, datetime]] = []
     maybe: list[tuple[datetime, datetime]] = []
@@ -45,14 +52,16 @@ def _periods(occurrences, start: datetime, end: datetime, tentative) -> list[dic
     return sorted(result, key=lambda p: p["start"])
 
 
-def _without(events, exclude_event_id: str | None):
+def _without(events: QuerySet[Event], exclude_event_id: str | None) -> QuerySet[Event]:
     # The event being planned doesn't block itself, nor do its changed occurrences.
     if exclude_event_id:
         events = events.exclude(Q(pk=exclude_event_id) | Q(parent_id=exclude_event_id))
     return events
 
 
-def user_periods(user: User, start: datetime, end: datetime, exclude_event_id: str | None = None) -> list[dict]:
+def user_periods(
+    user: User, start: datetime, end: datetime, exclude_event_id: str | None = None
+) -> list[dict[str, Any]]:
     """When the user is taken: by events they created or take part in (declined ones aside).
 
     Pending bookings and invitations not yet accepted count as tentative.
@@ -85,7 +94,7 @@ def user_periods(user: User, start: datetime, end: datetime, exclude_event_id: s
 
 def resource_periods(
     resource: Resource, start: datetime, end: datetime, exclude_event_id: str | None = None
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """When the resource is booked; bookings awaiting approval count as tentative."""
     events = _overlapping(
         Event.objects.filter(

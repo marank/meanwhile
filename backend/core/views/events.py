@@ -136,7 +136,7 @@ def _occurrences(
                 recurrence_count=(
                     recurrence_count(event, occ_start) if event.show_recurrence_count and is_series(event) else None
                 ),
-                status=event.status,
+                status=EventStatus(event.status),
                 category_id=str(event.category_id) if event.category_id else None,
                 category_name=event.category.name if event.category else None,
                 category_color=event.category.color if event.category else None,
@@ -151,7 +151,11 @@ def _occurrences(
                 is_recurring=is_series(event) or bool(event.parent_id),
                 series_id=str(event.parent_id or event.id) if is_series(event) or event.parent_id else None,
                 recurrence_id=(
-                    as_utc(event.recurrence_id) if event.parent_id else occ_start if is_series(event) else None
+                    as_utc(event.recurrence_id)
+                    if event.parent_id and event.recurrence_id
+                    else occ_start
+                    if is_series(event)
+                    else None
                 ),
             )
         )

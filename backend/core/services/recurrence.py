@@ -2,9 +2,10 @@
 Recurrence expansion and conflict detection.
 """
 
-from datetime import UTC, date, datetime, time, timedelta
+from collections.abc import Iterable, Iterator
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import islice, takewhile
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -14,6 +15,9 @@ from icalendar.timezone.windows_to_olson import WINDOWS_TO_OLSON
 
 from core.models.events import Event
 
+# An occurrence's start and end.
+type Span = tuple[datetime, datetime]
+
 
 def as_utc(dt: datetime) -> datetime:
     """The date-time in UTC; one without a zone is taken to be in UTC already."""
@@ -22,7 +26,7 @@ def as_utc(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
 
 
-def zone(name: str | None):
+def zone(name: str | None) -> tzinfo:
     """The zone for an IANA name; unknown names fall back to UTC."""
     try:
         return ZoneInfo(name or "UTC")
@@ -53,7 +57,7 @@ def is_series(event: Event) -> bool:
 
 def rrule_parts(rule: str) -> dict[str, str]:
     """The parts of an RRULE value ("FREQ=WEEKLY;COUNT=3") by name, in their order."""
-    parts = {}
+    parts: dict[str, str] = {}
     for part in rule.strip().removeprefix("RRULE:").split(";"):
         name, _, value = part.partition("=")
         if name:
@@ -121,10 +125,10 @@ def normalized_rrule(event: Event) -> str | None:
 class _UtcRule:
     """All-day series repeat on floating dates; their occurrences are reported as UTC midnights."""
 
-    def __init__(self, rule):
+    def __init__(self, rule: rruleset) -> None:
         self._rule = rule
 
-    def between(self, after: datetime, before: datetime, inc: bool = False):
+    def between(self, after: datetime, before: datetime, inc: bool = False) -> list[datetime]:
         naive = self._rule.between(
             after.astimezone(UTC).replace(tzinfo=None),
             before.astimezone(UTC).replace(tzinfo=None),
@@ -132,15 +136,15 @@ class _UtcRule:
         )
         return [dt.replace(tzinfo=UTC) for dt in naive]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[datetime]:
         return (dt.replace(tzinfo=UTC) for dt in self._rule)
 
-    def xafter(self, after: datetime, inc: bool = False):
+    def xafter(self, after: datetime, inc: bool = False) -> Iterator[datetime]:
         naive = self._rule.xafter(after.astimezone(UTC).replace(tzinfo=None), inc=inc)
         return (dt.replace(tzinfo=UTC) for dt in naive)
 
 
-def _rule(event: Event, event_start: datetime):
+def _rule(event: Event, event_start: datetime) -> rruleset | _UtcRule:
     # Timed events repeat in their own zone, so weekdays and wall-clock times stay put across
     # midnight in UTC and daylight saving changes. All-day events are dates and repeat in UTC.
     if event.all_day:
@@ -170,8 +174,8 @@ def _rule(event: Event, event_start: datetime):
     return _UtcRule(rule) if event.all_day else rule
 
 
-def parse_exdates(values) -> set[datetime]:
-    result = set()
+def parse_exdates(values: Iterable[Any] | None) -> set[datetime]:
+    result: set[datetime] = set()
     for value in values or []:
         try:
             result.add(as_utc(datetime.fromisoformat(value)))
@@ -202,7 +206,7 @@ def expand_event(
     range_end: datetime,
     max_occurrences: int = 1000,
     exclude: set[datetime] | None = None,
-):
+) -> list[Span]:
     """Return (start, end) tuples for occurrences overlapping [range_start, range_end).
 
     Occurrences that were removed or replaced by an override are left out; `exclude` passes
@@ -221,7 +225,7 @@ def expand_event(
     rule = _rule(event, event_start)
     # Lazily, so that only up to max_occurrences of a dense series are worked out.
     starts = takewhile(lambda start: start <= range_end, rule.xafter(range_start - duration, inc=True))
-    occurrences = []
+    occurrences: list[Span] = []
     for start in islice(starts, max_occurrences):
         occ_start = as_utc(start)
         occ_end = occ_start + duration
@@ -241,7 +245,7 @@ def occurrence_index(event: Event, start: datetime) -> int | None:
     return len(starts) - 1
 
 
-def occurrence_starts(event: Event, after: datetime, exclude: set[datetime] | None = None):
+def occurrence_starts(event: Event, after: datetime, exclude: set[datetime] | None = None) -> Iterator[datetime]:
     """The starts of the event's occurrences after `after`, in order (endless for an endless series).
 
     Like expand_event, without the removed and replaced ones; `exclude` passes their starts in.
@@ -272,7 +276,9 @@ def recurrence_count(event: Event, occurrence_start: datetime) -> int:
     return max(0, len(rule.between(event.start, occurrence_start, inc=True)) - 1)
 
 
-def expand_events(events, range_start: datetime, range_end: datetime):
+def expand_events(
+    events: Iterable[Event], range_start: datetime, range_end: datetime
+) -> list[tuple[Event, datetime, datetime]]:
     events = list(events)
     # One query for the overridden occurrences of every series instead of one per series.
     series_ids = [e.pk for e in events if is_series(e)]
@@ -280,7 +286,7 @@ def expand_events(events, range_start: datetime, range_end: datetime):
     for parent_id, rid in Event.objects.filter(parent_id__in=series_ids).values_list("parent_id", "recurrence_id"):
         if rid is not None:
             overridden.setdefault(parent_id, set()).add(rid)
-    result = []
+    result: list[tuple[Event, datetime, datetime]] = []
     for event in events:
         exclude = parse_exdates(event.exdates) | overridden.get(event.pk, set()) if is_series(event) else set()
         for start, end in expand_event(event, range_start, range_end, exclude=exclude):
@@ -288,13 +294,13 @@ def expand_events(events, range_start: datetime, range_end: datetime):
     return result
 
 
-def find_conflicts(candidate: Event, existing_events, horizon_end: datetime):
+def find_conflicts(candidate: Event, existing_events: Iterable[Event], horizon_end: datetime) -> list[Event]:
     range_start, range_end = candidate.start, horizon_end
     candidate_starts = expand_event(candidate, range_start, range_end)
     if not candidate_starts:
         return []
 
-    conflicting = []
+    conflicting: list[Event] = []
     for existing in existing_events:
         if existing.id == candidate.id:
             continue
@@ -304,7 +310,7 @@ def find_conflicts(candidate: Event, existing_events, horizon_end: datetime):
     return conflicting
 
 
-def _series_overlap(a, b) -> bool:
+def _series_overlap(a: list[Span], b: list[Span]) -> bool:
     for a_start, a_end in a:
         for b_start, b_end in b:
             if a_start < b_end and b_start < a_end:
