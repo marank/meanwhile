@@ -29,6 +29,7 @@ calendar/
   frontend/           Vue SPA
   branding/           Logo (logo.svg; logo-alt.svg is the spare design) and build.sh, which renders
                       favicon, email and home screen icons into frontend/public/
+  scripts/            sync_env.py: brings a .env up to date with .env.example
   docker/             nginx, supervisord, entrypoint, healthcheck and backup script of the production image
   Dockerfile          Production image (frontend + backend in one container)
   compose.yml         Production: PostgreSQL, Redis, app, nightly backups
@@ -337,6 +338,11 @@ docker compose exec -T backup sh -c 'pg_restore --clean --if-exists -d "$PGDATAB
 ```
 
 ### Upgrading an existing installation
+
+New versions may bring new settings. `python3 scripts/sync_env.py` brings `.env` up to date with
+`.env.example`: same order and explanations, your values unchanged, new settings added commented
+out (their defaults apply until you set them), and settings that are gone listed at the end. The
+old file stays as `.env.bak`; `--dry-run` only shows the changes.
 
 The configuration changed: in `.env`, rename `POSTGRES_PASSWORD` to `DB_PASSWORD` and replace
 `DOMAIN=meanwhile.example.com` with `APP_URLS=https://meanwhile.example.com`. `ENVIRONMENT`,

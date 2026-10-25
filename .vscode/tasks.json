@@ -112,6 +112,14 @@
       "problemMatcher": []
     },
     {
+      "label": "env: sync",
+      "detail": "Bring .env up to date with .env.example, keeping its values (old one as .env.bak)",
+      "type": "shell",
+      "command": "uv run python ../scripts/sync_env.py",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
       "label": "docker: up",
       "detail": "Build and start the production stack (compose.yml, http://localhost:6326)",
       "type": "shell",
