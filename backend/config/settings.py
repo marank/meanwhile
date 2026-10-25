@@ -59,14 +59,19 @@ CSRF_COOKIE_HTTPONLY = False  # the SPA reads csrftoken to send X-CSRFToken
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
 
-# Content Security Policy for Django's own responses (admin, API); nginx sets the frontend's
-# (docker/security_headers.conf). In DEBUG violations are only reported (browser console), as the
-# API docs (/api/docs) load their scripts from a CDN.
+# Content Security Policy for Django's own responses (admin, API); the same policy nginx sets for
+# the frontend (docker/security_headers.conf) — keep the two in step. In DEBUG violations are only
+# reported (browser console), as the API docs (/api/docs) load their scripts from a CDN.
 _CSP = {
     "default-src": [CSP.SELF],
-    "img-src": [CSP.SELF, "data:"],
+    "script-src": [CSP.SELF],
+    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
+    "img-src": [CSP.SELF, "data:", "blob:"],
+    "font-src": [CSP.SELF, "data:"],
+    "connect-src": [CSP.SELF],
     "object-src": [CSP.NONE],
     "base-uri": [CSP.SELF],
+    "form-action": [CSP.SELF],
     "frame-ancestors": [CSP.NONE],
 }
 if DEBUG:
@@ -116,6 +121,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.permissions_policy",
 ]
 
 ROOT_URLCONF = "config.urls"
