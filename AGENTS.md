@@ -35,8 +35,8 @@ VS Code tasks (`.vscode/tasks.json`) hold the everyday commands; the README list
 - User-facing texts in emails come in English and German (`core/services/mail_texts.py`).
 - Configuration only via environment variables read through `config/env.py`; every new variable
   gets a commented entry in `.env.example`. No secrets with placeholder values in production.
-- mypy must pass (django-stubs); type new code. Coverage stays ≥ 90 %. Tests run against
-  PostgreSQL, in parallel (`-n auto`).
+- mypy runs in strict mode (django-stubs), tests included; `# type: ignore[code]` only with the
+  reason next to it. Coverage stays ≥ 90 %. Tests run against PostgreSQL, in parallel (`-n auto`).
 - No GPL/AGPL/SSPL dependencies (CI license check). Radicale (GPL-3.0) is the one deliberate
   exception: fine while the app is only run, not handed to others.
 
