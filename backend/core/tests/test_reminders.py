@@ -3,6 +3,7 @@ Each user's reminders before events, delivered as notifications.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from django.db import connection
@@ -10,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 
 from core.models import Event, EventReminder, Notification, User
 from core.services.reminders import deliver_due_reminders
-from core.tests.helpers import iso
+from core.tests.helpers import Response, World, iso
 
 pytestmark = pytest.mark.django_db
 
@@ -18,20 +19,21 @@ NOW = datetime(2030, 1, 7, 8, 50, tzinfo=UTC)
 NINE = datetime(2030, 1, 7, 9, 0, tzinfo=UTC)
 
 
-def create(world, **fields):
+def create(world: World, **fields: Any) -> dict[str, Any]:
     data = {"title": "Meeting", "start": iso(NINE), "end": iso(NINE + timedelta(hours=1)), "timezone": "UTC", **fields}
     res = world["api"]["owner"].post(f"/calendars/{world['cal']['id']}/events", data)
     assert res.status_code == 200, res.content
-    return res.json()
+    event: dict[str, Any] = res.json()
+    return event
 
 
-def remind(world, event, minutes, user="owner"):
+def remind(world: World, event: dict[str, Any], minutes: list[int], user: str = "owner") -> Response:
     return world["api"][user].client.put(
         f"/api/events/{event['id']}/reminders", {"minutes": minutes}, content_type="application/json"
     )
 
 
-def reminders_of(world, user="owner"):
+def reminders_of(world: World, user: str = "owner") -> list[str]:
     return list(
         Notification.objects.filter(user=world["users"][user], type="event_reminder").values_list(
             "data__start", flat=True
@@ -39,7 +41,7 @@ def reminders_of(world, user="owner"):
     )
 
 
-def test_reminders_are_set_per_user(world):
+def test_reminders_are_set_per_user(world: World) -> None:
     event = create(world)
     assert remind(world, event, [30, 15, 15, -5]).json() == {"minutes": [15, 30]}
     # Viewers may be reminded too; it concerns only them.
@@ -52,7 +54,7 @@ def test_reminders_are_set_per_user(world):
     assert remind(world, event, [5], "other").status_code == 200  # contributor, sees the event
 
 
-def test_due_reminders_are_delivered_once(world):
+def test_due_reminders_are_delivered_once(world: World) -> None:
     event = create(world)
     remind(world, event, [15, 5])
     delivered = deliver_due_reminders(now=NOW)
@@ -64,13 +66,15 @@ def test_due_reminders_are_delivered_once(world):
 
 
 @pytest.mark.parametrize("found_after_the_start, delivered", [(timedelta(minutes=10), 1), (timedelta(hours=1), 0)])
-def test_missed_reminders_go_out_shortly_after_the_start_only(world, found_after_the_start, delivered):
+def test_missed_reminders_go_out_shortly_after_the_start_only(
+    world: World, found_after_the_start: timedelta, delivered: int
+) -> None:
     event = create(world)
     remind(world, event, [15])
     assert len(deliver_due_reminders(now=NINE + found_after_the_start)) == delivered
 
 
-def test_every_occurrence_of_a_series_is_reminded_of(world):
+def test_every_occurrence_of_a_series_is_reminded_of(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     remind(world, event, [15])
     for day in range(3):
@@ -78,7 +82,7 @@ def test_every_occurrence_of_a_series_is_reminded_of(world):
     assert deliver_due_reminders(now=NOW + timedelta(days=3)) == []
 
 
-def test_changed_occurrences_are_reminded_of_at_their_new_time(world):
+def test_changed_occurrences_are_reminded_of_at_their_new_time(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     remind(world, event, [15])
     second = NINE + timedelta(days=1)
@@ -93,13 +97,13 @@ def test_changed_occurrences_are_reminded_of_at_their_new_time(world):
     assert [d["event_id"] for d in delivered] == [override["id"]]
 
 
-def set_status(event: dict, status: str) -> None:
+def set_status(event: dict[str, Any], status: str) -> None:
     row = Event.objects.get(id=event["id"])
     row.status = status
     row.save()
 
 
-def test_cancelled_and_unreachable_events_are_not_reminded_of(world):
+def test_cancelled_and_unreachable_events_are_not_reminded_of(world: World) -> None:
     event = create(world)
     remind(world, event, [15])
     set_status(event, "cancelled")
@@ -113,7 +117,7 @@ def test_cancelled_and_unreachable_events_are_not_reminded_of(world):
     assert len(reminders_of(world)) == 1 and reminders_of(world, "other") == []
 
 
-def test_all_day_events_are_reminded_of_in_the_users_zone(world):
+def test_all_day_events_are_reminded_of_in_the_users_zone(world: World) -> None:
     User.objects.filter(id=world["users"]["owner"].id).update(timezone="Europe/Berlin")
     day = datetime(2030, 1, 8, tzinfo=UTC)
     event = create(world, start=iso(day), end=iso(day), all_day=True)
@@ -123,14 +127,14 @@ def test_all_day_events_are_reminded_of_in_the_users_zone(world):
     assert len(deliver_due_reminders(now=datetime(2030, 1, 7, 8, 0, tzinfo=UTC))) == 1
 
 
-def test_setting_a_reminder_does_not_notify(world):
+def test_setting_a_reminder_does_not_notify(world: World) -> None:
     event = create(world)
     remind(world, event, [15])
     body = world["api"]["owner"].get("/notifications/counts").json()
     assert body["unread"] == 0
 
 
-def test_a_delivery_works_out_when_the_reminder_is_next_due(world):
+def test_a_delivery_works_out_when_the_reminder_is_next_due(world: World) -> None:
     event = create(world, rrule="FREQ=YEARLY;INTERVAL=2")
     remind(world, event, [15])
     reminder = EventReminder.objects.get(event_id=event["id"])
@@ -149,7 +153,7 @@ def test_a_delivery_works_out_when_the_reminder_is_next_due(world):
     assert reminder.next_due_at == NINE.replace(hour=10) - timedelta(minutes=15)
 
 
-def test_reminders_not_due_cost_nothing(world):
+def test_reminders_not_due_cost_nothing(world: World) -> None:
     def run_queries() -> int:
         with CaptureQueriesContext(connection) as captured:
             deliver_due_reminders(now=NOW)
@@ -173,7 +177,7 @@ def test_reminders_not_due_cost_nothing(world):
     assert run_queries() == few
 
 
-def test_reminders_stay_within_bounds(world):
+def test_reminders_stay_within_bounds(world: World) -> None:
     from core.services.reminders import MAX_MINUTES_BEFORE, MAX_REMINDERS
 
     event = create(world)
@@ -184,7 +188,7 @@ def test_reminders_stay_within_bounds(world):
     assert res.json()["minutes"] == list(range(0, MAX_REMINDERS * 5, 5))
 
 
-def test_caldav_alarms_stay_within_the_same_bounds():
+def test_caldav_alarms_stay_within_the_same_bounds() -> None:
     from core.caldav.parsing import parse_series
     from core.services.reminders import MAX_REMINDERS
 

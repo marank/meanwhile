@@ -3,6 +3,9 @@ Unknown ids are answered with 404, missing access with 403, never with a server 
 """
 
 import pytest
+from django.test import Client
+
+from core.tests.helpers import World
 
 pytestmark = pytest.mark.django_db
 
@@ -18,19 +21,19 @@ pytestmark = pytest.mark.django_db
         ("delete", "/notifications/unknown"),
     ],
 )
-def test_unknown_ids_are_not_found(world, method, path):
+def test_unknown_ids_are_not_found(world: World, method: str, path: str) -> None:
     api = world["api"]["owner"]
     res = api.patch(path, {"name": "x"}) if method == "patch" else getattr(api, method)(path)
     assert res.status_code == 404
     assert res.json()["detail"].endswith("not found")
 
 
-def test_not_found_names_what_is_missing(world):
+def test_not_found_names_what_is_missing(world: World) -> None:
     res = world["api"]["owner"].get("/calendars/01a16fd9-0000-7000-8000-000000000000")
     assert res.json() == {"detail": "Calendar not found"}
 
 
-def test_calendar_endpoints_tell_outsiders_and_lesser_roles_apart(world):
+def test_calendar_endpoints_tell_outsiders_and_lesser_roles_apart(world: World) -> None:
     cal_id = world["cal"]["id"]
     outsider, booker = world["api"]["outsider"], world["api"]["booker"]
     res = outsider.get(f"/calendars/{cal_id}/members")
@@ -41,7 +44,7 @@ def test_calendar_endpoints_tell_outsiders_and_lesser_roles_apart(world):
     assert (res.status_code, res.json()["detail"]) == (403, "Full access required")
 
 
-def test_someone_without_access_cannot_delete_a_comment(world):
+def test_someone_without_access_cannot_delete_a_comment(world: World) -> None:
     owner = world["api"]["owner"]
     event = world["book"](owner, None).json()
     comment = owner.post(f"/events/{event['id']}/comments", {"body": "Hi"}).json()
@@ -49,7 +52,7 @@ def test_someone_without_access_cannot_delete_a_comment(world):
     assert res.status_code == 403
 
 
-def test_only_public_endpoints_answer_without_a_session(client):
+def test_only_public_endpoints_answer_without_a_session(client: Client) -> None:
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/settings").status_code == 200
     assert client.get("/api/rsvp/unknown-token").status_code == 404
@@ -57,7 +60,7 @@ def test_only_public_endpoints_answer_without_a_session(client):
     assert client.get("/api/admin/users").status_code == 401
 
 
-def test_roles_and_statuses_are_checked_by_the_schema(world):
+def test_roles_and_statuses_are_checked_by_the_schema(world: World) -> None:
     owner, cal = world["api"]["owner"], world["cal"]["id"]
     user_id = str(world["users"]["outsider"].id)
     assert owner.post(f"/calendars/{cal}/members", {"user_id": user_id, "role": "boss"}).status_code == 422
@@ -66,7 +69,7 @@ def test_roles_and_statuses_are_checked_by_the_schema(world):
     assert res.status_code == 422
 
 
-def test_searches_list_no_more_than_a_dropdown_shows(world):
+def test_searches_list_no_more_than_a_dropdown_shows(world: World) -> None:
     from core.services.search import MAX_LIMIT
     from core.tests.helpers import make_user
 
@@ -78,7 +81,7 @@ def test_searches_list_no_more_than_a_dropdown_shows(world):
     assert world["api"]["owner"].get("/search?entity=nope&q=person").status_code == 422
 
 
-def test_participants_of_hidden_bookings_stay_hidden(world):
+def test_participants_of_hidden_bookings_stay_hidden(world: World) -> None:
     room = world["resource"]("Room", approver_ids=[str(world["users"]["resapprover"].id)])
     res = world["book"](world["api"]["booker"], room["id"])
     assert res.json()["status"] == "pending"
@@ -86,10 +89,11 @@ def test_participants_of_hidden_bookings_stay_hidden(world):
     assert world["api"]["booker"].get(f"/events/{res.json()['id']}/participants").status_code == 200
 
 
-def test_unique_clashes_answer_conflict_not_server_error(world):
+def test_unique_clashes_answer_conflict_not_server_error(world: World) -> None:
     from django.db import IntegrityError
+    from django.http import HttpRequest
 
     from core.api import conflict
 
-    response = conflict(None, IntegrityError("duplicate key"))
+    response = conflict(HttpRequest(), IntegrityError("duplicate key"))
     assert response.status_code == 409

@@ -5,14 +5,15 @@ CalDAV driven through the mounted Radicale app, the way real clients talk to it.
 import base64
 import io
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import unquote
 from wsgiref.util import setup_testing_defaults
 from zoneinfo import ZoneInfo
 
 import pytest
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
@@ -26,7 +27,9 @@ pytestmark = pytest.mark.django_db(transaction=True)
 PASSWORD = "secret-pw"
 
 
-def dav(method: str, path: str, user: User | str | None = None, body: str = "", password=PASSWORD, **headers):
+def dav(
+    method: str, path: str, user: User | str | None = None, body: str = "", password: str = PASSWORD, **headers: str
+) -> tuple[int, str, dict[str, str]]:
     environ: dict[str, Any] = {}
     setup_testing_defaults(environ)
     data = body.encode()
@@ -42,11 +45,16 @@ def dav(method: str, path: str, user: User | str | None = None, body: str = "", 
         environ["HTTP_AUTHORIZATION"] = "Basic " + base64.b64encode(f"{login}:{password}".encode()).decode()
     for name, value in headers.items():
         environ["HTTP_" + name.upper()] = value
-    response = {}
+    response: dict[str, Any] = {}
 
-    def start_response(status, response_headers, exc_info=None):
+    def start_response(
+        status: str,
+        response_headers: list[tuple[str, str]],
+        exc_info: object = None,
+    ) -> Callable[[bytes], object]:
         response["status"] = int(status.split()[0])
         response["headers"] = dict(response_headers)
+        return lambda data: None  # the write() of old WSGI applications; Radicale doesn't use it
 
     content = b"".join(application(environ, start_response)).decode()
     return response["status"], content, response["headers"]
@@ -93,8 +101,14 @@ def sync_token(xml: str) -> str:
     return match.group(1)
 
 
+class Team(TypedDict):
+    users: dict[str, User]
+    calendar: Calendar
+    path: str
+
+
 @pytest.fixture
-def team():
+def team() -> Team:
     users = {
         name: User.objects.create_user(email=f"{name}@example.test", password=PASSWORD, display_name=name.title())
         for name in ("owner", "own", "read", "outsider")
@@ -107,7 +121,7 @@ def team():
     return {"users": users, "calendar": calendar, "path": path}
 
 
-def put(team, href: str, user_name: str = "owner", text: str | None = None, **headers):
+def put(team: Team, href: str, user_name: str = "owner", text: str | None = None, **headers: str) -> int:
     status, content, _ = dav(
         "PUT",
         team["path"] + href,
@@ -119,7 +133,7 @@ def put(team, href: str, user_name: str = "owner", text: str | None = None, **he
     return status
 
 
-def test_multiget_returns_the_requested_events(team):
+def test_multiget_returns_the_requested_events(team: Team) -> None:
     assert put(team, "one.ics") == 201
     assert put(team, "two.ics") == 201
     path = team["path"]
@@ -129,7 +143,7 @@ def test_multiget_returns_the_requested_events(team):
     assert content.count("404 Not Found") == 1
 
 
-def test_initial_sync_lists_every_event(team):
+def test_initial_sync_lists_every_event(team: Team) -> None:
     put(team, "one.ics")
     put(team, "two.ics")
     status, content = sync_collection(team["path"], team["users"]["owner"])
@@ -138,14 +152,16 @@ def test_initial_sync_lists_every_event(team):
 
 
 def login(email: str, password: str) -> bool:
+    from radicale.auth import AuthContext
     from radicale.config import load
 
     from core.caldav.auth import Auth
 
-    return Auth(load())._login_ext(email, password, None) == email
+    context = AuthContext()  # type: ignore[no-untyped-call]  # radicale leaves AuthContext.__init__ unannotated
+    return Auth(load())._login_ext(email, password, context) == email
 
 
-def test_deactivated_users_cannot_log_in(team):
+def test_deactivated_users_cannot_log_in(team: Team) -> None:
     user = team["users"]["read"]
     assert login(user.email, PASSWORD)
     user.is_active = False
@@ -153,7 +169,7 @@ def test_deactivated_users_cannot_log_in(team):
     assert not login(user.email, PASSWORD)
 
 
-def test_app_passwords_replace_the_account_password(team):
+def test_app_passwords_replace_the_account_password(team: Team) -> None:
     user = team["users"]["read"]
     AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
     assert login(user.email, "app-pw")
@@ -161,13 +177,13 @@ def test_app_passwords_replace_the_account_password(team):
     assert AppPassword.objects.get(user=user).last_used_at is not None
 
 
-def test_requests_are_answered_for_valid_credentials_only(team):
+def test_requests_are_answered_for_valid_credentials_only(team: Team) -> None:
     owner = team["users"]["owner"]
     assert dav("PROPFIND", team["path"], owner, DEPTH="0")[0] == 207
     assert dav("PROPFIND", team["path"], owner, password="wrong", DEPTH="0")[0] == 401
 
 
-def test_contributors_change_only_their_own_events(team):
+def test_contributors_change_only_their_own_events(team: Team) -> None:
     assert put(team, "by-owner.ics") == 201
     assert put(team, "by-owner.ics", "own", ics("by-owner", summary="Hijacked")) == 403
     assert dav("DELETE", team["path"] + "by-owner.ics", team["users"]["own"])[0] == 403
@@ -181,7 +197,7 @@ def test_contributors_change_only_their_own_events(team):
     assert not Event.objects.filter(uid="mine").exists()
 
 
-def test_editors_change_everyones_events(team):
+def test_editors_change_everyones_events(team: Team) -> None:
     put(team, "mine.ics", "own")
     team["calendar"].members.filter(user=team["users"]["own"]).update(role="full")
     put(team, "by-owner.ics")
@@ -189,7 +205,7 @@ def test_editors_change_everyones_events(team):
     assert dav("DELETE", team["path"] + "by-owner.ics", team["users"]["own"])[0] == 200
 
 
-def test_viewers_and_outsiders_cannot_write(team):
+def test_viewers_and_outsiders_cannot_write(team: Team) -> None:
     put(team, "by-owner.ics")
     for name in ("read", "outsider"):
         assert put(team, "new.ics", name) == 403
@@ -198,7 +214,7 @@ def test_viewers_and_outsiders_cannot_write(team):
     assert not Event.objects.filter(uid="new").exists()
 
 
-def test_only_the_owner_renames_the_calendar(team):
+def test_only_the_owner_renames_the_calendar(team: Team) -> None:
     body = (
         '<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:"><d:set><d:prop>'
         "<d:displayname>Renamed</d:displayname></d:prop></d:set></d:propertyupdate>"
@@ -211,13 +227,13 @@ def test_only_the_owner_renames_the_calendar(team):
 
 @pytest.mark.parametrize("method", ["GET", "PROPFIND"])
 @pytest.mark.parametrize("path", ["/.well-known/caldav", "/.well-known/caldav/"])
-def test_well_known_caldav_redirects_to_the_caldav_root(team, method, path):
+def test_well_known_caldav_redirects_to_the_caldav_root(team: Team, method: str, path: str) -> None:
     status, _, headers = dav(method, path, team["users"]["owner"])
     assert status == 301
     assert headers["Location"] == "/caldav/"
 
 
-def test_events_stay_at_the_href_the_client_chose(team):
+def test_events_stay_at_the_href_the_client_chose(team: Team) -> None:
     path = team["path"]
     assert put(team, "client-name.ics", text=ics("another-uid")) == 201
     status, content, _ = dav("GET", path + "client-name.ics", team["users"]["owner"])
@@ -236,7 +252,7 @@ def test_events_stay_at_the_href_the_client_chose(team):
     assert not Event.objects.filter(uid="another-uid").exists()
 
 
-def test_events_from_the_app_are_found_by_uid(team):
+def test_events_from_the_app_are_found_by_uid(team: Team) -> None:
     owner = team["users"]["owner"]
     Event.objects.create(
         calendar=team["calendar"],
@@ -263,7 +279,7 @@ def changes(xml: str) -> dict[str, str]:
     return result
 
 
-def test_sync_reports_changes_and_deletions(team):
+def test_sync_reports_changes_and_deletions(team: Team) -> None:
     owner, path = team["users"]["owner"], team["path"]
     for name in ("keep", "edit", "drop"):
         put(team, f"{name}.ics")
@@ -283,7 +299,7 @@ def test_sync_reports_changes_and_deletions(team):
     assert sync_token(content) != token
 
 
-def test_sync_reports_events_deleted_in_the_app(team):
+def test_sync_reports_events_deleted_in_the_app(team: Team) -> None:
     owner, path = team["users"]["owner"], team["path"]
     put(team, "drop.ics")
     token = sync_token(sync_collection(path, owner)[1])
@@ -291,7 +307,7 @@ def test_sync_reports_events_deleted_in_the_app(team):
     assert changes(sync_collection(path, owner, token)[1]) == {"drop.ics": "deleted"}
 
 
-def test_sync_drops_bookings_that_turn_hidden(team):
+def test_sync_drops_bookings_that_turn_hidden(team: Team) -> None:
     owner, path = team["users"]["owner"], team["path"]
     put(team, "booking.ics")
     token = sync_token(sync_collection(path, owner)[1])
@@ -304,18 +320,20 @@ def test_sync_drops_bookings_that_turn_hidden(team):
 @pytest.mark.parametrize(
     "token", ["garbage", "http://radicale.org/ns/sync/0123abc", "http://radicale.org/ns/sync/1000-x"]
 )
-def test_unknown_or_expired_sync_tokens_ask_for_a_full_sync(team, token):
+def test_unknown_or_expired_sync_tokens_ask_for_a_full_sync(team: Team, token: str) -> None:
     status, content = sync_collection(team["path"], team["users"]["owner"], token)
     assert status == 403 and "valid-sync-token" in content
 
 
-def test_ctag_changes_when_an_event_is_deleted(team):
+def test_ctag_changes_when_an_event_is_deleted(team: Team) -> None:
     body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:prop><cs:getctag/></d:prop></d:propfind>'
 
-    def ctag():
-        return re.search(
+    def ctag() -> str:
+        match = re.search(
             r"getctag>([^<]*)<", dav("PROPFIND", team["path"], team["users"]["owner"], body, DEPTH="0")[1]
-        ).group(1)
+        )
+        assert match is not None
+        return match.group(1)
 
     put(team, "one.ics")
     put(team, "two.ics")
@@ -346,18 +364,20 @@ def series_ics(uid: str, *, master_last: bool = False, with_override: bool = Tru
     return f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n{body}END:VCALENDAR\r\n"
 
 
-def occurrences_in_app(team, start="2030-10-01T00:00:00Z", end="2030-11-01T00:00:00Z"):
+def occurrences_in_app(
+    team: Team, start: str = "2030-10-01T00:00:00Z", end: str = "2030-11-01T00:00:00Z"
+) -> list[tuple[str, str]]:
     from django.test import Client
 
     client = Client()
     client.force_login(team["users"]["owner"])
-    response = client.get("/api/events", {"start": start, "end": end, "calendar_ids": team["calendar"].id})
+    response = client.get("/api/events", {"start": start, "end": end, "calendar_ids": str(team["calendar"].id)})
     assert response.status_code == 200, response.content
     return [(o["start"], o["title"]) for o in response.json()]
 
 
 @pytest.mark.parametrize("master_last", [False, True])
-def test_series_with_exceptions_round_trip(team, master_last):
+def test_series_with_exceptions_round_trip(team: Team, master_last: bool) -> None:
     assert put(team, "daily.ics", text=series_ics("daily", master_last=master_last)) == 201
     series = Event.objects.get(uid="daily", parent__isnull=True)
     assert series.rrule == "FREQ=DAILY;COUNT=5"
@@ -385,7 +405,7 @@ def test_series_with_exceptions_round_trip(team, master_last):
     assert ("2030-10-09T07:00:00Z", "Daily") in occurrences_in_app(team)
 
 
-def test_all_day_events_keep_their_length(team):
+def test_all_day_events_keep_their_length(team: Team) -> None:
     text = (
         ics("allday")
         .replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007")
@@ -398,7 +418,7 @@ def test_all_day_events_keep_their_length(team):
     assert "DTSTART;VALUE=DATE:20301007" in content and "DTEND;VALUE=DATE:20301008" in content
 
 
-def test_duration_sets_the_end(team):
+def test_duration_sets_the_end(team: Team) -> None:
     text = ics("dur").replace("DTEND:20301007T100000Z", "DURATION:PT2H30M")
     assert put(team, "dur.ics", text=text) == 201
     assert Event.objects.get(uid="dur").end == datetime(2030, 10, 7, 11, 30, tzinfo=UTC)
@@ -406,13 +426,13 @@ def test_duration_sets_the_end(team):
     assert "DURATION" not in content and "DTEND:20301007T113000Z" in content
 
 
-def test_tasks_are_refused(team):
+def test_tasks_are_refused(team: Team) -> None:
     todo = ics("task").replace("VEVENT", "VTODO")
     assert put(team, "task.ics", text=todo) in (400, 403, 415)
     assert not Event.objects.filter(uid="task").exists()
 
 
-def test_all_day_series_until_a_date(team):
+def test_all_day_series_until_a_date(team: Team) -> None:
     text = (
         ics("weekly")
         .replace("DTSTART:20301007T090000Z", "DTSTART;VALUE=DATE:20301007")
@@ -428,7 +448,7 @@ def test_all_day_series_until_a_date(team):
     assert "UNTIL=20301021" in content and "UNTIL=20301021T" not in content
 
 
-def test_caldav_shows_the_current_booking_status(team):
+def test_caldav_shows_the_current_booking_status(team: Team) -> None:
     from core.services.ical import serialize_event_ical
 
     owner = team["users"]["owner"]
@@ -449,7 +469,7 @@ def test_caldav_shows_the_current_booking_status(team):
     assert "STATUS:CONFIRMED" in content and "TENTATIVE" not in content
 
 
-def test_shared_calendars_are_listed_in_every_members_home(team):
+def test_shared_calendars_are_listed_in_every_members_home(team: Team) -> None:
     contributor = team["users"]["own"]
     home = f"/caldav/{contributor.email}/"
     body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
@@ -470,7 +490,7 @@ def test_shared_calendars_are_listed_in_every_members_home(team):
     assert dav("GET", own_path + "x.ics", team["users"]["read"])[0] in (403, 404)
 
 
-def test_occurrences_changed_in_the_app_reach_clients(team):
+def test_occurrences_changed_in_the_app_reach_clients(team: Team) -> None:
     from django.test import Client
 
     owner, path = team["users"]["owner"], team["path"]
@@ -496,18 +516,18 @@ def test_occurrences_changed_in_the_app_reach_clients(team):
     assert "EXDATE;TZID=Europe/Berlin:20301008T090000" in content
 
 
-def move(team, from_path: str, to_path: str, user_name: str = "owner", **headers):
+def move(team: Team, from_path: str, to_path: str, user_name: str = "owner", **headers: str) -> int:
     return dav("MOVE", from_path, team["users"][user_name], DESTINATION=to_path, **headers)[0]
 
 
 @pytest.fixture
-def other_calendar(team):
+def other_calendar(team: Team) -> tuple[Calendar, str]:
     calendar = Calendar.objects.create(name="Other", owner=team["users"]["owner"])
     CalendarMember.objects.create(calendar=calendar, user=team["users"]["owner"], role="owner")
     return calendar, f"/caldav/{team['users']['owner'].email}/{calendar.id}/"
 
 
-def test_move_renames_an_event(team):
+def test_move_renames_an_event(team: Team) -> None:
     owner, path = team["users"]["owner"], team["path"]
     put(team, "old.ics")
     Event.objects.update(updated_at=datetime.now(UTC) - timedelta(minutes=5))
@@ -519,7 +539,7 @@ def test_move_renames_an_event(team):
     assert changes(sync_collection(path, owner, token)[1]) == {"old.ics": "deleted", "new.ics": "found"}
 
 
-def test_move_to_another_calendar(team, other_calendar):
+def test_move_to_another_calendar(team: Team, other_calendar: tuple[Calendar, str]) -> None:
     calendar, other_path = other_calendar
     owner, path = team["users"]["owner"], team["path"]
     put(team, "event.ics")
@@ -531,7 +551,7 @@ def test_move_to_another_calendar(team, other_calendar):
     assert changes(sync_collection(path, owner, token)[1]) == {"event.ics": "deleted"}
 
 
-def test_move_needs_write_access_on_both_sides(team, other_calendar):
+def test_move_needs_write_access_on_both_sides(team: Team, other_calendar: tuple[Calendar, str]) -> None:
     calendar, other_path = other_calendar
     CalendarMember.objects.create(calendar=calendar, user=team["users"]["own"], role="read")
     put(team, "mine.ics", "own")
@@ -544,7 +564,7 @@ def test_move_needs_write_access_on_both_sides(team, other_calendar):
     assert move(team, team["path"] + "mine.ics", other_path + "mine.ics", "own") == 201
 
 
-def test_bookings_stay_in_their_calendar(team, other_calendar):
+def test_bookings_stay_in_their_calendar(team: Team, other_calendar: tuple[Calendar, str]) -> None:
     from core.models import Resource
 
     _, other_path = other_calendar
@@ -555,7 +575,7 @@ def test_bookings_stay_in_their_calendar(team, other_calendar):
     assert Event.objects.get(uid="booking").calendar_id == team["calendar"].id
 
 
-def test_move_overwrites_only_when_asked(team):
+def test_move_overwrites_only_when_asked(team: Team) -> None:
     path = team["path"]
     put(team, "a.ics")
     put(team, "b.ics")
@@ -565,7 +585,7 @@ def test_move_overwrites_only_when_asked(team):
     assert Event.objects.filter(uid__in=["a", "b"]).count() == 2
 
 
-def mkcalendar(user: User, path: str, components: str = "VEVENT", name: str = "Phone calendar"):
+def mkcalendar(user: User, path: str, components: str = "VEVENT", name: str = "Phone calendar") -> int:
     body = (
         '<?xml version="1.0"?><c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:set><d:prop>'
         f"<d:displayname>{name}</d:displayname>"
@@ -575,7 +595,7 @@ def mkcalendar(user: User, path: str, components: str = "VEVENT", name: str = "P
     return dav("MKCALENDAR", path, user, body)[0]
 
 
-def test_clients_create_calendars_in_their_home(team):
+def test_clients_create_calendars_in_their_home(team: Team) -> None:
     contributor = team["users"]["own"]
     path = f"/caldav/{contributor.email}/3F2504E0-4F89-11D3-9A0C-0305E82C3301/"
     assert mkcalendar(contributor, path) == 201
@@ -594,7 +614,7 @@ def test_clients_create_calendars_in_their_home(team):
     assert dav("GET", f"/caldav/{contributor.email}/{calendar.id}/e.ics", contributor)[0] == 200
 
 
-def test_calendars_are_not_created_elsewhere_or_for_tasks(team):
+def test_calendars_are_not_created_elsewhere_or_for_tasks(team: Team) -> None:
     contributor, owner = team["users"]["own"], team["users"]["owner"]
     assert mkcalendar(contributor, f"/caldav/{owner.email}/new/") == 403
     assert mkcalendar(contributor, f"/caldav/{contributor.email}/tasks/", components="VTODO") == 403
@@ -606,7 +626,7 @@ def test_calendars_are_not_created_elsewhere_or_for_tasks(team):
     assert Calendar.objects.count() == 1
 
 
-def test_only_the_owner_deletes_a_calendar(team):
+def test_only_the_owner_deletes_a_calendar(team: Team) -> None:
     calendar = team["calendar"]
     put(team, "e.ics")
     assert dav("DELETE", team["path"], team["users"]["own"])[0] == 403
@@ -623,12 +643,12 @@ def vevent_ics(uid: str, lines: str) -> str:
     )
 
 
-def test_long_titles_are_cut(team):
+def test_long_titles_are_cut(team: Team) -> None:
     assert put(team, "long.ics", text=ics("long", summary="x" * 400)) == 201
     assert len(Event.objects.get(uid="long").title) == 255
 
 
-def test_all_day_calendars_refuse_timed_events(team):
+def test_all_day_calendars_refuse_timed_events(team: Team) -> None:
     Calendar.objects.filter(id=team["calendar"].id).update(force_all_day=True)
     assert put(team, "timed.ics") == 403
     text = (
@@ -639,21 +659,22 @@ def test_all_day_calendars_refuse_timed_events(team):
     assert put(team, "day.ics", text=text) == 201
 
 
-def test_changes_from_clients_are_recorded(team):
+def test_changes_from_clients_are_recorded(team: Team) -> None:
     from core.models import EventActivity
 
     put(team, "daily.ics", "own", series_ics("daily", with_override=False))
     put(team, "daily.ics", "own", series_ics("daily").replace("SUMMARY:Daily\r\n", "SUMMARY:Standup\r\n"))
     series = Event.objects.get(uid="daily", parent__isnull=True)
     entries = [
-        (a.action, a.actor.email, a.details) for a in EventActivity.objects.filter(event=series).order_by("created_at")
+        (a.action, a.actor.email if a.actor else None, a.details)
+        for a in EventActivity.objects.filter(event=series).order_by("created_at")
     ]
     assert entries[0] == ("created", "own@example.test", None)
     assert entries[1] == ("updated", "own@example.test", {"fields": ["title"]})
     assert ("occurrence_changed", "own@example.test", {"occurrence": "2030-10-09T07:00:00+00:00"}) in entries
 
 
-def test_owner_sets_the_calendar_color(team):
+def test_owner_sets_the_calendar_color(team: Team) -> None:
     body = (
         '<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:" xmlns:i="http://apple.com/ns/ical/"><d:set><d:prop>'
         "<i:calendar-color>#FF2968FF</i:calendar-color></d:prop></d:set></d:propertyupdate>"
@@ -663,7 +684,7 @@ def test_owner_sets_the_calendar_color(team):
     assert calendar.event_color == calendar.dark_event_color == "#ff2968"
 
 
-def test_floating_times_are_read_in_the_writers_zone(team):
+def test_floating_times_are_read_in_the_writers_zone(team: Team) -> None:
     User.objects.filter(email="owner@example.test").update(timezone="Europe/Berlin")
     text = vevent_ics("float", "DTSTART:20300701T090000\r\nDTEND:20300701T100000\r\nSUMMARY:Floating\r\n")
     assert put(team, "float.ics", text=text) == 201
@@ -673,7 +694,7 @@ def test_floating_times_are_read_in_the_writers_zone(team):
 
 
 @pytest.mark.parametrize("tzid", ["W. Europe Standard Time", "/mozilla.org/20070129_1/Europe/Berlin"])
-def test_zones_by_other_names(team, tzid):
+def test_zones_by_other_names(team: Team, tzid: str) -> None:
     text = vevent_ics(
         "weekly",
         f"DTSTART;TZID={tzid}:20300107T090000\r\nDTEND;TZID={tzid}:20300107T100000\r\nRRULE:FREQ=WEEKLY;COUNT=30\r\nSUMMARY:Weekly\r\n",
@@ -686,7 +707,7 @@ def test_zones_by_other_names(team, tzid):
     assert starts[0] == "2030-01-07T08:00:00Z" and "2030-07-01T07:00:00Z" in starts
 
 
-def test_extra_dates_of_a_series(team):
+def test_extra_dates_of_a_series(team: Team) -> None:
     text = vevent_ics(
         "extra",
         "DTSTART:20301007T090000Z\r\nDTEND:20301007T100000Z\r\nRRULE:FREQ=WEEKLY;COUNT=2\r\n"
@@ -703,7 +724,7 @@ def test_extra_dates_of_a_series(team):
     assert "RDATE:20301009T090000Z" in content and "RDATE:20301020T090000Z" in content
 
 
-def test_category_resource_and_participants(team):
+def test_category_resource_and_participants(team: Team) -> None:
     from core.models import Category, EventParticipant, Resource
 
     Category.objects.create(calendar=team["calendar"], name="Workshop", color="#ff0000")
@@ -719,7 +740,7 @@ def test_category_resource_and_participants(team):
     )
     assert put(team, "meet.ics", text=text) == 201
     event = Event.objects.get(uid="meet")
-    assert event.category.name == "Workshop"
+    assert event.category is not None and event.category.name == "Workshop"
     assert {(p.email, p.status, bool(p.user)) for p in EventParticipant.objects.filter(event=event)} == {
         ("read@example.test", "tentative", True),
         ("guest@elsewhere.test", "needs_action", False),
@@ -743,7 +764,7 @@ def test_category_resource_and_participants(team):
     assert list(EventParticipant.objects.filter(event=event).values_list("email", flat=True)) == ["read@example.test"]
 
 
-def test_reminders_are_per_user(team):
+def test_reminders_are_per_user(team: Team) -> None:
     from core.models import EventReminder
 
     text = vevent_ics(
@@ -767,7 +788,7 @@ def test_reminders_are_per_user(team):
     )
 
 
-def test_location_and_booked_place(team):
+def test_location_and_booked_place(team: Team) -> None:
     from core.models import Resource
 
     text = vevent_ics(
@@ -793,7 +814,7 @@ def test_location_and_booked_place(team):
 COST_START = datetime(2030, 1, 7, 9, tzinfo=UTC)
 
 
-def add_events(team, numbers: range) -> None:
+def add_events(team: Team, numbers: range) -> None:
     for i in numbers:
         start = COST_START + timedelta(hours=i)
         Event.objects.create(
@@ -806,26 +827,32 @@ def add_events(team, numbers: range) -> None:
         )
 
 
-def propfind_queries(team) -> int:
+def propfind_queries(team: Team) -> int:
     with CaptureQueriesContext(connection) as queries:
         status, _, _ = dav("PROPFIND", team["path"], team["users"]["owner"], DEPTH="1")
     assert status == 207
     return len(queries)
 
 
-def test_listing_a_calendar_costs_the_same_for_more_events(team):
+def test_listing_a_calendar_costs_the_same_for_more_events(team: Team) -> None:
     add_events(team, range(5))
     few = propfind_queries(team)
     add_events(team, range(5, 55))
     assert propfind_queries(team) == few
 
 
-def test_a_password_is_checked_once_and_a_deleted_app_password_stops_working(team, monkeypatch):
+def test_a_password_is_checked_once_and_a_deleted_app_password_stops_working(
+    team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
     user = team["users"]["owner"]
     app_password = AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
-    checks = []
-    original = auth.check_password
-    monkeypatch.setattr(auth, "check_password", lambda *args: checks.append(1) or original(*args))
+    checks: list[str] = []
+
+    def counted_check(password: str, encoded: str) -> bool:
+        checks.append(password)
+        return check_password(password, encoded)
+
+    monkeypatch.setattr(auth, "check_password", counted_check)
 
     for _ in range(3):
         assert dav("PROPFIND", team["path"], user, password="app-pw", DEPTH="0")[0] == 207
@@ -836,7 +863,7 @@ def test_a_password_is_checked_once_and_a_deleted_app_password_stops_working(tea
     assert dav("PROPFIND", team["path"], user, password="app-pw", DEPTH="0")[0] == 401
 
 
-def test_failed_logins_are_limited_like_the_web_login(team):
+def test_failed_logins_are_limited_like_the_web_login(team: Team) -> None:
     user, path = team["users"]["owner"], team["path"]
     for _ in range(auth.MAX_FAILED_LOGINS):
         assert dav("PROPFIND", path, user, password="guess", DEPTH="0")[0] == 401
@@ -845,7 +872,7 @@ def test_failed_logins_are_limited_like_the_web_login(team):
     assert dav("PROPFIND", f"/caldav/{team['users']['own'].email}/", team["users"]["own"], DEPTH="0")[0] == 207
 
 
-def test_the_feed_leaves_out_what_clients_note_for_members(team):
+def test_the_feed_leaves_out_what_clients_note_for_members(team: Team) -> None:
     owner = team["users"]["owner"]
     body = ics("notes").replace(
         "SUMMARY:Meeting\r\n",
@@ -860,7 +887,7 @@ def test_the_feed_leaves_out_what_clients_note_for_members(team):
     assert "Call Ann" not in feed and "X-PRIVATE-NOTE" not in feed
 
 
-def test_expanded_queries_with_etags_work_for_series(team):
+def test_expanded_queries_with_etags_work_for_series(team: Team) -> None:
     owner = team["users"]["owner"]
     body = ics("series").replace("SUMMARY:Meeting\r\n", "SUMMARY:Meeting\r\nRRULE:FREQ=DAILY;COUNT=3\r\n")
     assert dav("PUT", team["path"] + "series.ics", owner, body, content_type="text/calendar")[0] == 201
@@ -876,7 +903,7 @@ def test_expanded_queries_with_etags_work_for_series(team):
     assert content.count("RECURRENCE-ID") == 3
 
 
-def test_zones_clients_define_themselves_keep_their_local_times(team):
+def test_zones_clients_define_themselves_keep_their_local_times(team: Team) -> None:
     owner = team["users"]["owner"]
     body = (
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
@@ -899,13 +926,13 @@ def test_zones_clients_define_themselves_keep_their_local_times(team):
     assert [s.astimezone(ZoneInfo(event.timezone)).hour for s in starts] == [9, 9, 9, 9]
 
 
-def test_events_ending_before_they_start_are_refused(team):
+def test_events_ending_before_they_start_are_refused(team: Team) -> None:
     owner = team["users"]["owner"]
     body = ics("backwards", start="20301007T100000Z", end="20301007T090000Z")
     assert dav("PUT", team["path"] + "backwards.ics", owner, body, content_type="text/calendar")[0] == 400
 
 
-def test_attendees_other_than_email_addresses_are_left_out(team):
+def test_attendees_other_than_email_addresses_are_left_out(team: Team) -> None:
     owner = team["users"]["owner"]
     body = ics("people").replace(
         "SUMMARY:Meeting\r\n",
@@ -918,7 +945,7 @@ def test_attendees_other_than_email_addresses_are_left_out(team):
     ]
 
 
-def test_xml_with_entities_is_a_bad_request(team):
+def test_xml_with_entities_is_a_bad_request(team: Team) -> None:
     body = (
         '<?xml version="1.0"?><!DOCTYPE d [<!ENTITY a "aaaa">]>'
         '<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
@@ -926,7 +953,7 @@ def test_xml_with_entities_is_a_bad_request(team):
     assert dav("PROPFIND", team["path"], team["users"]["owner"], body, DEPTH="0")[0] == 400
 
 
-def test_principals_name_their_email_address_and_no_address_books(team):
+def test_principals_name_their_email_address_and_no_address_books(team: Team) -> None:
     owner = team["users"]["owner"]
     body = (
         '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" '
@@ -939,7 +966,7 @@ def test_principals_name_their_email_address_and_no_address_books(team):
     assert "addressbook" not in dav("OPTIONS", "/caldav/", owner)[2]["DAV"]
 
 
-def test_calendars_tell_the_viewers_zone(team):
+def test_calendars_tell_the_viewers_zone(team: Team) -> None:
     owner = team["users"]["owner"]
     owner.timezone = "Europe/Berlin"
     owner.save()
@@ -951,7 +978,7 @@ def test_calendars_tell_the_viewers_zone(team):
     assert "TZID:Europe/Berlin" in content
 
 
-def test_calendar_names_are_each_owners_own(team):
+def test_calendar_names_are_each_owners_own(team: Team) -> None:
     own, owner = team["users"]["own"], team["users"]["owner"]
     assert mkcalendar(owner, f"/caldav/{owner.email}/work/") == 201
     # Another user may use the same name in their own home, and finds out nothing about the other.

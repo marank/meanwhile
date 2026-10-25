@@ -13,14 +13,14 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def admin_api():
+def admin_api() -> Api:
     admin = make_user("admin")
     admin.is_admin = True
     admin.save()
     return Api(admin)
 
 
-def test_the_api_neither_shows_nor_sets_superuser(admin_api):
+def test_the_api_neither_shows_nor_sets_superuser(admin_api: Api) -> None:
     res = admin_api.post(
         "/admin/users",
         {
@@ -41,7 +41,7 @@ def test_the_api_neither_shows_nor_sets_superuser(admin_api):
     assert not user.is_superuser
 
 
-def test_set_superuser_hands_it_out_and_takes_it_away():
+def test_set_superuser_hands_it_out_and_takes_it_away() -> None:
     user = make_user("someone")
 
     call_command("set_superuser", user.email.upper())
@@ -53,12 +53,12 @@ def test_set_superuser_hands_it_out_and_takes_it_away():
     assert not user.is_superuser and not user.is_staff
 
 
-def test_set_superuser_needs_an_existing_user():
+def test_set_superuser_needs_an_existing_user() -> None:
     with pytest.raises(CommandError):
         call_command("set_superuser", "nobody@example.test")
 
 
-def test_staff_alone_is_not_kept():
+def test_staff_alone_is_not_kept() -> None:
     user = make_user("someone")
     user.is_staff = True
     user.save()
@@ -67,7 +67,7 @@ def test_staff_alone_is_not_kept():
     assert not user.is_staff
 
 
-def test_app_admins_leave_superusers_alone(admin_api):
+def test_app_admins_leave_superusers_alone(admin_api: Api) -> None:
     boss = make_user("boss")
     boss.is_superuser = True
     boss.save()

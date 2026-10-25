@@ -3,19 +3,22 @@ Emails: notifications by email, and scheduling by email (iMIP): invitations, the
 cancellations, and the participants' answers by link or from their mail programs.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import StringIO
+from pathlib import Path
+from typing import Any
 
 import icalendar
 import pytest
 from django.core import mail as django_mail
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, EmailMultiAlternatives
 from django.core.management import call_command
 from django.test import Client
+from pytest_django.fixtures import Settings
 
 from core.models import Event, EventParticipant, Notification
 from core.services.itip import process_email, process_itip
-from core.tests.helpers import BASE, iso
+from core.tests.helpers import BASE, World, iso
 
 pytestmark = pytest.mark.django_db
 
@@ -23,12 +26,12 @@ GUEST = "guest@elsewhere.test"
 
 
 @pytest.fixture(autouse=True)
-def empty_outbox(world):
+def empty_outbox(world: World) -> None:
     """Without the emails of setting the calendar up (members are told they were added)."""
     django_mail.outbox.clear()
 
 
-def create(world, user="owner", **fields):
+def create(world: World, user: str = "owner", **fields: Any) -> dict[str, Any]:
     data = {
         "title": "Planning",
         "start": iso(BASE),
@@ -38,27 +41,38 @@ def create(world, user="owner", **fields):
     }
     res = world["api"][user].post(f"/calendars/{world['cal']['id']}/events", data)
     assert res.status_code == 200, res.content
-    return res.json()
+    event: dict[str, Any] = res.json()
+    return event
 
 
-def invite(world, event, email=GUEST, user="owner"):
+def invite(world: World, event: dict[str, Any], email: str = GUEST, user: str = "owner") -> dict[str, Any]:
     res = world["api"][user].post(f"/events/{event['id']}/participants", {"email": email})
     assert res.status_code == 200, res.content
-    return res.json()
+    participant: dict[str, Any] = res.json()
+    return participant
 
 
-def to(address):
+def to(address: str) -> list[EmailMessage]:
     return [m for m in django_mail.outbox if m.to == [address]]
 
 
-def itip(message):
+def itip(message: EmailMessage) -> tuple[str, icalendar.Component]:
     """The METHOD and the VEVENT of the iTIP message an email carries inline."""
+    assert isinstance(message, EmailMultiAlternatives)
     ical = next(content for content, mimetype in message.alternatives if mimetype.startswith("text/calendar"))
+    assert isinstance(ical, str | bytes)
     cal = icalendar.Calendar.from_ical(ical)
     return str(cal["METHOD"]), cal.walk("VEVENT")[0]
 
 
-def reply(participant_email, uid, partstat, sender=None, organizer="owner@example.test", **extra):
+def reply(
+    participant_email: str,
+    uid: str,
+    partstat: str,
+    sender: str | None = None,
+    organizer: str = "owner@example.test",
+    **extra: str,
+) -> bytes:
     vevent = icalendar.Event()
     vevent.add("uid", uid)
     vevent.add("dtstamp", BASE)
@@ -76,14 +90,14 @@ def reply(participant_email, uid, partstat, sender=None, organizer="owner@exampl
     return message.message().as_bytes()
 
 
-def status_of(event, email=GUEST):
+def status_of(event: dict[str, Any], email: str = GUEST) -> str:
     return EventParticipant.objects.get(event_id=event["id"], email=email).status
 
 
 # Invitations -----------------------------------------------------------------------------------
 
 
-def test_invited_guests_get_the_event_as_request_with_links_to_answer(world):
+def test_invited_guests_get_the_event_as_request_with_links_to_answer(world: World) -> None:
     event = create(world)
     invite(world, event)
     [message] = to(GUEST)
@@ -105,13 +119,13 @@ def test_invited_guests_get_the_event_as_request_with_links_to_answer(world):
     assert "10:00 AM" in message.body and "(Europe/Berlin)" in message.body
 
 
-def test_participants_given_with_a_new_event_are_invited(world):
+def test_participants_given_with_a_new_event_are_invited(world: World) -> None:
     create(world, participants=[{"email": GUEST}, {"user_id": str(world["users"]["other"].id)}])
     assert len(to(GUEST)) == 1
     assert len(to("other@example.test")) == 1
 
 
-def test_invitations_name_the_imip_mailbox_as_organizer(world, settings):
+def test_invitations_name_the_imip_mailbox_as_organizer(world: World, settings: Settings) -> None:
     settings.IMIP_ADDRESS = "meanwhile@app.test"
     invite(world, create(world))
     _, vevent = itip(to(GUEST)[0])
@@ -119,7 +133,7 @@ def test_invitations_name_the_imip_mailbox_as_organizer(world, settings):
     assert vevent["ORGANIZER"].params["CN"] == "Owner"
 
 
-def test_users_who_turned_invitations_off_get_them_in_the_app_only(world):
+def test_users_who_turned_invitations_off_get_them_in_the_app_only(world: World) -> None:
     other = world["users"]["other"]
     other.email_notifications = {"invitations": False}
     other.save()
@@ -128,7 +142,7 @@ def test_users_who_turned_invitations_off_get_them_in_the_app_only(world):
     assert Notification.objects.filter(user=other, type="participant_added").exists()
 
 
-def test_emails_are_written_in_the_language_of_the_recipient(world):
+def test_emails_are_written_in_the_language_of_the_recipient(world: World) -> None:
     other = world["users"]["other"]
     other.language = "de"
     other.time_format = "24h"
@@ -140,7 +154,7 @@ def test_emails_are_written_in_the_language_of_the_recipient(world):
     assert "Zusagen" in message.body
 
 
-def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(world):
+def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(world: World) -> None:
     event = create(world)
     invite(world, event)
     owner = world["api"]["owner"]
@@ -157,7 +171,7 @@ def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(worl
     assert len(to(GUEST)) == 2
 
 
-def test_changing_one_occurrence_sends_the_series_with_the_change(world):
+def test_changing_one_occurrence_sends_the_series_with_the_change(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     invite(world, event)
     second = BASE + timedelta(days=1)
@@ -168,7 +182,7 @@ def test_changing_one_occurrence_sends_the_series_with_the_change(world):
     assert titles == ["Planning", "Planning (moved)"]
 
 
-def test_participants_taken_off_the_event_get_a_cancellation(world):
+def test_participants_taken_off_the_event_get_a_cancellation(world: World) -> None:
     event = create(world)
     participant = invite(world, event)
     invite(world, event, "second@elsewhere.test")
@@ -181,7 +195,7 @@ def test_participants_taken_off_the_event_get_a_cancellation(world):
     assert len(to("second@elsewhere.test")) == 1
 
 
-def test_deleting_or_rejecting_the_event_cancels_it_for_everyone(world):
+def test_deleting_or_rejecting_the_event_cancels_it_for_everyone(world: World) -> None:
     event = create(world)
     invite(world, event)
     world["api"]["owner"].delete(f"/events/{event['id']}")
@@ -200,7 +214,7 @@ def test_deleting_or_rejecting_the_event_cancels_it_for_everyone(world):
 # Answers ---------------------------------------------------------------------------------------
 
 
-def test_guests_answer_by_link_without_an_account(world):
+def test_guests_answer_by_link_without_an_account(world: World) -> None:
     event = create(world)
     invite(world, event)
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
@@ -219,7 +233,7 @@ def test_guests_answer_by_link_without_an_account(world):
     assert anonymous.get("/api/rsvp/not-a-token").status_code == 404
 
 
-def test_cancelled_events_cannot_be_answered_by_link(world):
+def test_cancelled_events_cannot_be_answered_by_link(world: World) -> None:
     event = create(world)
     invite(world, event)
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
@@ -231,7 +245,7 @@ def test_cancelled_events_cannot_be_answered_by_link(world):
     )
 
 
-def test_replies_from_mail_programs_set_the_participants_answer(world):
+def test_replies_from_mail_programs_set_the_participants_answer(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     invite(world, event)
     # The occurrence changed before the answer follows the series' answer.
@@ -244,7 +258,7 @@ def test_replies_from_mail_programs_set_the_participants_answer(world):
     assert process_email(reply(GUEST, event["uid"], "TENTATIVE")) == [f"{event['uid']}: {GUEST}: tentative (unchanged)"]
 
 
-def test_replies_count_only_from_the_participant_themselves(world):
+def test_replies_count_only_from_the_participant_themselves(world: World) -> None:
     event = create(world)
     invite(world, event)
     result = process_email(reply(GUEST, event["uid"], "DECLINED", sender="mallory@elsewhere.test"))
@@ -270,7 +284,7 @@ def test_replies_count_only_from_the_participant_themselves(world):
     assert status_of(event) == "needs_action"
 
 
-def test_replies_for_unknown_invitations_change_nothing(world):
+def test_replies_for_unknown_invitations_change_nothing(world: World) -> None:
     event = create(world)
     invite(world, event)
     assert process_email(reply("stranger@elsewhere.test", event["uid"], "ACCEPTED")) == [
@@ -279,7 +293,7 @@ def test_replies_for_unknown_invitations_change_nothing(world):
     assert process_email(b"Subject: hello\n\njust text") == ["no iTIP message found"]
 
 
-def test_refresh_sends_the_event_again(world):
+def test_refresh_sends_the_event_again(world: World) -> None:
     event = create(world)
     invite(world, event)
     cal = icalendar.Calendar()
@@ -292,7 +306,7 @@ def test_refresh_sends_the_event_again(world):
     assert len(to(GUEST)) == 2
 
 
-def test_dev_reply_command_answers_like_a_mail_program(world, settings, tmp_path):
+def test_dev_reply_command_answers_like_a_mail_program(world: World, settings: Settings, tmp_path: Path) -> None:
     settings.IMIP_ADDRESS = "meanwhile@app.test"
     event = create(world)
     invite(world, event)
@@ -309,7 +323,7 @@ def test_dev_reply_command_answers_like_a_mail_program(world, settings, tmp_path
     assert status_of(event) == "accepted"
 
 
-def test_participants_answering_in_the_app_tell_the_organizer(world):
+def test_participants_answering_in_the_app_tell_the_organizer(world: World) -> None:
     event = create(world)
     other = world["users"]["other"]
     invite(world, event, other.email)
@@ -322,7 +336,7 @@ def test_participants_answering_in_the_app_tell_the_organizer(world):
 # Notifications by email ------------------------------------------------------------------------
 
 
-def test_notifications_come_by_email_as_each_user_chose(world):
+def test_notifications_come_by_email_as_each_user_chose(world: World) -> None:
     room = world["resource"]("Room")
     world["book"](world["api"]["booker"], room["id"])
     [message] = to("owner@example.test")
@@ -340,7 +354,7 @@ def test_notifications_come_by_email_as_each_user_chose(world):
     assert owner.get("/users/me").json()["email_notifications"]["approvals"] is False
 
 
-def test_comments_come_by_email_with_their_text(world):
+def test_comments_come_by_email_with_their_text(world: World) -> None:
     event = create(world)
     world["api"]["other"].post(f"/events/{event['id']}/comments", {"body": "Bring the slides"})
     [message] = to("owner@example.test")
@@ -348,7 +362,7 @@ def test_comments_come_by_email_with_their_text(world):
     assert "Bring the slides" in message.body
 
 
-def test_email_reminders_are_off_unless_chosen(world):
+def test_email_reminders_are_off_unless_chosen(world: World) -> None:
     from core.services.reminders import deliver_due_reminders
 
     event = create(world)
@@ -363,7 +377,7 @@ def test_email_reminders_are_off_unless_chosen(world):
     assert message.subject == "Reminder: Planning"
 
 
-def test_answers_reach_caldav_clients(world):
+def test_answers_reach_caldav_clients(world: World) -> None:
     event = create(world)
     invite(world, event)
     before = Event.objects.get(id=event["id"]).updated_at
@@ -371,7 +385,7 @@ def test_answers_reach_caldav_clients(world):
     assert Event.objects.get(id=event["id"]).updated_at > before
 
 
-def test_titles_over_several_lines_make_one_line_subjects():
+def test_titles_over_several_lines_make_one_line_subjects() -> None:
     from core.services.mail import one_line, sender
 
     assert one_line("Team\nmeeting\r\n  today") == "Team meeting today"
@@ -381,11 +395,11 @@ def test_titles_over_several_lines_make_one_line_subjects():
 # Occurrences, addresses and answers in detail -----------------------------------------------------
 
 
-def occurrence_url(event, start):
+def occurrence_url(event: dict[str, Any], start: datetime) -> str:
     return f"/events/{event['id']}/occurrences/{iso(start).replace('+', '%2B')}?scope=this"
 
 
-def test_cancelling_one_occurrence_cancels_only_that_one(world):
+def test_cancelling_one_occurrence_cancels_only_that_one(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     invite(world, event)
     second = BASE + timedelta(days=1)
@@ -393,10 +407,10 @@ def test_cancelling_one_occurrence_cancels_only_that_one(world):
     assert world["api"]["owner"].post(f"/events/{override['id']}/cancel").status_code == 200
     method, vevent = itip(to(GUEST)[-1])
     assert method == "CANCEL"
-    assert vevent["RECURRENCE-ID"].dt.astimezone(BASE.tzinfo) == second and "RRULE" not in vevent
+    assert vevent.decoded("RECURRENCE-ID").astimezone(BASE.tzinfo) == second and "RRULE" not in vevent
 
 
-def test_invitations_go_to_single_email_addresses_only(world):
+def test_invitations_go_to_single_email_addresses_only(world: World) -> None:
     event = create(world)
     api = world["api"]["owner"]
     for address in (
@@ -411,7 +425,7 @@ def test_invitations_go_to_single_email_addresses_only(world):
     assert django_mail.outbox == []
 
 
-def test_nobody_sends_more_than_the_hourly_invitations(world, monkeypatch):
+def test_nobody_sends_more_than_the_hourly_invitations(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
     from core.views import events
 
     monkeypatch.setattr(events, "MAX_INVITATIONS_PER_HOUR", 2)
@@ -422,7 +436,7 @@ def test_nobody_sends_more_than_the_hourly_invitations(world, monkeypatch):
     ] == [200, 200, 429]
 
 
-def test_who_is_invited_to_one_occurrence_gets_that_one_only(world):
+def test_who_is_invited_to_one_occurrence_gets_that_one_only(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     second = BASE + timedelta(days=1)
     override = world["api"]["owner"].patch(occurrence_url(event, second), {"title": "Moved"}).json()
@@ -439,7 +453,7 @@ def test_who_is_invited_to_one_occurrence_gets_that_one_only(world):
     assert method == "CANCEL" and "RECURRENCE-ID" in vevent
 
 
-def test_answers_for_one_unchanged_occurrence_count(world):
+def test_answers_for_one_unchanged_occurrence_count(world: World) -> None:
     event = create(world, rrule="FREQ=DAILY;COUNT=3")
     invite(world, event)
     second = BASE + timedelta(days=1)
@@ -461,7 +475,7 @@ def test_answers_for_one_unchanged_occurrence_count(world):
     assert statuses == {None: "accepted", second: "declined"}
 
 
-def test_answers_are_asked_again_when_the_event_moves(world):
+def test_answers_are_asked_again_when_the_event_moves(world: World) -> None:
     event = create(world)
     invite(world, event)
     process_email(reply(GUEST, event["uid"], "ACCEPTED"))
@@ -474,7 +488,7 @@ def test_answers_are_asked_again_when_the_event_moves(world):
     assert vevent["ATTENDEE"].params["PARTSTAT"] == "NEEDS-ACTION"
 
 
-def test_cancelled_events_take_no_answers_and_are_cancelled_once(world):
+def test_cancelled_events_take_no_answers_and_are_cancelled_once(world: World) -> None:
     event = create(world)
     invite(world, event)
     world["api"]["owner"].post(f"/events/{event['id']}/cancel")
@@ -485,7 +499,7 @@ def test_cancelled_events_take_no_answers_and_are_cancelled_once(world):
     assert len(to(GUEST)) == cancels
 
 
-def test_with_an_authserv_id_answers_need_a_verified_sender(world, settings):
+def test_with_an_authserv_id_answers_need_a_verified_sender(world: World, settings: Settings) -> None:
     settings.IMIP_TRUSTED_AUTHSERV_ID = "mx.example.test"
     event = create(world)
     invite(world, event)

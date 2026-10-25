@@ -8,6 +8,7 @@ from django.contrib.auth import SESSION_KEY
 from django.contrib.auth.hashers import make_password
 from django.core.management import CommandError, call_command
 from django.test import Client
+from pytest_django.fixtures import Settings
 
 from core.models import AppPassword, OverviewSettings, User
 from core.tests.helpers import make_user
@@ -16,14 +17,14 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def admin_env(settings):
+def admin_env(settings: Settings) -> Settings:
     settings.ADMIN_EMAIL = "Admin@Example.test"
     settings.ADMIN_PASSWORD = "secret-1"
     settings.ADMIN_NAME = "Admin"
     return settings
 
 
-def test_creates_the_admin(admin_env):
+def test_creates_the_admin(admin_env: Settings) -> None:
     call_command("ensure_admin")
 
     user = User.objects.get(email__iexact="admin@example.test")
@@ -35,7 +36,7 @@ def test_creates_the_admin(admin_env):
     assert not OverviewSettings.objects.filter(user=user).exists()
 
 
-def test_the_admin_can_sign_in(admin_env):
+def test_the_admin_can_sign_in(admin_env: Settings) -> None:
     call_command("ensure_admin")
 
     client = Client()
@@ -50,7 +51,7 @@ def test_the_admin_can_sign_in(admin_env):
     assert res.json()["data"]["user"] == client.get("/api/users/me").json()
 
 
-def test_promotes_an_existing_user_and_updates_password_and_name(admin_env):
+def test_promotes_an_existing_user_and_updates_password_and_name(admin_env: Settings) -> None:
     user = make_user("someone")
     admin_env.ADMIN_EMAIL = user.email.upper()
 
@@ -63,7 +64,7 @@ def test_promotes_an_existing_user_and_updates_password_and_name(admin_env):
     assert User.objects.count() == 1
 
 
-def test_an_unchanged_password_is_not_set_again(admin_env):
+def test_an_unchanged_password_is_not_set_again(admin_env: Settings) -> None:
     """Setting it again would change its hash and so sign the admin out of every session."""
     call_command("ensure_admin")
     hash_before = User.objects.get().password
@@ -73,7 +74,7 @@ def test_an_unchanged_password_is_not_set_again(admin_env):
     assert User.objects.get().password == hash_before
 
 
-def test_without_a_password_an_existing_admin_keeps_theirs(admin_env):
+def test_without_a_password_an_existing_admin_keeps_theirs(admin_env: Settings) -> None:
     call_command("ensure_admin")
     admin_env.ADMIN_PASSWORD = ""
 
@@ -82,7 +83,7 @@ def test_without_a_password_an_existing_admin_keeps_theirs(admin_env):
     assert User.objects.get().check_password("secret-1")
 
 
-def test_whoever_signed_up_with_the_address_loses_the_account(admin_env):
+def test_whoever_signed_up_with_the_address_loses_the_account(admin_env: Settings) -> None:
     """Emails aren't verified: someone else may have registered ADMIN_EMAIL before the admin was set up."""
     squatter = make_user("someone")
     AppPassword.objects.create(user=squatter, label="Phone", password_hash=make_password("app-1"))
@@ -102,7 +103,7 @@ def test_whoever_signed_up_with_the_address_loses_the_account(admin_env):
     assert EmailAddress.objects.filter(user=squatter, verified=True).exists()
 
 
-def test_a_new_admin_needs_a_password(admin_env):
+def test_a_new_admin_needs_a_password(admin_env: Settings) -> None:
     admin_env.ADMIN_PASSWORD = ""
 
     with pytest.raises(CommandError):
@@ -110,7 +111,7 @@ def test_a_new_admin_needs_a_password(admin_env):
     assert not User.objects.exists()
 
 
-def test_without_admin_email_nothing_happens(admin_env):
+def test_without_admin_email_nothing_happens(admin_env: Settings) -> None:
     admin_env.ADMIN_EMAIL = ""
 
     call_command("ensure_admin")
@@ -119,7 +120,7 @@ def test_without_admin_email_nothing_happens(admin_env):
 
 
 @pytest.mark.parametrize("password", ["change-me", "CHANGE-ME", "short"])
-def test_refuses_a_placeholder_or_weak_password_outside_debug(admin_env, password):
+def test_refuses_a_placeholder_or_weak_password_outside_debug(admin_env: Settings, password: str) -> None:
     admin_env.DEBUG = False
     admin_env.ADMIN_PASSWORD = password
 
@@ -128,7 +129,7 @@ def test_refuses_a_placeholder_or_weak_password_outside_debug(admin_env, passwor
     assert not User.objects.filter(email__iexact="admin@example.test").exists()
 
 
-def test_accepts_a_placeholder_in_debug(admin_env):
+def test_accepts_a_placeholder_in_debug(admin_env: Settings) -> None:
     admin_env.DEBUG = True
     admin_env.ADMIN_PASSWORD = "change-me"
 

@@ -9,12 +9,12 @@ import pytest
 from core.caldav.parsing import parse_series
 from core.models import Event
 from core.services.recurrence import expand_event
-from core.tests.helpers import BASE, iso
+from core.tests.helpers import BASE, Response, World, iso
 
 pytestmark = pytest.mark.django_db
 
 
-def _event(world, rrule):
+def _event(world: World, rrule: str) -> Response:
     return world["api"]["owner"].post(
         f"/calendars/{world['cal']['id']}/events",
         {
@@ -29,11 +29,11 @@ def _event(world, rrule):
 @pytest.mark.parametrize(
     "rrule", ["FREQ=BOGUS", "FREQ=SECONDLY", "FREQ=MINUTELY;COUNT=5", "INTERVAL=2", "FREQ=DAILY;UNTIL=soon"]
 )
-def test_unusable_rules_are_rejected(world, rrule):
+def test_unusable_rules_are_rejected(world: World, rrule: str) -> None:
     assert _event(world, rrule).status_code == 422
 
 
-def test_usable_rules_are_kept(world):
+def test_usable_rules_are_kept(world: World) -> None:
     res = _event(world, "FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20300101")
     assert res.status_code == 200, res.content
     assert res.json()["rrule"] == "FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20300101"
@@ -41,7 +41,7 @@ def test_usable_rules_are_kept(world):
     assert world["api"]["owner"].patch(f"/events/{series}", {"rrule": "FREQ=SECONDLY"}).status_code == 422
 
 
-def test_caldav_rejects_unusable_rules():
+def test_caldav_rejects_unusable_rules() -> None:
     ics = (
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:x\r\n"
         "DTSTART:20300101T090000Z\r\nDTEND:20300101T100000Z\r\nRRULE:FREQ=SECONDLY\r\n"
@@ -51,7 +51,7 @@ def test_caldav_rejects_unusable_rules():
         parse_series(ics)
 
 
-def test_rules_stored_earlier_count_as_single_events(world):
+def test_rules_stored_earlier_count_as_single_events(world: World) -> None:
     res = _event(world, "FREQ=DAILY;COUNT=3")
     event = Event.objects.get(id=res.json()["id"])
     Event.objects.filter(id=event.id).update(rrule="FREQ=BOGUS")
@@ -66,7 +66,7 @@ def test_rules_stored_earlier_count_as_single_events(world):
     assert res.status_code == 200, res.content
 
 
-def test_dense_series_expand_only_up_to_the_limit(world):
+def test_dense_series_expand_only_up_to_the_limit(world: World) -> None:
     res = _event(world, "FREQ=HOURLY")
     event = Event.objects.get(id=res.json()["id"])
     # Stored before the check: one occurrence a second over ten years.

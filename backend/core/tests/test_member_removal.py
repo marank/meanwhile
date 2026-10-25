@@ -4,26 +4,27 @@ Removing a member from a calendar also removes them as an approver, unless they 
 
 import pytest
 
-from core.models import CalendarApprover, CalendarGroup, ResourceApprover, UserGroup
+from core.models import CalendarApprover, CalendarGroup, ResourceApprover, User, UserGroup
+from core.tests.helpers import World
 
 pytestmark = pytest.mark.django_db
 
 
-def make_approver(world, user):
+def make_approver(world: World, user: User) -> None:
     path = f"/calendars/{world['cal']['id']}/approvers"
     owner = world["api"]["owner"]
     current = [a["user_id"] for a in owner.get(path).json()]
     assert owner.put(path, {"user_ids": [*current, str(user.id)]}).status_code == 200
 
 
-def approver_rows(world, user):
+def approver_rows(world: World, user: User) -> tuple[int, int]:
     return (
         CalendarApprover.objects.filter(calendar_id=world["cal"]["id"], user=user).count(),
         ResourceApprover.objects.filter(resource__calendar_id=world["cal"]["id"], user=user).count(),
     )
 
 
-def test_a_removed_member_is_no_approver_any_more(world):
+def test_a_removed_member_is_no_approver_any_more(world: World) -> None:
     owner, user = world["api"]["owner"], world["users"]["approver"]
     world["resource"]("Room", approver_ids=[str(user.id)])
     make_approver(world, user)
@@ -37,7 +38,7 @@ def test_a_removed_member_is_no_approver_any_more(world):
     assert approver_rows(world, other) == (1, 0)
 
 
-def test_someone_who_keeps_access_through_a_group_stays_an_approver(world):
+def test_someone_who_keeps_access_through_a_group_stays_an_approver(world: World) -> None:
     owner, user = world["api"]["owner"], world["users"]["approver"]
     group = UserGroup.objects.create(name="Crew")
     user.groups.add(group)

@@ -3,6 +3,7 @@ Listing calendars and their events costs the same however many calendars a user 
 """
 
 from urllib.parse import quote
+from uuid import UUID
 
 import pytest
 from django.db import connection
@@ -10,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 
 from core.models import CalendarGroup, UserGroup, get_or_create_app_settings
 from core.services.calendars import create_calendar
-from core.tests.helpers import BASE, Api, iso, make_user
+from core.tests.helpers import BASE, Api, World, iso, make_user
 
 pytestmark = pytest.mark.django_db
 
@@ -21,13 +22,14 @@ def queries(api: Api, url: str) -> int:
     return len(captured)
 
 
-def test_listing_costs_the_same_for_more_calendars():
+def test_listing_costs_the_same_for_more_calendars() -> None:
     # Exists in any running app; created by the first listing otherwise (its defaults fill in week layouts).
     get_or_create_app_settings()
     owner, me = make_user("owner"), make_user("me")
     group = UserGroup.objects.create(name="Team")
     me.groups.add(group)
-    api, calendar_ids = Api(me), []
+    api = Api(me)
+    calendar_ids: list[UUID] = []
 
     def add_calendars(n: int) -> None:
         for _ in range(n):
@@ -55,7 +57,7 @@ def test_listing_costs_the_same_for_more_calendars():
     assert (queries(api, "/calendars"), queries(api, events_url())) == few
 
 
-def test_listing_approvals_costs_the_same_for_more_bookings(world):
+def test_listing_approvals_costs_the_same_for_more_bookings(world: World) -> None:
     room = world["resource"]("Room", approver_ids=[str(world["users"]["resapprover"].id)])
     projector = world["resource"]("Projector")
     api = world["api"]["owner"]

@@ -3,6 +3,8 @@ A calendar's week layout follows the app's defaults until someone who manages it
 when an admin changes the defaults later.
 """
 
+from typing import Any
+
 import pytest
 
 from core.models import Calendar, get_or_create_app_settings
@@ -11,7 +13,7 @@ from core.tests.helpers import Api, make_user
 pytestmark = pytest.mark.django_db
 
 
-def set_app_defaults(**values):
+def set_app_defaults(**values: Any) -> None:
     app_settings = get_or_create_app_settings()
     for field, value in values.items():
         setattr(app_settings, f"default_{field}", value)
@@ -19,17 +21,18 @@ def set_app_defaults(**values):
 
 
 @pytest.fixture
-def owner():
+def owner() -> Api:
     return Api(make_user("owner"))
 
 
-def create(api: Api) -> dict:
+def create(api: Api) -> dict[str, Any]:
     res = api.post("/calendars", {"name": "Work"})
     assert res.status_code == 200, res.content
-    return res.json()
+    calendar: dict[str, Any] = res.json()
+    return calendar
 
 
-def test_a_new_calendar_follows_app_defaults_changed_later(owner):
+def test_a_new_calendar_follows_app_defaults_changed_later(owner: Api) -> None:
     calendar = create(owner)
     assert calendar["first_weekday"] == 1  # Monday
     assert Calendar.objects.get(id=calendar["id"]).first_weekday is None
@@ -44,7 +47,7 @@ def test_a_new_calendar_follows_app_defaults_changed_later(owner):
     assert listed["first_weekday"] == 0
 
 
-def test_a_layout_value_set_for_the_calendar_stays(owner):
+def test_a_layout_value_set_for_the_calendar_stays(owner: Api) -> None:
     calendar = create(owner)
     assert owner.patch(f"/calendars/{calendar['id']}", {"first_weekday": 1}).status_code == 200
 
@@ -55,7 +58,7 @@ def test_a_layout_value_set_for_the_calendar_stays(owner):
     assert shown["show_week_numbers"] is True
 
 
-def test_null_puts_a_layout_value_back_to_the_app_default(owner):
+def test_null_puts_a_layout_value_back_to_the_app_default(owner: Api) -> None:
     calendar = create(owner)
     owner.patch(f"/calendars/{calendar['id']}", {"first_weekday": 3})
     set_app_defaults(first_weekday=1)

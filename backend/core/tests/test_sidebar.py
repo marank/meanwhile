@@ -2,30 +2,33 @@
 Where calendars and folders sit in the user's sidebar.
 """
 
+from typing import Any
+
 import pytest
 from django.test import Client
 
 from core.models import CalendarGroup, CalendarMember, Folder, User, UserGroup
 from core.services.calendars import create_calendar
+from core.tests.helpers import Response
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def user_client():
+def user_client() -> tuple[User, Client]:
     user = User.objects.create_user(email="me@example.test", password="x", display_name="Me")
     client = Client()
     client.force_login(user)
     return user, client
 
 
-def reorder(client, *items):
+def reorder(client: Client, *items: dict[str, Any]) -> Response:
     response = client.patch("/api/layout/items", {"items": list(items)}, content_type="application/json")
     assert response.status_code == 200, response.content
     return response
 
 
-def test_calendars_are_moved_into_folders_by_their_id(user_client):
+def test_calendars_are_moved_into_folders_by_their_id(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     calendar = create_calendar(user, "Work")
     folder = Folder.objects.create(user=user, name="Projects")
@@ -39,11 +42,11 @@ def test_calendars_are_moved_into_folders_by_their_id(user_client):
     assert membership.folder_id is None
 
 
-def listed(client):
+def listed(client: Client) -> dict[str, dict[str, Any]]:
     return {item["calendar"]["id"]: item["membership"] for item in client.get("/api/calendars").json()}
 
 
-def test_calendars_shared_through_a_group_are_moved_too(user_client):
+def test_calendars_shared_through_a_group_are_moved_too(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     owner = User.objects.create_user(email="owner@example.test", password="x", display_name="Owner")
     calendar = create_calendar(owner, "Team")
@@ -61,7 +64,7 @@ def test_calendars_shared_through_a_group_are_moved_too(user_client):
     assert CalendarMember.objects.get(calendar=calendar, user=user).source == "group"
 
 
-def test_calendars_without_access_get_no_place(user_client):
+def test_calendars_without_access_get_no_place(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     owner = User.objects.create_user(email="owner@example.test", password="x", display_name="Owner")
     calendar = create_calendar(owner, "Public")
@@ -72,7 +75,7 @@ def test_calendars_without_access_get_no_place(user_client):
     assert calendar.id not in listed(client)
 
 
-def test_folders_move_into_folders(user_client):
+def test_folders_move_into_folders(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     outer = Folder.objects.create(user=user, name="Outer")
     inner = Folder.objects.create(user=user, name="Inner")
@@ -81,7 +84,7 @@ def test_folders_move_into_folders(user_client):
     assert str(inner.parent_id) == str(outer.id)
 
 
-def test_other_users_sidebars_stay_as_they_are(user_client):
+def test_other_users_sidebars_stay_as_they_are(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     other = User.objects.create_user(email="other@example.test", password="x", display_name="Other")
     calendar = create_calendar(other, "Theirs")
@@ -90,15 +93,15 @@ def test_other_users_sidebars_stay_as_they_are(user_client):
     assert CalendarMember.objects.get(calendar=calendar, user=other).folder_id is None
 
 
-def patch(client, url, data):
+def patch(client: Client, url: str, data: dict[str, Any]) -> Response:
     return client.patch(f"/api{url}", data, content_type="application/json")
 
 
-def post(client, url, data):
+def post(client: Client, url: str, data: dict[str, Any]) -> Response:
     return client.post(f"/api{url}", data, content_type="application/json")
 
 
-def test_the_layout_comes_in_one_request(user_client):
+def test_the_layout_comes_in_one_request(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     calendar = create_calendar(user, "Work")
     folder = Folder.objects.create(user=user, name="Projects", position=1)
@@ -112,14 +115,14 @@ def test_the_layout_comes_in_one_request(user_client):
     ] == [("Work", str(folder.id), 2)]
 
 
-def test_the_layout_shows_only_the_users_own_folders(user_client):
+def test_the_layout_shows_only_the_users_own_folders(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     other = User.objects.create_user(email="other@example.test", password="x", display_name="Other")
     Folder.objects.create(user=other, name="Theirs")
     assert client.get("/api/layout").json()["folders"] == []
 
 
-def test_folders_are_created_renamed_and_deleted(user_client):
+def test_folders_are_created_renamed_and_deleted(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     outer = post(client, "/layout/folders", {"name": "Outer"}).json()
     inner = post(client, "/layout/folders", {"name": "Inner", "parent_id": outer["id"], "position": 1}).json()
@@ -137,7 +140,7 @@ def test_folders_are_created_renamed_and_deleted(user_client):
     assert [f["name"] for f in client.get("/api/layout").json()["folders"]] == ["Again"]
 
 
-def test_a_folder_cannot_go_into_itself_or_its_own_folders(user_client):
+def test_a_folder_cannot_go_into_itself_or_its_own_folders(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     outer = Folder.objects.create(user=user, name="Outer")
     inner = Folder.objects.create(user=user, name="Inner", parent=outer)
@@ -154,7 +157,7 @@ def test_a_folder_cannot_go_into_itself_or_its_own_folders(user_client):
     assert outer.parent_id is None
 
 
-def test_folders_of_other_users_are_not_usable(user_client):
+def test_folders_of_other_users_are_not_usable(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     other = User.objects.create_user(email="other@example.test", password="x", display_name="Other")
     theirs = Folder.objects.create(user=other, name="Theirs")
@@ -173,7 +176,7 @@ def test_folders_of_other_users_are_not_usable(user_client):
     assert CalendarMember.objects.get(calendar=calendar, user=user).folder_id is None
 
 
-def test_items_that_are_gone_are_skipped(user_client):
+def test_items_that_are_gone_are_skipped(user_client: tuple[User, Client]) -> None:
     user, client = user_client
     calendar = create_calendar(user, "Work")
     response = client.patch(

@@ -8,12 +8,13 @@ import pytest
 from django.test import Client
 
 from core.models import Calendar, CalendarMember, Category, Event, FeedToken, User
+from core.tests.helpers import World
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def calendar():
+def calendar() -> Calendar:
     owner = User.objects.create_user(email="owner@example.test", password="x")
     calendar = Calendar.objects.create(name="Team Ä", description="Our dates", owner=owner, event_color="#3372cc")
     CalendarMember.objects.create(calendar=calendar, user=owner, role="owner")
@@ -29,7 +30,7 @@ def calendar():
     return calendar
 
 
-def test_feed_names_the_calendar(calendar):
+def test_feed_names_the_calendar(calendar: Calendar) -> None:
     response = Client().get("/ics/tok.ics")
     assert response.status_code == 200
     assert response["Content-Type"] == "text/calendar; charset=utf-8"
@@ -40,7 +41,7 @@ def test_feed_names_the_calendar(calendar):
     assert "X-APPLE-CALENDAR-COLOR:#3372cc" in body
 
 
-def test_unchanged_feed_answers_not_modified(calendar):
+def test_unchanged_feed_answers_not_modified(calendar: Calendar) -> None:
     client = Client()
     first = client.get("/ics/tok.ics")
     assert first["Cache-Control"] == "no-cache"
@@ -55,7 +56,7 @@ def test_unchanged_feed_answers_not_modified(calendar):
     assert changed.status_code == 200 and changed["ETag"] != first["ETag"]
 
 
-def test_renaming_a_category_changes_the_feed(calendar):
+def test_renaming_a_category_changes_the_feed(calendar: Calendar) -> None:
     category = Category.objects.create(calendar=calendar, name="Work")
     Event.objects.filter(uid="m").update(category=category)  # as of the fixture: already in the feed
     client = Client()
@@ -66,11 +67,11 @@ def test_renaming_a_category_changes_the_feed(calendar):
     assert changed.status_code == 200 and "CATEGORIES:Office" in changed.content.decode()
 
 
-def test_unknown_feed(calendar):
+def test_unknown_feed(calendar: Calendar) -> None:
     assert Client().get("/ics/nope.ics").status_code == 404
 
 
-def test_feed_urls_are_personal_and_end_with_access(world):
+def test_feed_urls_are_personal_and_end_with_access(world: World) -> None:
     cal = world["cal"]["id"]
     owner, full = world["api"]["owner"], world["api"]["full"]
     mine = owner.get(f"/calendars/{cal}/feed-url").json()["feed_url"]
@@ -87,7 +88,7 @@ def test_feed_urls_are_personal_and_end_with_access(world):
     assert Client().get(f"/{mine_path}").status_code == 200
 
 
-def test_rotating_replaces_only_the_users_own_url(world):
+def test_rotating_replaces_only_the_users_own_url(world: World) -> None:
     cal = world["cal"]["id"]
     full = world["api"]["full"]
     old = full.get(f"/calendars/{cal}/feed-url").json()["feed_url"]
@@ -96,7 +97,7 @@ def test_rotating_replaces_only_the_users_own_url(world):
     assert Client().get("/" + old.split("://", 1)[1].split("/", 1)[1]).status_code == 404
 
 
-def test_a_member_added_again_gets_a_new_feed_url(world):
+def test_a_member_added_again_gets_a_new_feed_url(world: World) -> None:
     cal = world["cal"]["id"]
     owner, full = world["api"]["owner"], world["api"]["full"]
     old = full.get(f"/calendars/{cal}/feed-url").json()["feed_url"]

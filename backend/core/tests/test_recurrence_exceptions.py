@@ -2,12 +2,13 @@
 Changing and removing single occurrences of a series through the API.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
 from core.models import Event
-from core.tests.helpers import BASE, iso
+from core.tests.helpers import BASE, World, iso
 
 pytestmark = pytest.mark.django_db
 
@@ -15,7 +16,7 @@ DAY = timedelta(days=1)
 
 
 @pytest.fixture
-def series(world):
+def series(world: World) -> dict[str, Any]:
     """Five daily meetings from BASE (Monday 09:00 UTC) on, created by the owner."""
     owner = world["api"]["owner"]
     res = owner.post(
@@ -29,28 +30,30 @@ def series(world):
         },
     )
     assert res.status_code == 200, res.content
-    return res.json()
+    series: dict[str, Any] = res.json()
+    return series
 
 
-def occurrences(world, user="owner"):
+def occurrences(world: World, user: str = "owner") -> list[dict[str, Any]]:
     res = world["api"][user].get(
         f"/events?start={iso(BASE - DAY)}&end={iso(BASE + 30 * DAY)}&calendar_ids={world['cal']['id']}".replace(
             "+", "%2B"
         )
     )
     assert res.status_code == 200, res.content
-    return res.json()
+    found: list[dict[str, Any]] = res.json()
+    return found
 
 
-def summary(world):
+def summary(world: World) -> list[tuple[str, str]]:
     return [(o["start"][:16], o["title"]) for o in occurrences(world)]
 
 
-def occurrence_url(series, start, scope="this"):
+def occurrence_url(series: dict[str, Any], start: datetime, scope: str = "this") -> str:
     return f"/events/{series['id']}/occurrences/{iso(start).replace('+', '%2B')}?scope={scope}"
 
 
-def test_changing_one_occurrence(world, series):
+def test_changing_one_occurrence(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     third = BASE + 2 * DAY
     res = owner.patch(
@@ -81,7 +84,7 @@ def test_changing_one_occurrence(world, series):
     assert owner.patch(f"/events/{override['id']}", {"rrule": "FREQ=DAILY"}).status_code == 422
 
 
-def test_removing_one_occurrence(world, series):
+def test_removing_one_occurrence(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     assert owner.delete(occurrence_url(series, BASE + DAY)).status_code == 200
     assert [s for s, _ in summary(world)] == [
@@ -94,7 +97,7 @@ def test_removing_one_occurrence(world, series):
     assert owner.delete(occurrence_url(series, BASE + DAY)).status_code == 404
 
 
-def test_deleting_a_changed_occurrence_removes_it(world, series):
+def test_deleting_a_changed_occurrence_removes_it(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     override = owner.patch(occurrence_url(series, BASE + DAY), {"title": "Special"}).json()
     assert owner.delete(f"/events/{override['id']}").status_code == 200
@@ -102,7 +105,7 @@ def test_deleting_a_changed_occurrence_removes_it(world, series):
     assert Event.objects.get(id=series["id"]).exdates == [iso(BASE + DAY)]
 
 
-def test_changing_this_and_following(world, series):
+def test_changing_this_and_following(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     third = BASE + 2 * DAY
     res = owner.patch(
@@ -122,14 +125,14 @@ def test_changing_this_and_following(world, series):
     assert Event.objects.get(id=series["id"]).rrule == "FREQ=DAILY;UNTIL=20300109T085959Z"
 
 
-def test_following_from_the_first_occurrence_changes_the_series(world, series):
+def test_following_from_the_first_occurrence_changes_the_series(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     res = owner.patch(occurrence_url(series, BASE, "following"), {"title": "Renamed"})
     assert res.json()["id"] == series["id"]
     assert {t for _, t in summary(world)} == {"Renamed"}
 
 
-def test_moving_all_occurrences_keeps_the_changed_ones(world, series):
+def test_moving_all_occurrences_keeps_the_changed_ones(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     fourth = BASE + 3 * DAY
     owner.patch(occurrence_url(series, fourth), {"title": "Special"})
@@ -151,7 +154,7 @@ def test_moving_all_occurrences_keeps_the_changed_ones(world, series):
     assert stored.overrides.get().recurrence_id == fourth + timedelta(hours=1)
 
 
-def test_removing_this_and_following(world, series):
+def test_removing_this_and_following(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     owner.patch(occurrence_url(series, BASE + 3 * DAY), {"title": "Special"})
     assert owner.delete(occurrence_url(series, BASE + 2 * DAY, "following")).status_code == 200
@@ -162,19 +165,19 @@ def test_removing_this_and_following(world, series):
     assert not Event.objects.filter(id=series["id"]).exists()
 
 
-def test_occurrences_must_exist(world, series):
+def test_occurrences_must_exist(world: World, series: dict[str, Any]) -> None:
     owner = world["api"]["owner"]
     assert owner.patch(occurrence_url(series, BASE + timedelta(hours=5)), {"title": "x"}).status_code == 404
     assert owner.patch(occurrence_url(series, BASE + 10 * DAY), {"title": "x"}).status_code == 404
 
 
-def test_only_who_may_edit_the_series_changes_occurrences(world, series):
+def test_only_who_may_edit_the_series_changes_occurrences(world: World, series: dict[str, Any]) -> None:
     booker = world["api"]["booker"]
     assert booker.patch(occurrence_url(series, BASE), {"title": "x"}).status_code == 403
     assert booker.delete(occurrence_url(series, BASE)).status_code == 403
 
 
-def test_changed_booking_occurrence_needs_approval_again(world):
+def test_changed_booking_occurrence_needs_approval_again(world: World) -> None:
     room = world["resource"]("Room", requires_approval=True)
     booker = world["api"]["booker"]
     res = booker.post(
@@ -200,7 +203,7 @@ def test_changed_booking_occurrence_needs_approval_again(world):
     assert Event.objects.get(id=series["id"]).status == "approved"
 
 
-def test_approving_a_series_approves_its_waiting_occurrences(world):
+def test_approving_a_series_approves_its_waiting_occurrences(world: World) -> None:
     room = world["resource"]("Room", requires_approval=True)
     booker = world["api"]["booker"]
     series = booker.post(
@@ -219,7 +222,9 @@ def test_approving_a_series_approves_its_waiting_occurrences(world):
     assert Event.objects.get(id=override["id"]).status == "approved"
 
 
-def test_following_from_a_changed_occurrence_the_rule_no_longer_has_is_refused(world, series):
+def test_following_from_a_changed_occurrence_the_rule_no_longer_has_is_refused(
+    world: World, series: dict[str, Any]
+) -> None:
     """A CalDAV client may store a changed occurrence at a time the rule doesn't produce."""
     stray = BASE + 2 * DAY + timedelta(hours=3)
     parent = Event.objects.get(id=series["id"])

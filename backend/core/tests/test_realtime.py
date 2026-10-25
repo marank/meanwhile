@@ -4,6 +4,7 @@ Live updates over WebSockets, through the ASGI application the server runs.
 
 import base64
 from datetime import UTC, datetime
+from typing import Any, TypedDict
 
 import pytest
 from channels.db import database_sync_to_async
@@ -14,14 +15,23 @@ from django.test import Client
 from config.asgi import application
 from core.models import Calendar, CalendarMember, Event, Notification, User
 from core.services.reminders import deliver_due_reminders
+from core.tests.helpers import Response
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 ORIGIN = b"http://localhost:6326"
 
 
+class Team(TypedDict):
+    owner: User
+    other: User
+    calendar: Calendar
+    private: Calendar
+    session: str
+
+
 @pytest.fixture
-def team():
+def team() -> Team:
     owner = User.objects.create_user(email="owner@example.test", password="pw", display_name="Owner")
     other = User.objects.create_user(email="other@example.test", password="pw", display_name="Other")
     calendar = Calendar.objects.create(name="Team", owner=owner)
@@ -46,7 +56,7 @@ def socket(session: str | None = None, origin: bytes = ORIGIN) -> WebsocketCommu
     return WebsocketCommunicator(application, "/ws/", headers=headers)
 
 
-async def connected(team) -> WebsocketCommunicator:
+async def connected(team: Team) -> WebsocketCommunicator:
     communicator = socket(team["session"])
     accepted, _ = await communicator.connect()
     assert accepted
@@ -54,11 +64,12 @@ async def connected(team) -> WebsocketCommunicator:
     return communicator
 
 
-async def subscribe(communicator, *calendar_ids) -> list[str]:
+async def subscribe(communicator: WebsocketCommunicator, *calendar_ids: object) -> list[str]:
     await communicator.send_json_to({"type": "subscribe", "calendars": [str(i) for i in calendar_ids]})
     reply = await communicator.receive_json_from()
     assert reply["type"] == "subscribed"
-    return reply["calendars"]
+    calendars: list[str] = reply["calendars"]
+    return calendars
 
 
 @database_sync_to_async
@@ -74,20 +85,20 @@ def create_event(calendar: Calendar, title: str = "Meeting") -> Event:
     return event
 
 
-async def test_without_a_session_the_socket_closes(team):
+async def test_without_a_session_the_socket_closes(team: Team) -> None:
     communicator = socket()
     accepted, _ = await communicator.connect()
     assert accepted
     assert (await communicator.receive_output())["code"] == 4401
 
 
-async def test_pages_of_other_sites_cannot_connect(team):
+async def test_pages_of_other_sites_cannot_connect(team: Team) -> None:
     communicator = socket(team["session"], origin=b"https://evil.example")
     accepted, code = await communicator.connect()
     assert not accepted and code == 4403
 
 
-async def test_only_readable_calendars_are_followed(team):
+async def test_only_readable_calendars_are_followed(team: Team) -> None:
     communicator = await connected(team)
     assert await subscribe(communicator, team["calendar"].id, team["private"].id, "nonsense") == [
         str(team["calendar"].id)
@@ -95,7 +106,7 @@ async def test_only_readable_calendars_are_followed(team):
     await communicator.disconnect()
 
 
-async def test_changes_of_followed_calendars_arrive(team):
+async def test_changes_of_followed_calendars_arrive(team: Team) -> None:
     communicator = await connected(team)
     await subscribe(communicator, team["calendar"].id)
 
@@ -112,12 +123,12 @@ async def test_changes_of_followed_calendars_arrive(team):
     await communicator.disconnect()
 
 
-async def test_a_transaction_is_announced_once(team):
+async def test_a_transaction_is_announced_once(team: Team) -> None:
     communicator = await connected(team)
     await subscribe(communicator, team["calendar"].id)
 
     @database_sync_to_async
-    def several():
+    def several() -> None:
         with transaction.atomic():
             for i in range(3):
                 Event.objects.create(
@@ -135,12 +146,12 @@ async def test_a_transaction_is_announced_once(team):
     await communicator.disconnect()
 
 
-async def test_changes_rolled_back_are_not_announced(team):
+async def test_changes_rolled_back_are_not_announced(team: Team) -> None:
     communicator = await connected(team)
     await subscribe(communicator, team["calendar"].id)
 
     @database_sync_to_async
-    def rolled_back():
+    def rolled_back() -> None:
         with transaction.atomic():
             try:
                 with transaction.atomic():
@@ -171,12 +182,12 @@ async def test_changes_rolled_back_are_not_announced(team):
     await communicator.disconnect()
 
 
-async def test_losing_access_ends_the_subscription(team):
+async def test_losing_access_ends_the_subscription(team: Team) -> None:
     communicator = await connected(team)
     await subscribe(communicator, team["calendar"].id)
 
     @database_sync_to_async
-    def hand_over():
+    def hand_over() -> None:
         # The calendar goes to someone else; the former owner keeps no membership.
         CalendarMember.objects.filter(calendar=team["calendar"], user=team["owner"]).delete()
         Calendar.objects.filter(pk=team["calendar"].pk).update(owner=team["other"])
@@ -190,7 +201,7 @@ async def test_losing_access_ends_the_subscription(team):
     await communicator.disconnect()
 
 
-async def test_notifications_are_announced_to_their_user(team):
+async def test_notifications_are_announced_to_their_user(team: Team) -> None:
     communicator = await connected(team)
     await database_sync_to_async(Notification.objects.create)(user=team["owner"], type="comment_added", title="x")
     assert await communicator.receive_json_from() == {"type": "notifications.changed"}
@@ -199,13 +210,13 @@ async def test_notifications_are_announced_to_their_user(team):
     await communicator.disconnect()
 
 
-async def test_ping_checks_the_session(team):
+async def test_ping_checks_the_session(team: Team) -> None:
     communicator = await connected(team)
     await communicator.send_json_to({"type": "ping"})
     assert await communicator.receive_json_from() == {"type": "pong"}
 
     @database_sync_to_async
-    def log_out():
+    def log_out() -> None:
         from django.contrib.sessions.models import Session
 
         Session.objects.filter(session_key=team["session"]).delete()
@@ -215,7 +226,7 @@ async def test_ping_checks_the_session(team):
     assert (await communicator.receive_output())["code"] == 4401
 
 
-async def test_bad_messages_are_answered_not_fatal(team):
+async def test_bad_messages_are_answered_not_fatal(team: Team) -> None:
     communicator = await connected(team)
     await communicator.send_to(text_data="not json")
     assert (await communicator.receive_json_from())["type"] == "error"
@@ -228,7 +239,7 @@ async def test_bad_messages_are_answered_not_fatal(team):
     await communicator.disconnect()
 
 
-async def test_caldav_is_served_through_asgi(team):
+async def test_caldav_is_served_through_asgi(team: Team) -> None:
     auth = base64.b64encode(b"owner@example.test:pw")
     communicator = HttpCommunicator(
         application,
@@ -248,14 +259,14 @@ async def test_caldav_is_served_through_asgi(team):
     await communicator.wait()
 
 
-async def test_the_list_of_calendars_follows_access_and_settings(team):
+async def test_the_list_of_calendars_follows_access_and_settings(team: Team) -> None:
     from core.models import CalendarGroup, Folder, UserGroup
 
     communicator = await connected(team)
     expected = {"type": "calendars.changed"}
 
     @database_sync_to_async
-    def act(step):
+    def act(step: str) -> None:
         calendar, other = team["calendar"], team["other"]
         if step == "shared":
             CalendarMember.objects.create(calendar=calendar, user=team["other"], role="read")
@@ -291,11 +302,11 @@ async def test_the_list_of_calendars_follows_access_and_settings(team):
     await communicator.disconnect()
 
 
-async def test_reordering_the_sidebar_updates_the_users_other_tabs(team):
+async def test_reordering_the_sidebar_updates_the_users_other_tabs(team: Team) -> None:
     communicator = await connected(team)
 
     @database_sync_to_async
-    def reorder():
+    def reorder() -> Response:
         client = Client()
         client.force_login(team["owner"])
         return client.patch(
@@ -310,7 +321,7 @@ async def test_reordering_the_sidebar_updates_the_users_other_tabs(team):
 
 
 @database_sync_to_async
-def remind_in(team, minutes_from_now: int, before: int = 15) -> Event:
+def remind_in(team: Team, minutes_from_now: int, before: int = 15) -> Event:
     from datetime import timedelta
 
     from core.models import EventReminder
@@ -328,9 +339,9 @@ def remind_in(team, minutes_from_now: int, before: int = 15) -> Event:
     return event
 
 
-async def receive_until(communicator, message_type: str, limit: int = 6) -> dict:
+async def receive_until(communicator: WebsocketCommunicator, message_type: str, limit: int = 6) -> dict[str, Any]:
     for _ in range(limit):
-        message = await communicator.receive_json_from()
+        message: dict[str, Any] = await communicator.receive_json_from()
         if message["type"] == message_type:
             return message
     raise AssertionError(f"no {message_type} message")
@@ -343,7 +354,7 @@ def session_of(user: User) -> str:
     return client.cookies["sessionid"].value
 
 
-async def test_reminders_reach_every_connection_of_the_user_and_nobody_else(team):
+async def test_reminders_reach_every_connection_of_the_user_and_nobody_else(team: Team) -> None:
     first, second = await connected(team), await connected(team)
     other_socket = socket(await session_of(team["other"]))
     await other_socket.connect()

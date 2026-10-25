@@ -5,7 +5,7 @@ from core.tests.helpers import Api, make_user
 pytestmark = pytest.mark.django_db
 
 
-def test_calendar_url_path_can_be_set_and_cleared():
+def test_calendar_url_path_can_be_set_and_cleared() -> None:
     api = Api(make_user("owner"))
     calendar = api.post("/calendars", {"name": "Team"}).json()
 
@@ -18,7 +18,7 @@ def test_calendar_url_path_can_be_set_and_cleared():
     assert response.json()["url_path"] is None
 
 
-def test_calendar_url_path_must_be_unique_and_readable():
+def test_calendar_url_path_must_be_unique_and_readable() -> None:
     api = Api(make_user("owner"))
     first = api.post("/calendars", {"name": "First"}).json()
     second = api.post("/calendars", {"name": "Second"}).json()

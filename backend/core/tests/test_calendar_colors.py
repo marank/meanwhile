@@ -10,13 +10,13 @@ from core.tests.helpers import Api, make_user
 pytestmark = pytest.mark.django_db
 
 
-def test_new_calendars_start_with_the_default_preset():
+def test_new_calendars_start_with_the_default_preset() -> None:
     api = Api(make_user("owner"))
     calendar = api.post("/calendars", {"name": "Team"}).json()
     assert {field: calendar[field] for field in DEFAULT_COLORS} == DEFAULT_COLORS
 
 
-def test_colors_can_be_set_individually():
+def test_colors_can_be_set_individually() -> None:
     api = Api(make_user("owner"))
     calendar = api.post("/calendars", {"name": "Team"}).json()
     res = api.patch(f"/calendars/{calendar['id']}", {"event_color": "#123456", "dark_border_color": "#abcdef"})
@@ -25,14 +25,14 @@ def test_colors_can_be_set_individually():
     assert res.json()["dark_border_color"] == "#abcdef"
 
 
-def test_invalid_colors_are_rejected():
+def test_invalid_colors_are_rejected() -> None:
     api = Api(make_user("owner"))
     calendar = api.post("/calendars", {"name": "Team"}).json()
     res = api.patch(f"/calendars/{calendar['id']}", {"event_color": "red"})
     assert res.status_code == 422
 
 
-def test_occurrences_name_their_calendar():
+def test_occurrences_name_their_calendar() -> None:
     api = Api(make_user("owner"))
     calendar = api.post("/calendars", {"name": "Team"}).json()
     api.post(

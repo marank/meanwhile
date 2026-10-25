@@ -1,20 +1,22 @@
 """Resources can have an icon, which events and the resource pickers show before the name."""
 
 from datetime import timedelta
+from typing import Any
 
 import pytest
 
-from core.tests.helpers import BASE, iso
+from core.tests.helpers import BASE, Api, World, iso
 
 pytestmark = pytest.mark.django_db
 
 
-def occurrences_of(api, cal):
+def occurrences_of(api: Api, cal: dict[str, Any]) -> list[dict[str, Any]]:
     start, end = (iso(BASE + timedelta(days=d)).replace("+", "%2B") for d in (-1, 1))
-    return api.get(f"/events?calendar_ids={cal['id']}&start={start}&end={end}").json()
+    occurrences: list[dict[str, Any]] = api.get(f"/events?calendar_ids={cal['id']}&start={start}&end={end}").json()
+    return occurrences
 
 
-def test_a_resource_has_an_icon(world):
+def test_a_resource_has_an_icon(world: World) -> None:
     projector = world["resource"]("Projector", requires_approval=False, icon="projector")
     assert projector["icon"] == "projector"
     assert world["resource"]("Plain", requires_approval=False)["icon"] == ""
@@ -28,13 +30,13 @@ def test_a_resource_has_an_icon(world):
 
 
 @pytest.mark.parametrize("icon", ["Door", "door open", "door--open", "-door", "<svg>", "x" * 41])
-def test_icon_names_are_checked(world, icon):
+def test_icon_names_are_checked(world: World, icon: str) -> None:
     cal = world["cal"]
     res = world["api"]["full"].post(f"/calendars/{cal['id']}/resources", {"name": "R", "icon": icon})
     assert res.status_code == 422
 
 
-def test_searches_and_occurrences_carry_the_icon(world):
+def test_searches_and_occurrences_carry_the_icon(world: World) -> None:
     resource = world["resource"]("Projector", requires_approval=False, icon="projector")
     room = world["resource"]("Room", requires_approval=False, icon="door-open", is_location=True)
     cal, api = world["cal"], world["api"]["booker"]

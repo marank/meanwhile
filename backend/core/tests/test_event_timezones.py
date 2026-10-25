@@ -2,6 +2,8 @@
 Recurring events repeat in the zone they were planned in, not in UTC.
 """
 
+from typing import Any
+
 import pytest
 
 from core.models import Event
@@ -14,28 +16,30 @@ BERLIN = "Europe/Berlin"
 
 
 @pytest.fixture
-def owner():
+def owner() -> Api:
     return Api(make_user("owner"))
 
 
 @pytest.fixture
-def calendar(owner):
-    return owner.post("/calendars", {"name": "Team"}).json()
+def calendar(owner: Api) -> dict[str, Any]:
+    calendar: dict[str, Any] = owner.post("/calendars", {"name": "Team"}).json()
+    return calendar
 
 
-def create(owner, calendar, **fields):
+def create(owner: Api, calendar: dict[str, Any], **fields: Any) -> dict[str, Any]:
     res = owner.post(f"/calendars/{calendar['id']}/events", {"title": "Series", **fields})
     assert res.status_code == 200, res.content
-    return res.json()
+    event: dict[str, Any] = res.json()
+    return event
 
 
-def occurrence_starts(owner, calendar, start, end):
+def occurrence_starts(owner: Api, calendar: dict[str, Any], start: str, end: str) -> list[str]:
     res = owner.get(f"/calendars/{calendar['id']}/events?start={start}&end={end}")
     assert res.status_code == 200, res.content
     return [o["start"].replace("+00:00", "Z") for o in res.json()]
 
 
-def test_weekday_rules_use_the_local_weekday(owner, calendar):
+def test_weekday_rules_use_the_local_weekday(owner: Api, calendar: dict[str, Any]) -> None:
     # Wednesday 00:30 in Berlin is still Tuesday in UTC.
     create(
         owner,
@@ -49,7 +53,7 @@ def test_weekday_rules_use_the_local_weekday(owner, calendar):
     assert starts == ["2026-10-06T22:30:00Z", "2026-10-13T22:30:00Z", "2026-10-20T22:30:00Z"]
 
 
-def test_local_time_survives_daylight_saving_changes(owner, calendar):
+def test_local_time_survives_daylight_saving_changes(owner: Api, calendar: dict[str, Any]) -> None:
     # 09:00 in Berlin: 07:00 UTC in summer time, 08:00 UTC after the change on 25 October.
     create(
         owner, calendar, start="2026-10-19T07:00:00Z", end="2026-10-19T08:00:00Z", rrule="FREQ=WEEKLY", timezone=BERLIN
@@ -58,14 +62,14 @@ def test_local_time_survives_daylight_saving_changes(owner, calendar):
     assert starts == ["2026-10-19T07:00:00Z", "2026-10-26T08:00:00Z"]
 
 
-def test_events_without_a_zone_repeat_in_utc(owner, calendar):
+def test_events_without_a_zone_repeat_in_utc(owner: Api, calendar: dict[str, Any]) -> None:
     event = create(owner, calendar, start="2026-10-19T07:00:00Z", end="2026-10-19T08:00:00Z", rrule="FREQ=WEEKLY")
     assert event["timezone"] == "UTC"
     starts = occurrence_starts(owner, calendar, "2026-10-18T00:00:00Z", "2026-10-28T00:00:00Z")
     assert starts == ["2026-10-19T07:00:00Z", "2026-10-26T07:00:00Z"]
 
 
-def test_all_day_series_are_dates_regardless_of_the_zone(owner, calendar):
+def test_all_day_series_are_dates_regardless_of_the_zone(owner: Api, calendar: dict[str, Any]) -> None:
     create(
         owner,
         calendar,
@@ -79,7 +83,7 @@ def test_all_day_series_are_dates_regardless_of_the_zone(owner, calendar):
     assert starts == ["2026-10-07T00:00:00Z", "2026-10-14T00:00:00Z"]
 
 
-def test_unknown_zones_are_rejected(owner, calendar):
+def test_unknown_zones_are_rejected(owner: Api, calendar: dict[str, Any]) -> None:
     res = owner.post(
         f"/calendars/{calendar['id']}/events",
         {
@@ -92,7 +96,7 @@ def test_unknown_zones_are_rejected(owner, calendar):
     assert res.status_code == 422
 
 
-def test_the_zone_only_changes_along_with_the_schedule(owner, calendar):
+def test_the_zone_only_changes_along_with_the_schedule(owner: Api, calendar: dict[str, Any]) -> None:
     event = create(
         owner, calendar, start="2026-10-07T10:00:00Z", end="2026-10-07T11:00:00Z", rrule="FREQ=WEEKLY", timezone=BERLIN
     )
@@ -111,7 +115,7 @@ def test_the_zone_only_changes_along_with_the_schedule(owner, calendar):
     assert res.json()["timezone"] == "America/New_York"
 
 
-def test_ical_export_names_the_zone(owner, calendar):
+def test_ical_export_names_the_zone(owner: Api, calendar: dict[str, Any]) -> None:
     event = create(
         owner, calendar, start="2026-10-19T07:00:00Z", end="2026-10-19T08:00:00Z", rrule="FREQ=WEEKLY", timezone=BERLIN
     )

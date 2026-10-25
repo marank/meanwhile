@@ -5,13 +5,13 @@ The manage role: everything the owner may in a calendar, except deleting it and 
 import pytest
 
 from core.models import CalendarGroup, UserGroup
-from core.tests.helpers import make_user
+from core.tests.helpers import Api, World, make_user
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def manager(world):
+def manager(world: World) -> Api:
     """ "outsider" manages the calendar, through a group, as managing can be granted like any role."""
     group = UserGroup.objects.create(name="Leads")
     world["users"]["outsider"].groups.add(group)
@@ -19,7 +19,7 @@ def manager(world):
     return world["api"]["outsider"]
 
 
-def test_managers_change_settings_access_feed_and_approvers(world, manager):
+def test_managers_change_settings_access_feed_and_approvers(world: World, manager: Api) -> None:
     cal = world["cal"]["id"]
     users = world["users"]
 
@@ -34,13 +34,13 @@ def test_managers_change_settings_access_feed_and_approvers(world, manager):
     assert manager.put(f"/calendars/{cal}/approvers", {"user_ids": [str(users["approver"].id)]}).status_code == 200
 
 
-def test_managers_change_all_events(world, manager):
+def test_managers_change_all_events(world: World, manager: Api) -> None:
     res = world["book"](world["api"]["booker"], None)
     assert res.status_code == 200, res.content
     assert manager.patch(f"/events/{res.json()['id']}", {"title": "Changed"}).status_code == 200
 
 
-def test_only_the_owner_deletes_the_calendar_or_is_owner(world, manager):
+def test_only_the_owner_deletes_the_calendar_or_is_owner(world: World, manager: Api) -> None:
     cal = world["cal"]["id"]
     owner_id = world["users"]["owner"].id
     me = world["users"]["outsider"].id
@@ -55,19 +55,19 @@ def test_only_the_owner_deletes_the_calendar_or_is_owner(world, manager):
     assert world["api"]["owner"].patch(f"/calendars/{cal}/members/{other}", {"role": "owner"}).status_code == 400
 
 
-def test_public_access_never_manages(world):
+def test_public_access_never_manages(world: World) -> None:
     res = world["api"]["owner"].patch(f"/calendars/{world['cal']['id']}", {"is_public": True, "public_role": "manage"})
     assert res.status_code == 422
 
 
-def test_full_access_does_not_manage(world):
+def test_full_access_does_not_manage(world: World) -> None:
     full = world["api"]["full"]
     cal = world["cal"]["id"]
     assert full.patch(f"/calendars/{cal}", {"name": "Renamed"}).status_code == 403
     assert full.patch(f"/calendars/{cal}/members/{world['users']['other'].id}", {"role": "full"}).status_code == 403
 
 
-def test_only_managers_change_how_resources_are_approved(world, manager):
+def test_only_managers_change_how_resources_are_approved(world: World, manager: Api) -> None:
     cal = world["cal"]["id"]
     room = world["resource"]("Room")
     full = world["api"]["full"]
@@ -83,7 +83,7 @@ def test_only_managers_change_how_resources_are_approved(world, manager):
     assert manager.put(f"{url}/approvers", {"user_ids": [str(world["users"]["approver"].id)]}).status_code == 200
 
 
-def test_demoted_creators_no_longer_change_their_events(world):
+def test_demoted_creators_no_longer_change_their_events(world: World) -> None:
     cal = world["cal"]["id"]
     booker = world["api"]["booker"]
     res = world["book"](booker, None)

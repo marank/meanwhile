@@ -5,12 +5,12 @@ Optional texts are stored as "" (never NULL); clients may still send null for "n
 import pytest
 
 from core.models import Calendar, Event
-from core.tests.helpers import BASE, iso
+from core.tests.helpers import BASE, World, iso
 
 pytestmark = pytest.mark.django_db
 
 
-def test_null_texts_are_stored_empty(world):
+def test_null_texts_are_stored_empty(world: World) -> None:
     owner, cal = world["api"]["owner"], world["cal"]["id"]
     assert owner.patch(f"/calendars/{cal}", {"description": None}).json()["description"] == ""
     assert Calendar.objects.get(id=cal).description == ""
@@ -30,7 +30,7 @@ def test_null_texts_are_stored_empty(world):
     assert Event.objects.get(id=event["id"]).description == ""
 
 
-def test_app_settings_accept_null_urls(world):
+def test_app_settings_accept_null_urls(world: World) -> None:
     world["users"]["owner"].is_admin = True
     world["users"]["owner"].save()
     res = world["api"]["owner"].patch("/admin/settings", {"logo_url": None, "favicon_url": None})

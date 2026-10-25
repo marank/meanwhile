@@ -3,21 +3,23 @@ Passwords: changed in the account settings, or set anew from a link sent by emai
 """
 
 import re
+from typing import Any
 
 import pytest
 from django.core import mail
 from django.test import Client
+from pytest_django.fixtures import Settings
 
-from core.tests.helpers import make_user
+from core.tests.helpers import Response, make_user
 
 pytestmark = pytest.mark.django_db
 
 
-def post(client: Client, url: str, data: dict):
+def post(client: Client, url: str, data: dict[str, Any]) -> Response:
     return client.post(url, data, content_type="application/json")
 
 
-def test_users_change_their_password_and_stay_signed_in():
+def test_users_change_their_password_and_stay_signed_in() -> None:
     user = make_user("someone")
     client = Client()
     client.force_login(user)
@@ -48,7 +50,7 @@ def request_link(email: str) -> str | None:
     return match.group(1)
 
 
-def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings):
+def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings: Settings) -> None:
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     user = make_user("someone")
     key = request_link("SOMEONE@example.test")
@@ -68,7 +70,7 @@ def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings):
     )
 
 
-def test_made_up_keys_change_nothing(settings):
+def test_made_up_keys_change_nothing(settings: Settings) -> None:
     user = make_user("someone")
     for key in ("nonsense", f"{user.pk.hex}-abc-def", "x-y"):
         assert (
@@ -79,12 +81,12 @@ def test_made_up_keys_change_nothing(settings):
     assert user.check_password("x")
 
 
-def test_unknown_addresses_get_no_mail_and_the_same_answer(settings):
+def test_unknown_addresses_get_no_mail_and_the_same_answer(settings: Settings) -> None:
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     assert request_link("nobody@example.test") is None
 
 
-def test_the_link_comes_in_the_accounts_language(settings):
+def test_the_link_comes_in_the_accounts_language(settings: Settings) -> None:
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     user = make_user("someone")
     user.language = "de"
