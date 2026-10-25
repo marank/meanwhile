@@ -93,7 +93,7 @@ function onKeydown(event: KeyboardEvent) {
         role="menuitem"
         tabindex="-1"
         :data-tone="item.danger ? 'danger' : undefined"
-        class="block w-full whitespace-nowrap px-3 py-2 text-left text-sm hover:bg-hover focus:bg-hover focus:outline-none"
+        class="block w-full whitespace-nowrap px-3 py-2 text-left text-sm hover:bg-hover focus:outline-none focus-visible:bg-hover"
         :class="item.danger ? 'text-red-600' : 'text-gray-700'"
         @click="choose(item)"
       >
