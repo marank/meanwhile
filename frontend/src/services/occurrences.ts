@@ -1,4 +1,4 @@
-import type { OccurrenceScope } from '@/api'
+import type { Occurrence, OccurrenceScope } from '@/api'
 import { i18n } from '@/i18n'
 import { choose } from './dialog'
 
@@ -7,6 +7,12 @@ export interface OccurrenceRef {
   recurrenceId: string
   start: string
   end: string
+}
+
+/** An occurrence of a series (not a changed one, which is an event of its own). */
+export function seriesOccurrence(occ: Occurrence): OccurrenceRef | null {
+  if (!occ.series_id || occ.series_id !== occ.event_id || !occ.recurrence_id) return null
+  return { recurrenceId: occ.recurrence_id, start: occ.start, end: occ.end }
 }
 
 /**
