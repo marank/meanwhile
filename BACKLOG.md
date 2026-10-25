@@ -44,6 +44,10 @@ Features and improvements proposed for future releases.
 24. **Rate-limit failed CalDAV logins** — Radicale waits about a second after every failed login. Since the move to ASGI, CalDAV requests run in their own thread pool (20 threads per process), so they no longer hold up the app and API, but a flood of wrong logins can still occupy that pool. Rate-limit `/caldav` in the reverse proxy (e.g. nginx `limit_req`, or fail2ban on 401 answers).
 25. **Approvers who lose access through a group** — removing a member removes them as an approver unless they keep access some other way. Losing access *through a group* (the group link removed, or the user taken out of the group) doesn't: the user stays listed as approver of the calendar and its resources, although they can no longer decide on bookings, and are notified of requests. Clean up the approver entries when a group link or a group membership ends, for those who then have no access left.
 
+### Code quality
+
+26. **oxlint warnings fail CI** — `pnpm lint` passes with warnings, so they pile up unnoticed in the CI log. Run oxlint with `--deny-warnings` in `frontend/package.json` (the `lint` script, which CI and the VS Code check task run). Two warnings are there today: `unicorn(no-useless-spread)` in `saveParticipants` (`frontend/src/components/event/EventModal.vue`). The copies are deliberate (the loops go over a snapshot while the lists shrink), so silence the rule there with a comment rather than removing them.
+
 ## Known v1 limitations
 
 - No automatically created personal calendar (by design).
