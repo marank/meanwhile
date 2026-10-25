@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { i18n } from '@/i18n'
 import { dialog, submitDialog } from '../dialog'
-import { chooseScope } from '../occurrences'
+import { at, occurrence } from '@/components/calendar/__tests__/calendarFixtures'
+import { chooseScope, seriesOccurrence } from '../occurrences'
 
 beforeEach(() => {
   i18n.global.locale.value = 'en'
@@ -31,5 +32,18 @@ describe('chooseScope', () => {
     expect(dialog.choices.map((choice) => choice.value)).toEqual(['following', 'all'])
     submitDialog(null)
     await expect(answer).resolves.toBeNull()
+  })
+})
+
+describe('seriesOccurrence', () => {
+  it('refers to an occurrence of a series, not to a changed one or a single event', () => {
+    const series = occurrence({ event_id: 's1', series_id: 's1', recurrence_id: at(2026, 10, 14, 10) })
+    expect(seriesOccurrence(series)).toEqual({
+      recurrenceId: series.recurrence_id,
+      start: series.start,
+      end: series.end,
+    })
+    expect(seriesOccurrence({ ...series, event_id: 'x1' })).toBeNull()
+    expect(seriesOccurrence(occurrence())).toBeNull()
   })
 })
