@@ -66,6 +66,12 @@ const router = createRouter({
       props: true,
     },
     {
+      path: '/calendar/:calendarId/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      props: true,
+    },
+    {
       path: '/calendar/folder/:folderId',
       name: 'folder',
       component: () => import('@/views/CalendarView.vue'),
@@ -75,12 +81,6 @@ const router = createRouter({
       path: '/notifications',
       name: 'notifications',
       component: () => import('@/views/NotificationsView.vue'),
-    },
-    {
-      path: '/settings/:calendarId',
-      name: 'settings',
-      component: () => import('@/views/SettingsView.vue'),
-      props: true,
     },
     {
       path: '/account',

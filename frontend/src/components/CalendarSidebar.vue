@@ -136,7 +136,7 @@ function calendarMenuItems(item: CalendarListItem): MenuItem[] {
   return [
     { label: t('app.rename'), action: () => renameCalendar(item) },
     ...(role === 'owner' ? [{ label: t('app.delete'), action: () => deleteCalendar(item) }] : []),
-    { label: t('app.settings'), action: () => router.push(`/settings/${item.calendar.id}`) },
+    { label: t('app.settings'), action: () => router.push(`/calendar/${item.calendar.id}/settings`) },
   ]
 }
 

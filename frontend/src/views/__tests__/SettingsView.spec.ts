@@ -11,11 +11,11 @@ import SettingsView from '../SettingsView.vue'
 
 let backend: FakeBackend
 
-async function open(path = '/settings/cal', history = createMemoryHistory()) {
+async function open(path = '/calendar/cal/settings', history = createMemoryHistory()) {
   const router = createRouter({
     history,
     routes: [
-      { path: '/settings/:calendarId', component: SettingsView, props: true },
+      { path: '/calendar/:calendarId/settings', component: SettingsView, props: true },
       { path: '/calendar/:id?', component: { render: () => h('p', 'calendar page') } },
     ],
   })
@@ -87,7 +87,7 @@ describe('calendar settings page', () => {
   })
 
   it('opens the tab named in the URL, and the first one for an unknown name', async () => {
-    const { wrapper, router } = await open('/settings/cal?tab=share')
+    const { wrapper, router } = await open('/calendar/cal/settings?tab=share')
     expect(wrapper.text()).toContain('https://cal.test/feed.ics')
     await router.replace({ query: { tab: 'nonsense' } })
     await flushPromises()
@@ -130,7 +130,7 @@ describe('calendar settings page', () => {
       () => new Promise((resolve) => (answerFirst = () => resolve(calendar({ name: 'Late' })))),
     )
     const { wrapper, router } = await open()
-    await router.push('/settings/other')
+    await router.push('/calendar/other/settings')
     await flushPromises()
     expect(title(wrapper)).toBe('Settings: Other')
     answerFirst()
@@ -143,7 +143,7 @@ describe('calendar settings page', () => {
     let failFirst!: () => void
     backend.on('GET /api/calendars/cal', () => new Promise((resolve) => (failFirst = () => resolve(reply(500)))))
     const { wrapper, router } = await open()
-    await router.push('/settings/other')
+    await router.push('/calendar/other/settings')
     await flushPromises()
     failFirst()
     await flushPromises()
@@ -163,7 +163,7 @@ describe('calendar settings page', () => {
   it('goes back to where it was opened from', async () => {
     // Only the browser's history knows the page before.
     const { wrapper, router } = await open('/calendar', createWebHistory())
-    await router.push('/settings/cal')
+    await router.push('/calendar/cal/settings')
     await flushPromises()
     await buttonNamed(wrapper, 'Back').trigger('click')
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/calendar'))

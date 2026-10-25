@@ -39,7 +39,7 @@ describe('router', () => {
   describe('signed out', () => {
     beforeEach(() => session(null))
 
-    it.each(['/', '/calendar', '/calendar/c1', '/notifications', '/settings/c1', '/account', '/admin'])(
+    it.each(['/', '/calendar', '/calendar/c1', '/notifications', '/calendar/c1/settings', '/account', '/admin'])(
       'sends %s to the login',
       async (path) => {
         expect(await visit(path)).toBe('/login')
@@ -62,7 +62,7 @@ describe('router', () => {
       expect(await visit('/')).toBe('/calendar')
     })
 
-    it.each(['/calendar/c1', '/calendar/folder/f1', '/notifications', '/settings/c1', '/account'])(
+    it.each(['/calendar/c1', '/calendar/folder/f1', '/notifications', '/calendar/c1/settings', '/account'])(
       'shows %s',
       async (path) => {
         expect(await visit(path)).toBe(path)

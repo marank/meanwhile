@@ -35,7 +35,7 @@ async function render() {
     routes: [
       { path: '/calendar/folder/:folderId', component: Page },
       { path: '/calendar/:calendarId(.*)?', component: Page },
-      { path: '/settings/:calendarId', component: Page },
+      { path: '/calendar/:calendarId/settings', component: Page },
     ],
   })
   await router.push('/calendar')
@@ -177,7 +177,7 @@ describe('CalendarSidebar', () => {
     await row(wrapper, 'mine').trigger('contextmenu', { clientX: 40, clientY: 50 })
     await choose(wrapper, 'Settings')
     await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/settings/mine')
+    expect(router.currentRoute.value.fullPath).toBe('/calendar/mine/settings')
   })
 
   it('lets managers change a calendar but not delete it, and gives others no menu', async () => {
