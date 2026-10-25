@@ -234,15 +234,30 @@ def expand_event(
     return occurrences
 
 
+# dateutil iterates a recurrence from its start, so the position of an occurrence, or the count up
+# to it, costs one step per occurrence in between. This caps that work: an instant beyond this many
+# occurrences is not treated as an individually addressable occurrence. Without the cap a far-future
+# recurrence_id (e.g. in the year 9999 of an hourly series) would make one request enumerate tens of
+# millions of occurrences — a denial of service. Generous for real edits: 10k occurrences is over a
+# year even for an hourly series, far longer for daily or weekly ones.
+MAX_OCCURRENCE_SCAN = 10_000
+
+
 def occurrence_index(event: Event, start: datetime) -> int | None:
-    """Position of the occurrence starting at `start` in the series (0 is the first), or None
-    if the series has no occurrence then. Removed and overridden occurrences count."""
+    """Position of the occurrence starting at `start` in the series (0 is the first), or None if the
+    series has no occurrence then or it lies beyond MAX_OCCURRENCE_SCAN occurrences. Removed and
+    overridden occurrences count."""
     if not is_series(event):
         return 0 if event.start == start else None
-    starts = _rule(event, event.start).between(event.start, start, inc=True)
-    if not starts or starts[-1] != start:
-        return None
-    return len(starts) - 1
+    start = as_utc(start)
+    rule = _rule(event, event.start)
+    for index, occurrence in enumerate(islice(rule.xafter(event.start, inc=True), MAX_OCCURRENCE_SCAN)):
+        instant = as_utc(occurrence)
+        if instant == start:
+            return index
+        if instant > start:
+            break
+    return None
 
 
 def occurrence_starts(event: Event, after: datetime, exclude: set[datetime] | None = None) -> Iterator[datetime]:
@@ -265,6 +280,8 @@ def occurrence_starts(event: Event, after: datetime, exclude: set[datetime] | No
 def nth_occurrence(event: Event, index: int) -> datetime | None:
     if not is_series(event):
         return as_utc(event.start) if index == 0 else None
+    if index >= MAX_OCCURRENCE_SCAN:
+        return None
     found = next(islice(iter(_rule(event, event.start)), index, None), None)
     return as_utc(found) if found is not None else None
 
@@ -272,8 +289,14 @@ def nth_occurrence(event: Event, index: int) -> datetime | None:
 def recurrence_count(event: Event, occurrence_start: datetime) -> int:
     if not is_series(event):
         return 0
+    occurrence_start = as_utc(occurrence_start)
     rule = _rule(event, event.start)
-    return max(0, len(rule.between(event.start, occurrence_start, inc=True)) - 1)
+    count = 0
+    for occurrence in islice(rule.xafter(event.start, inc=True), MAX_OCCURRENCE_SCAN):
+        if as_utc(occurrence) >= occurrence_start:
+            break
+        count += 1
+    return count
 
 
 def expand_events(
