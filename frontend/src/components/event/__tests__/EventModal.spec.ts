@@ -208,6 +208,28 @@ describe('EventModal', () => {
       expect(backend.calls('POST /api/calendars/cal1/events')).toHaveLength(0)
     })
 
+    it('moves the end along with the start, keeping the duration', async () => {
+      serve()
+      await openNew()
+      await timeField('Start').setValue('14:30')
+      expect((timeField('End').element as HTMLInputElement).value).toBe('15:30')
+      expect(page().find('[role="alert"]').exists()).toBe(false)
+      await timeField('End').setValue('17:00')
+      await timeField('Start').setValue('23:00')
+      expect((field('End').element as HTMLInputElement).value).toBe('2026-03-11')
+      expect((timeField('End').element as HTMLInputElement).value).toBe('01:30')
+      // An end set before the start: a new start gets an hour.
+      await field('End').setValue('2026-03-10')
+      await timeField('End').setValue('08:00')
+      await timeField('Start').setValue('10:00')
+      expect((field('End').element as HTMLInputElement).value).toBe('2026-03-10')
+      expect((timeField('End').element as HTMLInputElement).value).toBe('11:00')
+      await page().get('[role="switch"]').trigger('click')
+      await field('End').setValue('2026-03-12')
+      await field('Start').setValue('2026-03-20')
+      expect((field('End').element as HTMLInputElement).value).toBe('2026-03-22')
+    })
+
     it('takes typed text as the place, and a picked place as a booking', async () => {
       serve(calendar(), event(), {
         'POST /api/calendars/cal1/events': event(),
@@ -309,9 +331,40 @@ describe('EventModal', () => {
       })
     })
 
+    it('opens with its form, the title field focused', async () => {
+      serve()
+      wrapper = mount(EventModal, {
+        props: { calendarId: 'cal1', defaultStart: new Date('2026-03-10T09:00') },
+        global: { plugins: [i18n] },
+        attachTo: document.body,
+      })
+      // Not shown with only "Loading…" in it while the calendar is on its way.
+      expect(page().find('[role="dialog"]').exists()).toBe(false)
+      await flushPromises()
+      expect(page().find('[role="dialog"]').exists()).toBe(true)
+      expect(document.activeElement).toBe(field('Title').element)
+    })
+
+    it('shows that it is loading when the calendar takes a while, then focuses the title', async () => {
+      let answer: (value: api.Calendar) => void = () => {}
+      serve(calendar(), event(), {
+        'GET /api/calendars/cal1': () => new Promise<api.Calendar>((resolve) => (answer = resolve)),
+      })
+      await openNew()
+      expect(page().find('[role="dialog"]').exists()).toBe(false)
+      vi.advanceTimersByTime(300)
+      await flushPromises()
+      expect(text()).toContain('Loading…')
+      answer(calendar())
+      await flushPromises()
+      expect(document.activeElement).toBe(field('Title').element)
+    })
+
     it('waits for a calendar to put it in', async () => {
       const backend = serve()
       await open({})
+      vi.advanceTimersByTime(300)
+      await flushPromises()
       expect(text()).toContain('Loading…')
       expect(backend.requests.filter((r) => r.path !== '/api/search')).toHaveLength(0)
     })

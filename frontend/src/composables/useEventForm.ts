@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type * as api from '@/api'
 import type { OccurrenceRef } from '@/services/occurrences'
 import { browserTimeZone, toDateInputValue, toTimeInputValue } from '@/services/datetime'
@@ -62,6 +62,46 @@ export function useEventForm() {
     () => !!form.locationResourceId && selectedLocation.value?.meta?.requires_approval === true,
   )
 
+  // All-day dates are counted as UTC midnights, so a DST change doesn't shift them by an hour.
+  const startMs = () =>
+    new Date(form.allDay ? `${form.startDate}T00:00:00Z` : `${form.startDate}T${form.startTime}`).getTime()
+  const endMs = () => new Date(form.allDay ? `${form.endDate}T00:00:00Z` : `${form.endDate}T${form.endTime}`).getTime()
+
+  // A changed start moves the end along, keeping the duration, so the end isn't reported as before the start
+  // before it was even touched. Filling the form sets both itself.
+  let filling = false
+  let lastStart = Number.NaN
+  function fill(apply: () => void) {
+    filling = true
+    apply()
+    filling = false
+    lastStart = startMs()
+  }
+  watch(
+    () => [form.startDate, form.startTime],
+    () => {
+      const start = startMs()
+      if (filling || Number.isNaN(start)) return
+      const duration = endMs() - lastStart
+      lastStart = start
+      if (Number.isNaN(duration)) return
+      const end = new Date(start + (duration >= 0 ? duration : form.allDay ? 0 : HOUR_MS))
+      if (form.allDay) {
+        form.endDate = end.toISOString().slice(0, 10)
+      } else {
+        form.endDate = toDateInputValue(end)
+        form.endTime = toTimeInputValue(end)
+      }
+    },
+    { flush: 'sync' },
+  )
+  // All-day starts are counted differently.
+  watch(
+    () => form.allDay,
+    () => (lastStart = startMs()),
+    { flush: 'sync' },
+  )
+
   function setLocalRange(start: Date, end: Date) {
     form.startDate = toDateInputValue(start)
     form.startTime = toTimeInputValue(start)
@@ -70,6 +110,10 @@ export function useEventForm() {
   }
 
   function fillFromEvent(value: api.Event, forceAllDay: boolean) {
+    fill(() => fillEventFields(value, forceAllDay))
+  }
+
+  function fillEventFields(value: api.Event, forceAllDay: boolean) {
     form.title = value.title
     form.description = value.description
     form.allDay = forceAllDay || value.all_day
@@ -89,19 +133,23 @@ export function useEventForm() {
 
   /** Shows the opened occurrence's times instead of those of the series' first occurrence. */
   function fillFromOccurrence(occurrence: OccurrenceRef) {
-    if (form.allDay) {
-      // Occurrence ends of all-day events are exclusive; the form shows the last day.
-      form.startDate = occurrence.start.slice(0, 10)
-      form.endDate = new Date(new Date(occurrence.end).getTime() - DAY_MS).toISOString().slice(0, 10)
-    } else {
-      setLocalRange(new Date(occurrence.start), new Date(occurrence.end))
-    }
+    fill(() => {
+      if (form.allDay) {
+        // Occurrence ends of all-day events are exclusive; the form shows the last day.
+        form.startDate = occurrence.start.slice(0, 10)
+        form.endDate = new Date(new Date(occurrence.end).getTime() - DAY_MS).toISOString().slice(0, 10)
+      } else {
+        setLocalRange(new Date(occurrence.start), new Date(occurrence.end))
+      }
+    })
   }
 
   /** A new event: an hour from `start` unless an end is given. */
   function fillDefaults(start: Date, end: Date | undefined, allDay: boolean) {
-    form.allDay = allDay
-    setLocalRange(start, end ?? new Date(start.getTime() + HOUR_MS))
+    fill(() => {
+      form.allDay = allDay
+      setLocalRange(start, end ?? new Date(start.getTime() + HOUR_MS))
+    })
   }
 
   function loadRrule(value: string) {

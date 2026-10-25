@@ -31,7 +31,7 @@ const fieldId = useId()
     <section class="space-y-3">
       <label class="block">
         <span class="block text-sm font-medium text-gray-700">{{ $t('event.title') }}</span>
-        <input v-model="form.title" class="mt-1 w-full rounded-lg border px-3 py-2" />
+        <input v-model="form.title" data-autofocus class="mt-1 w-full rounded-lg border px-3 py-2" />
       </label>
 
       <div>

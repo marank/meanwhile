@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as api from '@/api'
 import AppModal from '@/components/AppModal.vue'
@@ -152,6 +152,14 @@ const { busy, error, save, remove, decide } = useEventSave({
   onDeleted: () => emit('deleted'),
 })
 
+// The dialog opens once its calendar is there, so it doesn't flash up small with only "Loading…" in it
+// first; only a slow answer shows it before then.
+const SHOW_LOADING_AFTER_MS = 300
+const loadingShown = ref(false)
+const loadingTimer = setTimeout(() => (loadingShown.value = true), SHOW_LOADING_AFTER_MS)
+onBeforeUnmount(() => clearTimeout(loadingTimer))
+const ready = computed(() => !!calendar.value || !!error.value || loadingShown.value)
+
 onMounted(async () => {
   try {
     if (props.eventId) event.value = await api.getEvent(props.eventId)
@@ -166,6 +174,9 @@ onMounted(async () => {
   else if (props.defaultStart)
     fillDefaults(props.defaultStart, props.defaultEnd, forceAllDay.value || !!props.defaultAllDay)
   if (seriesOccurrence.value) fillFromOccurrence(seriesOccurrence.value)
+  // Shown early, the dialog had no title field to focus yet.
+  if (loadingShown.value)
+    nextTick(() => panel.value?.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)')?.focus())
   if (event.value?.rrule) loadRrule(event.value.rrule)
   if (event.value) {
     const eventId = event.value.id
@@ -177,7 +188,7 @@ onMounted(async () => {
 
 <template>
   <AppModal
-    open
+    :open="ready"
     size="2xl"
     fullscreen-on-phone
     :dismissible="false"

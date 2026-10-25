@@ -67,9 +67,14 @@ watch(
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     await nextTick()
     if (!panel.value || panel.value.contains(document.activeElement)) return
-    // The content rather than the close button in the header comes first, e.g. a prompt's input.
+    // A field marked `data-autofocus` comes first, then the content rather than the close button in the
+    // header, e.g. a prompt's input.
     const elements = focusable()
-    const target = elements.find((el) => !el.closest('[data-modal-header]')) ?? elements[0] ?? panel.value
+    const target =
+      panel.value.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)') ??
+      elements.find((el) => !el.closest('[data-modal-header]')) ??
+      elements[0] ??
+      panel.value
     target.focus()
   },
   { immediate: true },
