@@ -132,7 +132,7 @@ const calendarStyle = computed(() => ({
 
 <template>
   <div class="calendar-root h-full flex flex-col" :style="calendarStyle">
-    <div class="flex flex-1 flex-col overflow-hidden p-2">
+    <div class="mx-auto flex w-full max-w-[100rem] flex-1 flex-col overflow-hidden p-2">
       <CalendarToolbar
         v-bind="shownToolbar"
         @prev="nav.goPrev"
