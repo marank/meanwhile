@@ -9,48 +9,52 @@ events) are sent once.
 """
 
 import logging
+from collections.abc import Iterable
+from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import transaction
 
+from core.models.base import AnyId
+
 logger = logging.getLogger(__name__)
 
 
-def calendar_group(calendar_id) -> str:
+def calendar_group(calendar_id: AnyId) -> str:
     return f"calendar.{calendar_id}"
 
 
-def user_group(user_id) -> str:
+def user_group(user_id: AnyId) -> str:
     return f"user.{user_id}"
 
 
-def calendar_changed(calendar_id) -> None:
+def calendar_changed(calendar_id: AnyId | None) -> None:
     """The events of the calendar changed."""
     if calendar_id:
         _queue(calendar_group(calendar_id), {"type": "calendar.changed", "calendar_id": str(calendar_id)})
 
 
-def notifications_changed(user_id) -> None:
+def notifications_changed(user_id: AnyId | None) -> None:
     """The user has new or changed notifications."""
     if user_id:
         _queue(user_group(user_id), {"type": "notifications.changed"})
 
 
-def calendars_changed(user_ids) -> None:
+def calendars_changed(user_ids: Iterable[AnyId | None]) -> None:
     """The users' lists of calendars and folders changed (access, names, colors, order)."""
     for user_id in set(user_ids):
         if user_id:
             _queue(user_group(user_id), {"type": "calendars.changed"})
 
 
-def reminders_due(user_id, reminders: list[dict]) -> None:
+def reminders_due(user_id: AnyId | None, reminders: list[dict[str, Any]]) -> None:
     """Reminders of the user came due: their tabs show them."""
     if user_id and reminders:
         _queue(user_group(user_id), {"type": "reminders.due", "reminders": reminders})
 
 
-def _queue(group: str, message: dict) -> None:
+def _queue(group: str, message: dict[str, Any]) -> None:
     # Kept by group and type: one message of each kind per transaction, none taking another's place.
     key = (group, message["type"])
     connection = transaction.get_connection()
@@ -61,7 +65,7 @@ def _queue(group: str, message: dict) -> None:
     # (its savepoint was rolled back) is replaced, so later changes still go out.
     batch = getattr(connection, "_live_updates", None)
     if batch is None or not any(entry[1] is batch["flush"] for entry in connection.run_on_commit):
-        messages: dict[tuple[str, str], dict] = {}
+        messages: dict[tuple[str, str], dict[str, Any]] = {}
 
         def flush() -> None:
             connection._live_updates = None
@@ -72,7 +76,7 @@ def _queue(group: str, message: dict) -> None:
     batch["messages"][key] = message
 
 
-def _send(messages: dict[tuple[str, str], dict]) -> None:
+def _send(messages: dict[tuple[str, str], dict[str, Any]]) -> None:
     layer = get_channel_layer()
     if layer is None:
         return

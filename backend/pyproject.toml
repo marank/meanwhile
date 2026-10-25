@@ -95,7 +95,6 @@ module = [
     "core.tasks",
     "core.management.*",
     "core.models.*",
-    "core.realtime.*",
     "core.tests.*",
 ]
 disallow_untyped_defs = false

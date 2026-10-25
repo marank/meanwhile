@@ -6,6 +6,7 @@ e.g. `uvicorn config.asgi:application`.
 """
 
 import os
+from typing import cast
 
 from django.core.asgi import get_asgi_application
 
@@ -15,6 +16,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django_application = get_asgi_application()
 
 from a2wsgi import WSGIMiddleware  # noqa: E402
+from asgiref.typing import ASGI3Application  # noqa: E402
 from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from django.conf import settings  # noqa: E402
@@ -41,6 +43,10 @@ async def http_application(scope, receive, send):
 application = ProtocolTypeRouter(
     {
         "http": http_application,
-        "websocket": OriginCheck(AuthMiddlewareStack(URLRouter(websocket_urlpatterns))),
+        # Channels' stubs type its middleware as any kind of application, and its URLRouter as taking
+        # patterns of their own; at runtime they are ASGI 3 applications and Django's path() patterns.
+        "websocket": OriginCheck(
+            cast(ASGI3Application, AuthMiddlewareStack(URLRouter(websocket_urlpatterns)))  # type: ignore[arg-type]
+        ),
     }
 )

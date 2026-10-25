@@ -23,6 +23,7 @@ reconnecting until the user signs in again.
 
 import json
 import logging
+from typing import Any, cast
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -42,8 +43,8 @@ MAX_MESSAGE_BYTES = 16 * 1024
 
 
 @database_sync_to_async
-def _readable_calendars(user: User, calendar_ids: list[str]) -> set[str]:
-    if not user.is_active:
+def _readable_calendars(user: User | None, calendar_ids: list[str]) -> set[str]:
+    if user is None or not user.is_active:
         return set()
     # Ids as the client sends them (strings); ones that aren't UUIDs name no calendar.
     valid = [calendar_id for calendar_id in calendar_ids if as_uuid(calendar_id)]
@@ -51,32 +52,35 @@ def _readable_calendars(user: User, calendar_ids: list[str]) -> set[str]:
 
 
 @database_sync_to_async
-def _session_valid(session: SessionBase | None, user: User) -> bool:
+def _session_valid(session: SessionBase | None, user: User | None) -> bool:
     """Whether the sign-in the connection was opened with still holds (no logout, account active)."""
-    if session is None or not session.session_key or not session.exists(session.session_key):
+    if user is None or session is None or not session.session_key or not session.exists(session.session_key):
         return False
     return User.objects.filter(pk=user.pk, is_active=True).exists()
 
 
 class LiveUpdatesConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        self.user = self.scope.get("user")
+    async def connect(self) -> None:
+        self.user: User | None = None
         self.calendars: set[str] = set()
         self.groups_joined: set[str] = set()
-        if self.user is None or not self.user.is_authenticated or not self.user.is_active:
+        user = self.scope.get("user")
+        if user is None or not user.is_authenticated or not user.is_active:
             # Accept first so the browser sees the close code instead of a failed handshake.
             await self.accept()
             await self.close(code=CLOSE_UNAUTHENTICATED)
             return
+        # Signed in: AuthMiddlewareStack (config.asgi) loaded the app's user.
+        self.user = cast(User, user)
         await self._join(user_group(self.user.pk))
         await self.accept()
         await self._send({"type": "hello", "protocol": PROTOCOL_VERSION})
 
-    async def disconnect(self, code):
+    async def disconnect(self, code: int) -> None:
         for group in list(self.groups_joined):
             await self._leave(group)
 
-    async def receive(self, text_data=None, bytes_data=None):
+    async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
         if text_data is None or len(text_data) > MAX_MESSAGE_BYTES:
             await self._send({"type": "error", "message": "Expected a JSON text message"})
             return
@@ -93,13 +97,13 @@ class LiveUpdatesConsumer(AsyncWebsocketConsumer):
         else:
             await self._send({"type": "error", "message": f"Unknown message type {kind!r}"})
 
-    async def _ping(self):
+    async def _ping(self) -> None:
         if not await _session_valid(self.scope.get("session"), self.user):
             await self.close(code=CLOSE_UNAUTHENTICATED)
             return
         await self._send({"type": "pong"})
 
-    async def _subscribe(self, calendar_ids):
+    async def _subscribe(self, calendar_ids: object) -> None:
         if not isinstance(calendar_ids, list) or not all(isinstance(i, str) for i in calendar_ids):
             await self._send({"type": "error", "message": "calendars must be a list of ids"})
             return
@@ -113,7 +117,7 @@ class LiveUpdatesConsumer(AsyncWebsocketConsumer):
 
     # Group messages (sent by core.realtime.broadcast) ---------------------------------------
 
-    async def calendar_changed(self, message):
+    async def calendar_changed(self, message: dict[str, Any]) -> None:
         calendar_id = message["calendar_id"]
         if calendar_id not in self.calendars:
             return
@@ -125,24 +129,24 @@ class LiveUpdatesConsumer(AsyncWebsocketConsumer):
             return
         await self._send({"type": "events.changed", "calendar_id": calendar_id})
 
-    async def notifications_changed(self, message):
+    async def notifications_changed(self, message: dict[str, Any]) -> None:
         await self._send({"type": "notifications.changed"})
 
-    async def reminders_due(self, message):
+    async def reminders_due(self, message: dict[str, Any]) -> None:
         await self._send({"type": "reminders.due", "reminders": message["reminders"]})
 
-    async def calendars_changed(self, message):
+    async def calendars_changed(self, message: dict[str, Any]) -> None:
         await self._send({"type": "calendars.changed"})
 
     # Helpers -------------------------------------------------------------------------------
 
-    async def _send(self, message: dict):
+    async def _send(self, message: dict[str, Any]) -> None:
         await self.send(text_data=json.dumps(message))
 
-    async def _join(self, group: str):
+    async def _join(self, group: str) -> None:
         await self.channel_layer.group_add(group, self.channel_name)
         self.groups_joined.add(group)
 
-    async def _leave(self, group: str):
+    async def _leave(self, group: str) -> None:
         await self.channel_layer.group_discard(group, self.channel_name)
         self.groups_joined.discard(group)

@@ -4,6 +4,7 @@ Who may open a WebSocket: browsers on the app's own pages only.
 
 from urllib.parse import urlsplit
 
+from asgiref.typing import ASGI3Application, ASGIReceiveCallable, ASGISendCallable, Scope, WebSocketCloseEvent
 from django.conf import settings
 
 
@@ -27,15 +28,17 @@ class OriginCheck:
     Origin; they still need the session cookie.
     """
 
-    def __init__(self, app):
+    def __init__(self, app: ASGI3Application) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
-        headers = dict(scope.get("headers", []))
+    async def __call__(self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable) -> None:
+        headers = dict(scope["headers"]) if scope["type"] != "lifespan" else {}
         origin = headers.get(b"origin", b"").decode("latin1")
         # nginx passes the host the client asked for, a trusted proxy's X-Forwarded-Host included.
         host = headers.get(b"host", b"").decode("latin1").split(",")[0].strip()
         if origin and not _origin_allowed(origin, host):
-            await send({"type": "websocket.close", "code": 4403})
+            # The ASGI spec makes the reason optional; asgiref's types require it.
+            close: WebSocketCloseEvent = {"type": "websocket.close", "code": 4403}  # type: ignore[typeddict-item]
+            await send(close)
             return
-        return await self.app(scope, receive, send)
+        await self.app(scope, receive, send)
