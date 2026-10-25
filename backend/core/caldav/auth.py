@@ -48,7 +48,7 @@ def _count_failure(key: str) -> None:
 
 
 class Auth(base_auth.BaseAuth):
-    def _login_ext(self, login: str, password: str, context) -> str:
+    def _login_ext(self, login: str, password: str, context: base_auth.AuthContext) -> str:
         # REMOTE_ADDR: the client's address, also behind the proxy (uvicorn --proxy-headers).
         failures = _failures_key(login.lower(), getattr(context, "remote_addr", None))
         if cache.get(failures, 0) >= MAX_FAILED_LOGINS:

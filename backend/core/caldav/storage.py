@@ -8,19 +8,21 @@ import functools
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
+from typing import Any, overload
 
 import icalendar
 from django.db import transaction
-from django.db.models import Max, Prefetch, Q
+from django.db.models import Max, Prefetch, Q, QuerySet
 from django.utils import timezone
+from radicale import config, pathutils, storage, types
 from radicale import item as radicale_item
-from radicale import pathutils, storage
 
-from core.caldav.parsing import parse_series, to_utc
+from core.caldav.parsing import EventData, parse_series, to_utc
 from core.caldav.request import once_per_request
 from core.models import Calendar, Category, DeletedEvent, Event, EventParticipant, EventReminder, User, as_uuid
 from core.models.base import EventStatus, Role
@@ -55,7 +57,7 @@ _acting_login: ContextVar[str] = ContextVar("caldav_acting_login", default="")
 
 
 @contextlib.contextmanager
-def acting_as(login: str):
+def acting_as(login: str) -> Iterator[None]:
     token = _acting_login.set(login or "")
     try:
         yield
@@ -87,7 +89,7 @@ def _hex_color(value: str | None) -> str | None:
     return value.strip()[:7].lower()
 
 
-def _fields(event: Event) -> dict:
+def _fields(event: Event) -> dict[str, object]:
     """What a client changes of an event, to record which of it changed."""
     return {
         "title": event.title,
@@ -108,7 +110,8 @@ def calendar_timezone(name: str) -> str:
     cal.add("prodid", PRODID)
     cal.add("version", "2.0")
     cal.add_component(icalendar.Timezone.from_tzid(name, last_date=VTIMEZONE_UNTIL))
-    return cal.to_ical().decode()
+    data: bytes = cal.to_ical()
+    return data.decode()
 
 
 def _dav_name(calendar: Calendar, home: User) -> str:
@@ -123,7 +126,7 @@ def user_by_email(email: str) -> User | None:
     return once_per_request(("user", email.lower()), lambda: User.objects.filter(email__iexact=email).first())
 
 
-def calendar_in_home(home: User, name: str, calendars=None) -> Calendar | None:
+def calendar_in_home(home: User, name: str, calendars: QuerySet[Calendar] | None = None) -> Calendar | None:
     """The calendar a path segment in the user's calendar home names: its id, else the name a client
     gave one of the user's own calendars (clients pick names like UUIDs, too)."""
     calendars = Calendar.objects.all() if calendars is None else calendars
@@ -138,7 +141,7 @@ class _Item(radicale_item.Item):
     the original shares; the second property (e.g. calendar-data after getetag) then fails. A copy
     of its own iCalendar object for each copy keeps them apart."""
 
-    def __copy__(self):
+    def __copy__(self) -> _Item:
         return _Item(
             text=self.serialize(),
             href=self.href,
@@ -150,7 +153,7 @@ class _Item(radicale_item.Item):
 class Collection(storage.BaseCollection):
     def __init__(
         self,
-        configuration,
+        configuration: config.Configuration,
         path: str,
         calendar: Calendar | None = None,
         user: User | None = None,
@@ -211,8 +214,14 @@ class Collection(storage.BaseCollection):
     def etag(self) -> str:
         return f'"{self._state()[1]}"'
 
-    def get_meta(self, key: str | None = None):
-        meta = {}
+    @overload
+    def get_meta(self, key: None = None) -> Mapping[str, str]: ...
+
+    @overload
+    def get_meta(self, key: str) -> str | None: ...
+
+    def get_meta(self, key: str | None = None) -> Mapping[str, str] | str | None:
+        meta: dict[str, str] = {}
         if not self.path:
             meta = {"tag": ""}
         elif self._is_principal or self.is_principal:
@@ -263,11 +272,11 @@ class Collection(storage.BaseCollection):
             return _http_datetime(self._calendar.updated_at)
         return _http_datetime(timezone.now())
 
-    def sync(self, old_token: str = ""):
+    def sync(self, old_token: str = "") -> tuple[str, list[str]]:
         changed_at, digest = self._state()
         token = f"{_SYNC_TOKEN_PREFIX}{changed_at}-{digest}"
         if not old_token or self._calendar is None:
-            return token, [item.href for item in self.get_all()]
+            return token, [item.href for item in self.get_all() if item.href is not None]
         if old_token == token:
             return token, []
         # Radicale answers a ValueError with "invalid sync token", and the client syncs everything.
@@ -299,7 +308,7 @@ class Collection(storage.BaseCollection):
         login = _acting_login.get() or self._login
         return user_by_email(login) if login else None
 
-    def _events(self):
+    def _events(self) -> QuerySet[Event]:
         """The calendar's series and single events, with what writing them needs."""
         viewer = self._viewer()
         return (
@@ -331,7 +340,7 @@ class Collection(storage.BaseCollection):
             collection=self,
         )
 
-    def _events_by_href(self, hrefs, shared_only: bool = True) -> dict[str, Event]:
+    def _events_by_href(self, hrefs: list[str], shared_only: bool = True) -> dict[str, Event]:
         # Events created in the app have no href of their own and are found by "{uid}.ics".
         uids = {h[:-4] for h in hrefs if h.endswith(".ics")}
         events = self._events().filter(
@@ -341,22 +350,22 @@ class Collection(storage.BaseCollection):
             events = events.filter(status__in=_SHARED_STATUSES)
         return {e.dav_href: e for e in events}
 
-    def get_all(self):
+    def get_all(self) -> list[radicale_item.Item]:
         if self._calendar is None:
             return []
         if self._items_cache is None:
             self._items_cache = [self._item(e) for e in self._events().filter(status__in=_SHARED_STATUSES)]
         return self._items_cache
 
-    def get_multi(self, hrefs):
+    def get_multi(self, hrefs: Iterable[str]) -> Iterator[tuple[str, radicale_item.Item | None]]:
         # Radicale passes a generator, and the hrefs are read twice below.
-        hrefs = list(hrefs)
+        wanted = list(hrefs)
         if self._calendar is None:
-            for href in hrefs:
+            for href in wanted:
                 yield href, None
             return
-        by_href = self._events_by_href(hrefs)
-        for href in hrefs:
+        by_href = self._events_by_href(wanted)
+        for href in wanted:
             event = by_href.get(href)
             yield href, self._item(event) if event is not None else None
 
@@ -377,7 +386,7 @@ class Collection(storage.BaseCollection):
             return False
         return Event.objects.filter(calendar=self._calendar, parent__isnull=True, uid=uid).exists()
 
-    def upload(self, href: str, item: radicale_item.Item):
+    def upload(self, href: str, item: radicale_item.Item) -> tuple[radicale_item.Item, radicale_item.Item | None]:
         if self._calendar is None:
             raise RuntimeError("Cannot upload to this collection")
 
@@ -460,7 +469,7 @@ class Collection(storage.BaseCollection):
         by_name = {c.name.lower(): c for c in self._calendar.categories.all()}
         return next((by_name[n] for n in wanted if n in by_name), None)
 
-    def _apply(self, event: Event, data: dict) -> None:
+    def _apply(self, event: Event, data: EventData) -> None:
         event.title = data["title"]
         event.description = data["description"]
         event.start = data["start"]
@@ -475,7 +484,9 @@ class Collection(storage.BaseCollection):
             event.rrule = data["rrule"]
             event.rdates = sorted(format_exdate(d) for d in data["rdates"])
 
-    def _store_exceptions(self, series: Event, data: dict, overrides: list[dict], actor: User):
+    def _store_exceptions(
+        self, series: Event, data: EventData, overrides: list[EventData], actor: User
+    ) -> tuple[set[datetime], set[datetime]]:
         """Saves the series with the removed and changed occurrences the client sent.
 
         Returns the starts of the occurrences that were newly removed and those changed.
@@ -489,14 +500,14 @@ class Collection(storage.BaseCollection):
         series.exdates = sorted(format_exdate(d) for d in exdates)
         series.save()
 
-        incoming = {o["recurrence_id"]: o for o in overrides if o["recurrence_id"] not in hidden}
+        incoming = {rid: o for o in overrides if (rid := o["recurrence_id"]) is not None and rid not in hidden}
         for rid, stale in current.items():
             if rid not in incoming and rid not in hidden:
                 stale.delete()
 
         booked = booked_resources(series)
         duration = series.end - series.start
-        changed = set()
+        changed: set[datetime] = set()
         for rid, override_data in incoming.items():
             override = current.get(rid)
             before = (
@@ -529,7 +540,7 @@ class Collection(storage.BaseCollection):
                 changed.add(rid)
         return exdates - old_exdates, changed
 
-    def _store_participants(self, event: Event, data: dict, actor: User) -> None:
+    def _store_participants(self, event: Event, data: EventData, actor: User) -> None:
         """Makes the event's participants those the client lists as attendees."""
         organizer = data["organizer"] or event.creator.email.lower()
         wanted = {email: status for email, status in data["attendees"] if email and email != organizer}
@@ -588,7 +599,7 @@ class Collection(storage.BaseCollection):
 
 class Storage(storage.BaseStorage):
     @contextlib.contextmanager
-    def acquire_lock(self, mode: str, user: str = "", *args, **kwargs):
+    def acquire_lock(self, mode: str, user: str = "", *args: Any, **kwargs: Any) -> Iterator[None]:
         # The database does the locking; this only remembers who the request runs for.
         with acting_as(user):
             yield
@@ -614,7 +625,13 @@ class Storage(storage.BaseStorage):
             return Collection(self.configuration, path, calendar=calendar)
         return None
 
-    def discover(self, path: str, depth: str = "0", child_context_manager=None, user_groups=None):
+    def discover(
+        self,
+        path: str,
+        depth: str = "0",
+        child_context_manager: Callable[[str, str | None], AbstractContextManager[None]] | None = None,
+        user_groups: set[str] | None = None,
+    ) -> Iterator[types.CollectionOrItem]:
         path = pathutils.sanitize_path(path)
         if not path or path == "/":
             root = Collection(self.configuration, "/")
@@ -652,8 +669,7 @@ class Storage(storage.BaseStorage):
             if coll is not None:
                 yield coll
                 if depth != "0":
-                    for item in coll.get_all():
-                        yield item
+                    yield from coll.get_all()
             return
 
         parent_path = "/" + "/".join(parts[:-1])
@@ -661,11 +677,16 @@ class Storage(storage.BaseStorage):
         parent = self._collection_from_path(parent_path)
         if parent is None:
             return
-        for _, item in parent.get_multi([href]):
-            if item is not None:
-                yield item
+        for _, found in parent.get_multi([href]):
+            if found is not None:
+                yield found
 
-    def create_collection(self, href: str, items=None, props=None):
+    def create_collection(
+        self,
+        href: str,
+        items: Iterable[radicale_item.Item] | None = None,
+        props: Mapping[str, str] | None = None,
+    ) -> tuple[Collection, dict[str, radicale_item.Item], list[str]]:
         """Creates a calendar for a client (MKCALENDAR, or MKCOL from the Radicale web interface).
 
         Returns it as Radicale expects: with the items it replaced and the hrefs of new ones (none here).
@@ -703,9 +724,12 @@ class Storage(storage.BaseStorage):
         )
         return Collection(self.configuration, href, calendar=calendar), {}, []
 
-    def move(self, item, to_collection, to_href: str) -> None:
+    def move(self, item: radicale_item.Item, to_collection: storage.BaseCollection, to_href: str) -> None:
         """Renames an event or moves it to another calendar, e.g. when a client changes its calendar."""
         source = item.collection
+        # Every collection is one of this storage's.
+        assert isinstance(source, Collection) and isinstance(to_collection, Collection)
+        assert item.href is not None
         target = to_collection._calendar
         event = source._events_by_href([item.href]).get(item.href)
         if event is None or target is None:

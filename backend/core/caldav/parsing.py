@@ -2,8 +2,9 @@
 Reading events from the iCalendar objects CalDAV clients send.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from functools import lru_cache
+from typing import Any, TypedDict
 from zoneinfo import ZoneInfo, available_timezones
 
 import vobject
@@ -16,6 +17,8 @@ from core.services.reminders import allowed_minutes
 # Longest title the database keeps; longer ones are cut.
 TITLE_MAX_LENGTH = 255
 
+# vobject ships no types: its components and properties are Any here.
+
 PARTSTATS = {
     "NEEDS-ACTION": "needs_action",
     "ACCEPTED": "accepted",
@@ -24,7 +27,7 @@ PARTSTATS = {
 }
 
 
-def to_utc(dt: datetime | date, naive_zone=UTC) -> datetime:
+def to_utc(dt: datetime | date, naive_zone: tzinfo = UTC) -> datetime:
     """A date or date-time in UTC; date-times without a zone are taken to be in `naive_zone`."""
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
@@ -33,21 +36,22 @@ def to_utc(dt: datetime | date, naive_zone=UTC) -> datetime:
     return datetime(dt.year, dt.month, dt.day, tzinfo=UTC)
 
 
-def _tzid(line) -> str | None:
+def _tzid(line: Any) -> str | None:
     # vobject moves the TZID parameter aside when it resolves the zone.
     params = line.params
-    return (params.get("X-VOBJ-ORIGINAL-TZID") or params.get("TZID") or [None])[0]
+    tzid: str | None = (params.get("X-VOBJ-ORIGINAL-TZID") or params.get("TZID") or [None])[0]
+    return tzid
 
 
-def _naive_zone(line, floating: str):
+def _naive_zone(line: Any, floating: str) -> tzinfo:
     """The zone of a property's date-times that came without one: its TZID if known, else `floating`."""
     name = iana_zone_name(_tzid(line))
     return zone(name or floating)
 
 
-def _times(vevent, name: str, floating: str) -> set[datetime]:
+def _times(vevent: Any, name: str, floating: str) -> set[datetime]:
     """All values of a date list property (EXDATE, RDATE) in UTC."""
-    result = set()
+    result: set[datetime] = set()
     for line in vevent.contents.get(name, []):
         values = line.value if isinstance(line.value, list) else [line.value]
         for value in values:
@@ -58,12 +62,12 @@ def _times(vevent, name: str, floating: str) -> set[datetime]:
     return result
 
 
-def _email(address) -> str:
+def _email(address: object) -> str:
     text = str(address).strip()
     return (text[7:] if text.lower().startswith("mailto:") else text).lower()
 
 
-def _attendee_email(address) -> str | None:
+def _attendee_email(address: object) -> str | None:
     """The email address of an ATTENDEE, or None for others (e.g. urn:uuid:..., or not an address)."""
     text = str(address).strip()
     if not text.lower().startswith("mailto:"):
@@ -76,19 +80,21 @@ def _attendee_email(address) -> str | None:
     return email if len(email) <= 254 else None
 
 
-def _zone_like(tzinfo, around: datetime, preferred: str) -> str | None:
+def _zone_like(zone_info: tzinfo, around: datetime, preferred: str) -> str | None:
     """An IANA zone with the same offsets as a zone a client defined itself (a VTIMEZONE under a name
     like "Customized Time Zone"), around the event's start; the writer's own zone if it fits."""
     samples = tuple(around.replace(tzinfo=None) + timedelta(days=15 * k) for k in range(-4, 50))
     try:
-        offsets = tuple(tzinfo.utcoffset(sample) for sample in samples)
+        offsets = tuple(zone_info.utcoffset(sample) for sample in samples)
     except Exception:
         return None
     return _zone_with_offsets(offsets, samples, preferred)
 
 
 @lru_cache(maxsize=256)
-def _zone_with_offsets(offsets, samples, preferred: str) -> str | None:
+def _zone_with_offsets(
+    offsets: tuple[timedelta | None, ...], samples: tuple[datetime, ...], preferred: str
+) -> str | None:
     for name in [preferred, *sorted(available_timezones())]:
         zone_info = ZoneInfo(name)
         if all(zone_info.utcoffset(sample) == offset for sample, offset in zip(samples, offsets, strict=True)):
@@ -96,12 +102,12 @@ def _zone_with_offsets(offsets, samples, preferred: str) -> str | None:
     return None
 
 
-def _alarm_minutes(vevent, start: datetime, end: datetime) -> list[int] | None:
+def _alarm_minutes(vevent: Any, start: datetime, end: datetime) -> list[int] | None:
     """Minutes before the start of each VALARM; None if the event carries no VALARM at all."""
     alarms = vevent.contents.get("valarm")
     if not alarms:
         return None
-    minutes = set()
+    minutes: set[int] = set()
     for alarm in alarms:
         if not hasattr(alarm, "trigger"):
             continue
@@ -117,7 +123,29 @@ def _alarm_minutes(vevent, start: datetime, end: datetime) -> list[int] | None:
     return allowed_minutes(minutes)
 
 
-def component_data(vevent, floating: str) -> dict:
+class EventData(TypedDict):
+    """The fields of one VEVENT (component_data)."""
+
+    title: str
+    description: str
+    location: str
+    start: datetime
+    end: datetime
+    all_day: bool
+    timezone: str
+    rrule: str | None
+    uid: str | None
+    recurrence_id: datetime | None
+    exdates: set[datetime]
+    rdates: set[datetime]
+    categories: list[str]
+    organizer: str | None
+    # (email, status) of each participant.
+    attendees: list[tuple[str, str]]
+    alarms: list[int] | None
+
+
+def component_data(vevent: Any, floating: str) -> EventData:
     """The fields of one VEVENT, with ends stored the way the app does (inclusive for all-day events).
 
     `floating`: the zone (IANA name) for times that come without one.
@@ -159,13 +187,13 @@ def component_data(vevent, floating: str) -> dict:
     if hasattr(vevent, "recurrence_id"):
         recurrence_id = to_utc(vevent.recurrence_id.value, _naive_zone(vevent.recurrence_id, floating))
 
-    categories = []
+    categories: list[str] = []
     for line in vevent.contents.get("categories", []):
         values = line.value if isinstance(line.value, list) else [line.value]
         categories += [str(v).strip() for v in values if str(v).strip()]
 
     organizer = _email(vevent.organizer.value) if hasattr(vevent, "organizer") else None
-    attendees = []
+    attendees: list[tuple[str, str]] = []
     for line in vevent.contents.get("attendee", []):
         email = _attendee_email(line.value)
         if email is None:
@@ -193,7 +221,7 @@ def component_data(vevent, floating: str) -> dict:
     }
 
 
-def parse_series(text: str, floating: str = "UTC") -> tuple[dict, list[dict]]:
+def parse_series(text: str, floating: str = "UTC") -> tuple[EventData, list[EventData]]:
     """The series (or single event) and its changed occurrences from one iCalendar object."""
     try:
         vcal = vobject.readOne(text)
