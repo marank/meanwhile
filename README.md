@@ -33,6 +33,7 @@ calendar/
   compose.dev.yml     Development stack with live reload
   .gitea/workflows/   CI (checks, image build, smoke test, scans, push) and Renovate
   BACKLOG.md          Feature backlog and known limitations
+  AGENTS.md           Conventions for contributors and coding agents (CLAUDE.md imports it)
 ```
 
 ## Development with Docker
