@@ -7,7 +7,8 @@
 #   REGISTRY_TOKEN  access token with the "write:package" scope
 #
 # Pull requests only run the checks and a test build; pushes to main and
-# version tags (v1.2.3) also push the image.
+# version tags (v1.2.3) also push the image. A version tag on a commit main already
+# pushed reuses that image (same digest as its sha- tag) instead of building it again.
 name: build
 
 on:
@@ -235,18 +236,21 @@ jobs:
                 echo "Invalid version tag: $REF_NAME" >&2
                 exit 1
               fi
-              TAGS="$TAGS $IMAGE:$VERSION"
+              VERSION_TAGS="$VERSION"
               # Also tag 1.2 and 1 for plain releases (no -rc/-beta suffix).
               if echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                TAGS="$TAGS $IMAGE:${VERSION%.*} $IMAGE:${VERSION%%.*}"
+                VERSION_TAGS="$VERSION_TAGS ${VERSION%.*} ${VERSION%%.*}"
               fi
+              for t in $VERSION_TAGS; do TAGS="$TAGS $IMAGE:$t"; done
               ;;
           esac
           {
             echo "registry=$REGISTRY"
             echo "image=$IMAGE"
+            echo "repo=${IMAGE#"$REGISTRY"/}"
             echo "ref=$IMAGE:sha-$SHORT_SHA"
             echo "tags=$TAGS"
+            echo "version_tags=${VERSION_TAGS:-}"
           } >> "$GITHUB_OUTPUT"
           echo "Tags: $TAGS"
 
@@ -258,7 +262,23 @@ jobs:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
 
+      # A version tag on a commit main already pushed: take that image as it is, so the
+      # release is exactly what main tested and `latest` pointed to. It is smoke-tested and
+      # scanned again below (new vulnerabilities may be known by now), just not rebuilt.
+      - name: Reuse main's image
+        id: reuse
+        if: env.PUSH == 'true' && startsWith(gitea.ref, 'refs/tags/v')
+        env:
+          REF: ${{ steps.meta.outputs.ref }}
+        run: |
+          if docker pull "$REF"; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No $REF in the registry yet; building it."
+          fi
+
       - name: Build
+        if: steps.reuse.outputs.found != 'true'
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
@@ -367,12 +387,42 @@ jobs:
           trivy --scanners vuln --severity HIGH
 
       - name: Push
-        if: env.PUSH == 'true'
+        if: env.PUSH == 'true' && steps.reuse.outputs.found != 'true'
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           read -ra tag_list <<< "$IMAGE_TAGS"
           for t in "${tag_list[@]}"; do docker push "$t"; done
+
+      # Copies the sha- tag's manifest byte for byte to the version tags through the
+      # registry API; docker tag + push would write a new manifest with its own digest.
+      - name: Tag reused image
+        if: env.PUSH == 'true' && steps.reuse.outputs.found == 'true'
+        env:
+          REGISTRY: ${{ steps.meta.outputs.registry }}
+          REPO: ${{ steps.meta.outputs.repo }}
+          REF: ${{ steps.meta.outputs.ref }}
+          VERSION_TAGS: ${{ steps.meta.outputs.version_tags }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          api="https://$REGISTRY/v2/$REPO/manifests"
+          token=$(curl -fsS -u "$REGISTRY_USER:$REGISTRY_TOKEN" \
+            "https://$REGISTRY/v2/token?service=container_registry&scope=repository:$REPO:pull,push" \
+            | sed -E 's/.*"token":"([^"]+)".*/\1/')
+          echo "::add-mask::$token"
+          accept="application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.list.v2+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
+          curl -fsS -H "Authorization: Bearer $token" -H "Accept: $accept" \
+            -D /tmp/manifest.headers -o /tmp/manifest "$api/sha-${REF##*:sha-}"
+          type=$(grep -i '^content-type:' /tmp/manifest.headers | tail -n1 | cut -d' ' -f2 | tr -d '\r')
+          digest=$(grep -i '^docker-content-digest:' /tmp/manifest.headers | tail -n1 | cut -d' ' -f2 | tr -d '\r')
+          for t in $VERSION_TAGS; do
+            curl -fsS -X PUT -H "Authorization: Bearer $token" -H "Content-Type: $type" \
+              --data-binary @/tmp/manifest "$api/$t"
+            echo "Tagged $REGISTRY/$REPO:$t -> $digest"
+          done
 
       - name: Logout
         if: always() && env.PUSH == 'true'
