@@ -2,6 +2,7 @@
 config.env: reading the configuration from the environment.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,11 @@ def test_load_dotenv_keeps_existing_variables(tmp_path: Path, monkeypatch: pytes
 
     assert os.environ["NEW_ONE"] == "quoted"
     assert os.environ["KEPT"] == "from-env"
+
+
+def test_every_variable_the_settings_read_is_in_the_env_example() -> None:
+    config = Path(__file__).resolve().parents[2] / "config"
+    read = {name for file in config.glob("*.py") for name in re.findall(r'env_\w+\("([A-Z0-9_]+)"', file.read_text())}
+    example = (config.parents[1] / ".env.example").read_text()
+    listed = set(re.findall(r"^(?:# )?([A-Z][A-Z0-9_]+)=", example, re.MULTILINE))
+    assert read - listed == set()
