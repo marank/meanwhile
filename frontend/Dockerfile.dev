@@ -2,7 +2,7 @@
 # Runs as root on purpose: with rootless Docker that is the host user, who owns the mounted source.
 FROM node:24-alpine
 
-RUN npm install -g pnpm@10.34.5
+RUN npm install -g pnpm@10.34.7
 
 WORKDIR /app
 
