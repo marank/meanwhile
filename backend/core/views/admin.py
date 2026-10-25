@@ -20,6 +20,7 @@ from core.schemas import (
     GroupOut,
     OkOut,
 )
+from core.services import accounts
 from core.views.common import AuthedRequest, require_admin
 
 router = Router()
@@ -39,6 +40,7 @@ def _serialize_user(user: User) -> dict[str, Any]:
         "display_name": user.display_name,
         "is_admin": user.is_admin,
         "is_active": user.is_active,
+        "has_password": user.has_usable_password(),
         "created_at": user.created_at,
         "updated_at": user.updated_at,
         "groups": [GroupOut.model_validate(g) for g in user.groups.all()],
@@ -79,7 +81,10 @@ def admin_create_user(request: AuthedRequest, payload: AdminUserCreate) -> dict[
         is_admin=payload.is_admin,
         is_active=payload.is_active,
     )
-    user.set_password(payload.password)
+    if payload.password:
+        user.set_password(payload.password)
+    else:
+        user.set_unusable_password()
     user.save()
     if payload.group_ids:
         user.groups.set(UserGroup.objects.filter(id__in=payload.group_ids))
@@ -143,3 +148,13 @@ def admin_reset_password(request: AuthedRequest, user_id: str) -> dict[str, str]
     user.set_password(new_password)
     user.save()
     return {"password": new_password}
+
+
+@router.post("/admin/users/{user_id}/invite", response=OkOut)
+def admin_invite_user(request: AuthedRequest, user_id: str) -> dict[str, bool]:
+    """Emails the user about their account; without a password, with the link to choose one."""
+    require_admin(request)
+    user = User.objects.get(id=user_id)
+    _require_may_change(request, user)
+    accounts.send_invitation(user, request.user)
+    return {"ok": True}

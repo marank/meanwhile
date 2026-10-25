@@ -181,9 +181,18 @@ const en = {
     groupHasNoMembers: 'This group has no members.',
     overridden: 'overridden',
     resetPassword: 'Reset password',
-    passwordGenerated: 'Leave empty to generate a password',
+    passwordOptional: 'Leave empty to let the user choose one',
+    generatePassword: 'Generate password',
     passwordUnchanged: 'Leave empty to keep current password',
-    passwordGeneratedInfo: 'A password has been generated for the new user:',
+    passwordGeneratedInfo: 'The new password is:',
+    inviteUser: 'Send invitation',
+    inviteUserTitle: 'Send invitation?',
+    inviteUserText:
+      "{name} gets an email at {email} with a link to sign in. The password isn't in it; pass it on yourself.",
+    inviteUserTextNoPassword:
+      "{name} gets an email at {email} with a link to set a password. Until then, they can't sign in.",
+    inviteUserSent: 'Invitation sent to {email}.',
+    inviteUserFailed: 'Could not send the invitation.',
     save: 'Save',
     cancel: 'Cancel',
     delete: 'Delete',
@@ -315,6 +324,7 @@ const en = {
     hasAccount: 'Already have an account? Login',
     forgotPassword: 'Forgot your password?',
     resetTitle: 'Reset password',
+    inviteTitle: 'Choose your password',
     resetRequestHelp:
       'Enter your email address. If it belongs to an account, we send you a link to set a new password.',
     resetSend: 'Send link',

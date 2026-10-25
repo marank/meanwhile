@@ -17,6 +17,8 @@ class AdminUserOut(Schema):
     display_name: str
     is_admin: bool
     is_active: bool
+    # False until the user chose one from the link in the invitation (or an admin set one).
+    has_password: bool
     created_at: datetime
     updated_at: datetime
     groups: list[GroupOut] = []
@@ -25,7 +27,8 @@ class AdminUserOut(Schema):
 class AdminUserCreate(Schema):
     email: str = Field(..., pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
     display_name: str = Field(..., min_length=1, max_length=255)
-    password: str = Field(..., min_length=8)
+    # Left out: the account has no password until its owner chooses one (link in the invitation).
+    password: str | None = Field(None, min_length=8)
     is_admin: bool = False
     is_active: bool = True
     group_ids: list[Id] | None = None

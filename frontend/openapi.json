@@ -501,6 +501,41 @@
         ]
       }
     },
+    "/api/admin/users/{user_id}/invite": {
+      "post": {
+        "operationId": "core_views_admin_admin_invite_user",
+        "summary": "Admin Invite User",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Emails the user about their account; without a password, with the link to choose one.",
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
     "/api/groups": {
       "get": {
         "operationId": "core_views_groups_list_groups",
@@ -4446,6 +4481,10 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "has_password": {
+            "title": "Has Password",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -4471,6 +4510,7 @@
           "display_name",
           "is_admin",
           "is_active",
+          "has_password",
           "created_at",
           "updated_at",
           "groups"
@@ -4523,9 +4563,16 @@
             "type": "string"
           },
           "password": {
-            "minLength": 8,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
           },
           "is_admin": {
             "default": false,
@@ -4555,8 +4602,7 @@
         },
         "required": [
           "email",
-          "display_name",
-          "password"
+          "display_name"
         ],
         "title": "AdminUserCreate",
         "type": "object"

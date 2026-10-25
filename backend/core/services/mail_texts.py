@@ -73,6 +73,15 @@ TEXTS = {
         "accept": "Accept",
         "tentative": "Tentative",
         "decline": "Decline",
+        # Accounts created by an admin
+        "account_invite_subject": "You're invited to {app}",
+        "account_invite_heading": "Hello {name}",
+        "account_invite_body": "{actor} invited you to {app}.",
+        "account_invite_choose_password": 'To get started, set a password using the button below. The link works once and for a few days; after that, request a new one with "Forgot your password?" on the sign-in page.',
+        "account_invite_sign_in": "Sign in with this email address and the password you got from {actor}.",
+        "account_invite_email": "Email",
+        "account_invite_set_password": "Set password",
+        "account_invite_open": "Sign in to {app}",
     },
     "de": {
         "footer": "Diese E-Mail wurde von {app} gesendet.",
@@ -142,6 +151,14 @@ TEXTS = {
         "accept": "Zusagen",
         "tentative": "Vorläufig",
         "decline": "Ablehnen",
+        "account_invite_subject": "Einladung zu {app}",
+        "account_invite_heading": "Hallo {name}",
+        "account_invite_body": "{actor} hat Sie zu {app} eingeladen.",
+        "account_invite_choose_password": "Legen Sie zuerst über den Button unten ein Passwort fest. Der Link gilt einmal und für ein paar Tage; danach fordern Sie auf der Anmeldeseite über „Passwort vergessen?“ einen neuen an.",
+        "account_invite_sign_in": "Melden Sie sich mit dieser E-Mail-Adresse und dem Passwort an, das Sie von {actor} bekommen haben.",
+        "account_invite_email": "E-Mail",
+        "account_invite_set_password": "Passwort festlegen",
+        "account_invite_open": "Bei {app} anmelden",
     },
 }
 

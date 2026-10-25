@@ -5,6 +5,8 @@ import { useEscapeToClose } from '@/composables/useEscapeToClose'
 export type MenuItem = {
   label: string
   action: () => void
+  /** Destructive, e.g. deleting: shown in red. */
+  danger?: boolean
 }
 
 const props = defineProps<{
@@ -13,6 +15,8 @@ const props = defineProps<{
   items: MenuItem[]
   /** Open upwards from `y`, e.g. from a button at the bottom of the screen. */
   above?: boolean
+  /** End at `x` instead of starting there, e.g. under a button at the end of a row. */
+  alignEnd?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,8 +37,9 @@ onMounted(() => {
   // Keep the whole menu on screen when it opens near the right or bottom edge.
   const rect = menu.value!.getBoundingClientRect()
   const top = props.above ? props.y - rect.height : props.y
+  const left = props.alignEnd ? props.x - rect.width : props.x
   position.value = {
-    left: Math.max(VIEWPORT_MARGIN, Math.min(props.x, window.innerWidth - rect.width - VIEWPORT_MARGIN)),
+    left: Math.max(VIEWPORT_MARGIN, Math.min(left, window.innerWidth - rect.width - VIEWPORT_MARGIN)),
     top: Math.max(VIEWPORT_MARGIN, Math.min(top, window.innerHeight - rect.height - VIEWPORT_MARGIN)),
   }
   menuItems()[0]?.focus()
@@ -87,7 +92,9 @@ function onKeydown(event: KeyboardEvent) {
         type="button"
         role="menuitem"
         tabindex="-1"
-        class="block w-full whitespace-nowrap px-3 py-2 text-left text-sm text-gray-700 hover:bg-hover focus:bg-hover focus:outline-none"
+        :data-tone="item.danger ? 'danger' : undefined"
+        class="block w-full whitespace-nowrap px-3 py-2 text-left text-sm hover:bg-hover focus:bg-hover focus:outline-none"
+        :class="item.danger ? 'text-red-600' : 'text-gray-700'"
         @click="choose(item)"
       >
         {{ item.label }}

@@ -36,10 +36,11 @@ const router = createRouter({
     },
     {
       // The link in the email allauth sends (HEADLESS_FRONTEND_URLS); the key authorizes the reset.
+      // The invitation to an account without a password links here too, with ?invite=1.
       path: '/reset-password/:resetKey',
       name: 'reset-password',
       component: () => import('@/views/ResetPasswordView.vue'),
-      props: true,
+      props: (route) => ({ resetKey: route.params.resetKey, invite: route.query.invite === '1' }),
       meta: { anyone: true },
     },
     {

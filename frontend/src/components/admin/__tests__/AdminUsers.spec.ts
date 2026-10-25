@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import type * as api from '@/api'
 import { i18n } from '@/i18n'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import { dialog } from '@/services/dialog'
 import { realtime } from '@/services/realtime'
 import { useAuthStore } from '@/stores/auth'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
@@ -23,6 +24,7 @@ const adminUser = (id: string, name: string, overrides: Partial<api.AdminUser> =
   display_name: name,
   is_admin: false,
   is_active: true,
+  has_password: true,
   groups: [],
   created_at: '',
   updated_at: '',
@@ -46,8 +48,23 @@ async function pickGroup(wrapper: Wrapper, id: string, name: string) {
   await flushPromises()
 }
 
-/** The dialog with a new password is teleported to <body>. */
+/** The dialog with a reset password is teleported to <body>. */
 const dialogText = () => document.querySelector('[role="dialog"]')?.textContent ?? ''
+
+/** Opens the "More actions" menu of the user in `row`; returns its entries. */
+async function openMenu(wrapper: Wrapper, row: number) {
+  await wrapper.findAll('tbody tr')[row]!.get('button[aria-label="More actions"]').trigger('click')
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+}
+
+async function chooseFromMenu(wrapper: Wrapper, row: number, label: string) {
+  const entry = (await openMenu(wrapper, row)).find((item) => item.textContent!.trim() === label)
+  if (!entry) throw new Error(`No menu entry ${label}`)
+  entry.click()
+  await flushPromises()
+}
+
+const menuLabels = (items: HTMLElement[]) => items.map((item) => item.textContent!.trim())
 
 function closeDialog() {
   ;[...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
@@ -84,8 +101,19 @@ describe('admin users', () => {
     expect(rows[0]!.text()).toContain('Active')
     expect(rows[1]!.text()).toContain('—')
     expect(rows[1]!.text()).toContain('Inactive')
-    expect(rows[0]!.find('button[aria-label="Delete"]').exists()).toBe(false)
-    expect(rows[1]!.find('button[aria-label="Delete"]').exists()).toBe(true)
+
+    const more = rows[0]!.get('button[aria-label="More actions"]')
+    expect(more.attributes('aria-expanded')).toBe('false')
+    const own = await openMenu(wrapper, 0)
+    expect(more.attributes('aria-expanded')).toBe('true')
+    expect(menuLabels(own)).toEqual(['Send invitation', 'Reset password'])
+    document.querySelector<HTMLElement>('[role="menu"]')!.parentElement!.click() // outside closes it
+    await flushPromises()
+    expect(more.attributes('aria-expanded')).toBe('false')
+
+    const other = await openMenu(wrapper, 1)
+    expect(menuLabels(other)).toEqual(['Send invitation', 'Reset password', 'Delete'])
+    expect(other[2]!.dataset.tone).toBe('danger')
     wrapper.unmount()
   })
 
@@ -96,13 +124,14 @@ describe('admin users', () => {
     wrapper.unmount()
   })
 
-  it('adds a user with a generated password and shows it once', async () => {
-    backend.on('POST /api/admin/users', {})
+  it('adds a user without a password and sends the invitation to choose one', async () => {
+    backend.on('POST /api/admin/users', adminUser('cy', 'Cy', { email: 'cy@example.test', has_password: false }))
+    backend.on('POST /api/admin/users/*/invite', { ok: true })
     const wrapper = await render()
     await buttonNamed(wrapper, 'Add user').trigger('click')
     expect(wrapper.find('h2').text()).toBe('Add user')
     expect(buttonNamed(wrapper, 'Save').attributes('disabled')).toBeDefined()
-    const password = wrapper.get('input[placeholder="Leave empty to generate a password"]')
+    const password = wrapper.get('input[placeholder="Leave empty to let the user choose one"]')
     expect(password.attributes('type')).toBe('password')
     await buttonNamed(wrapper, 'Show password').trigger('click')
     expect(password.attributes('type')).toBe('text')
@@ -123,25 +152,49 @@ describe('admin users', () => {
 
     await buttonNamed(wrapper, 'Save').trigger('click')
     await flushPromises()
-    const body = backend.calls('POST /api/admin/users')[0]!.body as api.AdminUserCreate
-    expect(body).toMatchObject({
+    expect(backend.calls('POST /api/admin/users')[0]!.body).toEqual({
       email: 'cy@example.test',
       display_name: 'Cy',
       is_admin: true,
       is_active: true,
       group_ids: ['g1'],
     })
-    expect(body.password).toMatch(/^[a-zA-Z0-9]{16}$/)
-    expect(dialogText()).toContain(body.password)
-    closeDialog()
-    await flushPromises()
-    expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(wrapper.find('table').exists()).toBe(true)
+    expect(dialog.title).toBe('Send invitation?')
+    expect(dialog.message).toBe(
+      "Cy gets an email at cy@example.test with a link to set a password. Until then, they can't sign in.",
+    )
+    await answerConfirm(true)
+    expect(backend.calls('POST /api/admin/users/cy/invite')).toHaveLength(1)
+    expect(toastTexts()).toEqual(['Invitation sent to cy@example.test.'])
     wrapper.unmount()
   })
 
-  it('adds a user with a password of its own, without showing it', async () => {
-    backend.on('POST /api/admin/users', {})
+  it('fills in a generated password to pass on, and sends no invitation unless wanted', async () => {
+    backend.on('POST /api/admin/users', adminUser('cy', 'Cy', { email: 'cy@example.test' }))
+    const wrapper = await render()
+    await buttonNamed(wrapper, 'Add user').trigger('click')
+    await wrapper.get('input:not([type])').setValue('Cy')
+    await wrapper.get('input[type="email"]').setValue('cy@example.test')
+    await buttonNamed(wrapper, 'Generate password').trigger('click')
+    // Shown, so it can be passed on.
+    const password = wrapper.get<HTMLInputElement>('input[type="text"]')
+    expect(password.element.value).toMatch(/^[a-zA-Z0-9]{16}$/)
+    await buttonNamed(wrapper, 'Generate password').trigger('click')
+    const generated = password.element.value
+    await buttonNamed(wrapper, 'Save').trigger('click')
+    await flushPromises()
+    expect(backend.calls('POST /api/admin/users')[0]!.body).toMatchObject({ password: generated })
+    expect(dialog.message).toContain("The password isn't in it")
+    await answerConfirm(false)
+    expect(backend.calls('POST /api/admin/users/*/invite')).toHaveLength(0)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('adds a user with a password of its own, and reports an invitation that failed', async () => {
+    backend.on('POST /api/admin/users', adminUser('cy', 'Cy'))
+    backend.on('POST /api/admin/users/*/invite', reply(500))
     const wrapper = await render()
     await buttonNamed(wrapper, 'Add user').trigger('click')
     await wrapper.get('input:not([type])').setValue('Cy')
@@ -150,7 +203,8 @@ describe('admin users', () => {
     await buttonNamed(wrapper, 'Save').trigger('click')
     await flushPromises()
     expect(backend.calls('POST /api/admin/users')[0]!.body).toMatchObject({ password: 'chosen-secret' })
-    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    await answerConfirm(true)
+    expect(toastTexts()).toEqual(['Could not send the invitation.'])
     wrapper.unmount()
   })
 
@@ -197,11 +251,10 @@ describe('admin users', () => {
   it('resets a password once confirmed and shows the new one', async () => {
     backend.on('POST /api/admin/users/*/reset-password', { password: 'fresh-pass' })
     const wrapper = await render()
-    const reset = () => wrapper.findAll('button[aria-label="Reset password"]')[1]!
-    await reset().trigger('click')
+    await chooseFromMenu(wrapper, 1, 'Reset password')
     await answerConfirm(false)
     expect(backend.calls('POST /api/admin/users/*/reset-password')).toHaveLength(0)
-    await reset().trigger('click')
+    await chooseFromMenu(wrapper, 1, 'Reset password')
     await answerConfirm(true)
     expect(backend.calls('POST /api/admin/users/bob/reset-password')).toHaveLength(1)
     expect(dialogText()).toContain('fresh-pass')
@@ -209,19 +262,44 @@ describe('admin users', () => {
     wrapper.unmount()
   })
 
+  it('sends the invitation again once confirmed, worded by whether the user has a password', async () => {
+    backend.on('GET /api/admin/users', [
+      adminUser('ann', 'Ann'),
+      adminUser('bob', 'Bob', { email: 'bob@example.test', has_password: false }),
+    ])
+    backend.on('POST /api/admin/users/*/invite', { ok: true })
+    const wrapper = await render()
+    const invite = (row: number) => chooseFromMenu(wrapper, row, 'Send invitation')
+
+    await invite(1)
+    expect(dialog.message).toContain('a link to set a password')
+    await answerConfirm(false)
+    expect(backend.calls('POST /api/admin/users/*/invite')).toHaveLength(0)
+    await invite(1)
+    await answerConfirm(true)
+    expect(backend.calls('POST /api/admin/users/bob/invite')).toHaveLength(1)
+    expect(toastTexts()).toEqual(['Invitation sent to bob@example.test.'])
+
+    await invite(0)
+    expect(dialog.message).toContain("The password isn't in it")
+    await answerConfirm(true)
+    expect(backend.calls('POST /api/admin/users/ann/invite')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('deletes a user once confirmed, and reports a failure', async () => {
     backend.on('DELETE /api/admin/users/*', undefined)
     const wrapper = await render()
-    const remove = () => wrapper.get('button[aria-label="Delete"]')
-    await remove().trigger('click')
+    const remove = () => chooseFromMenu(wrapper, 1, 'Delete')
+    await remove()
     await answerConfirm(false)
     expect(backend.calls('DELETE /api/admin/users/*')).toHaveLength(0)
-    await remove().trigger('click')
+    await remove()
     await answerConfirm(true)
     expect(backend.calls('DELETE /api/admin/users/bob')).toHaveLength(1)
 
     backend.on('DELETE /api/admin/users/*', reply(500))
-    await remove().trigger('click')
+    await remove()
     await answerConfirm(true)
     expect(toastTexts()).toEqual(['Could not remove the item.'])
     wrapper.unmount()

@@ -187,9 +187,18 @@ const de: MessageSchema = {
     groupHasNoMembers: 'Diese Gruppe hat keine Mitglieder.',
     overridden: 'überschrieben',
     resetPassword: 'Passwort zurücksetzen',
-    passwordGenerated: 'Leer lassen, um ein Passwort zu generieren',
+    passwordOptional: 'Leer lassen, damit der Benutzer selbst eins wählt',
+    generatePassword: 'Passwort generieren',
     passwordUnchanged: 'Leer lassen, um das aktuelle Passwort zu behalten',
-    passwordGeneratedInfo: 'Ein Passwort wurde für den neuen Benutzer generiert:',
+    passwordGeneratedInfo: 'Das neue Passwort lautet:',
+    inviteUser: 'Einladung senden',
+    inviteUserTitle: 'Einladung senden?',
+    inviteUserText:
+      '{name} bekommt eine E-Mail an {email} mit einem Link zur Anmeldung. Das Passwort steht nicht darin, das geben Sie selbst weiter.',
+    inviteUserTextNoPassword:
+      '{name} bekommt eine E-Mail an {email} mit einem Link, um ein Passwort festzulegen. Vorher ist keine Anmeldung möglich.',
+    inviteUserSent: 'Einladung an {email} gesendet.',
+    inviteUserFailed: 'Die Einladung konnte nicht gesendet werden.',
     save: 'Speichern',
     cancel: 'Abbrechen',
     delete: 'Löschen',
@@ -322,6 +331,7 @@ const de: MessageSchema = {
     hasAccount: 'Bereits ein Konto? Anmelden',
     forgotPassword: 'Passwort vergessen?',
     resetTitle: 'Passwort zurücksetzen',
+    inviteTitle: 'Wähle dein Passwort',
     resetRequestHelp:
       'Gib deine E-Mail-Adresse ein. Gehört sie zu einem Konto, schicken wir dir einen Link, mit dem du ein neues Passwort setzt.',
     resetSend: 'Link senden',

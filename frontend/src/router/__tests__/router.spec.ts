@@ -102,4 +102,13 @@ describe('router', () => {
     expect(await visit('/rsvp/token-3?answer=declined')).toBe('/event/token-3?answer=declined')
     expect(await visit('/reset-password/key-1')).toBe('/reset-password/key-1')
   })
+
+  it('tells the password page whether its link came with the invitation to a new account', () => {
+    const propsOf = (path: string) => {
+      const route = router.resolve(path)
+      return (route.matched[0]!.props.default as (r: typeof route) => object)(route)
+    }
+    expect(propsOf('/reset-password/key-1?invite=1')).toEqual({ resetKey: 'key-1', invite: true })
+    expect(propsOf('/reset-password/key-1')).toEqual({ resetKey: 'key-1', invite: false })
+  })
 })

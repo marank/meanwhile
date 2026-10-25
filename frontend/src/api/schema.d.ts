@@ -181,6 +181,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/admin/users/{user_id}/invite': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Admin Invite User
+     * @description Emails the user about their account; without a password, with the link to choose one.
+     */
+    post: operations['core_views_admin_admin_invite_user']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/groups': {
     parameters: {
       query?: never
@@ -1368,6 +1388,8 @@ export interface components {
       is_admin: boolean
       /** Is Active */
       is_active: boolean
+      /** Has Password */
+      has_password: boolean
       /**
        * Created At
        * Format: date-time
@@ -1411,7 +1433,7 @@ export interface components {
       /** Display Name */
       display_name: string
       /** Password */
-      password: string
+      password?: string | null
       /**
        * Is Admin
        * @default false
@@ -3140,6 +3162,28 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['AdminPasswordResetOut']
+        }
+      }
+    }
+  }
+  core_views_admin_admin_invite_user: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        user_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['OkOut']
         }
       }
     }

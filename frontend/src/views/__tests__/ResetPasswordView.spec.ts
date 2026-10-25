@@ -9,13 +9,13 @@ import ResetPasswordView from '../ResetPasswordView.vue'
 let wrapper: VueWrapper
 let backend: FakeBackend
 
-async function render(resetKey?: string) {
+async function render(resetKey?: string, invite = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/:any(.*)', component: { template: '<div />' } }],
   })
   await router.push('/forgot-password')
-  wrapper = mount(ResetPasswordView, { props: { resetKey }, global: { plugins: [i18n, router] } })
+  wrapper = mount(ResetPasswordView, { props: { resetKey, invite }, global: { plugins: [i18n, router] } })
 }
 
 async function submit() {
@@ -68,6 +68,7 @@ describe('ResetPasswordView', () => {
     it('sets the new password, taking the answer "now sign in" as success', async () => {
       backend.on('POST /api/auth/v1/auth/password/reset', reply(401, { status: 401, flows: [] }))
       await render('abc-123')
+      expect(wrapper.get('h2').text()).toBe('Reset password')
       expect(wrapper.find('#reset-email').exists()).toBe(false)
       expect(wrapper.get('button[type="submit"]').text()).toBe('Set password')
       await wrapper.get('#new-password').setValue('a new secret')
@@ -77,6 +78,12 @@ describe('ResetPasswordView', () => {
         password: 'a new secret',
       })
       expect(wrapper.get('[role="status"]').text()).toBe('Your password has been changed. You can sign in with it now.')
+    })
+
+    it('welcomes new users from their invitation to choose a password', async () => {
+      await render('abc-123', true)
+      expect(wrapper.get('h2').text()).toBe('Choose your password')
+      expect(wrapper.get('button[type="submit"]').text()).toBe('Set password')
     })
 
     it('says so when the key is unknown, used or expired', async () => {

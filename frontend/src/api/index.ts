@@ -395,6 +395,9 @@ export const deleteAdminUser = (userId: string) => api<void>(`/api/admin/users/$
 export const resetAdminUserPassword = (userId: string) =>
   api<AdminPasswordReset>(`/api/admin/users/${userId}/reset-password`, { method: 'POST' })
 
+/** Emails the user about their account; without a password, with the link to choose one. */
+export const inviteAdminUser = (userId: string) => api<void>(`/api/admin/users/${userId}/invite`, { method: 'POST' })
+
 // Admin user groups
 export const listUserGroups = () => api<UserGroup[]>('/api/groups')
 

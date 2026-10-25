@@ -29,8 +29,8 @@ describe('ContextMenu', () => {
     document.body.innerHTML = ''
   })
 
-  async function render(x: number, y: number, above = false) {
-    const wrapper = mount(ContextMenu, { props: { x, y, items, above }, attachTo: document.body })
+  async function render(x: number, y: number, above = false, alignEnd = false) {
+    const wrapper = mount(ContextMenu, { props: { x, y, items, above, alignEnd }, attachTo: document.body })
     await nextTick()
     return wrapper
   }
@@ -56,6 +56,13 @@ describe('ContextMenu', () => {
     const wrapper = await render(10, 300, true)
     expect(menu(wrapper).element.style.top).toBe('220px')
     expect((await render(10, 20, true)).get<HTMLElement>('[role="menu"]').element.style.top).toBe('4px')
+  })
+
+  it('ends at the button it opens under, and marks destructive entries', async () => {
+    items[1]!.danger = true
+    const wrapper = await render(500, 20, false, true)
+    expect(menu(wrapper).element.style.left).toBe('400px')
+    expect(buttons(wrapper).map((b) => b.attributes('data-tone'))).toEqual([undefined, 'danger', undefined])
   })
 
   it('runs the chosen entry and closes, giving the focus back', async () => {

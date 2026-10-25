@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Eye, EyeOff, KeyRound, Pencil, Plus, Trash2, X } from '@lucide/vue'
+import { Dices, EllipsisVertical, Eye, EyeOff, Pencil, Plus, X } from '@lucide/vue'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import AppModal from '@/components/AppModal.vue'
+import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
@@ -37,6 +38,8 @@ const showPassword = ref(false)
 const pickedGroupId = ref<string | null>(null)
 const pickedGroup = ref<api.SearchResult | null>(null)
 const generatedPassword = ref<string | null>(null)
+// The row's menu of further actions, under its button.
+const rowMenu = ref<{ userId: string; x: number; y: number; items: MenuItem[] } | null>(null)
 
 const { loading } = useLoader(load)
 
@@ -48,6 +51,13 @@ function generatePassword() {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   const bytes = crypto.getRandomValues(new Uint32Array(16))
   return Array.from(bytes, (byte) => chars.charAt(byte % chars.length)).join('')
+}
+
+/** Fills the field with a new random password and shows it, so it can be passed on. */
+function fillGeneratedPassword() {
+  if (!form.value) return
+  form.value.password = generatePassword()
+  showPassword.value = true
 }
 
 function openForm(user: api.AdminUser | null) {
@@ -86,20 +96,41 @@ async function save() {
     is_active: value.is_active,
     group_ids: value.groups.map((g) => g.id),
   }
+  const withPassword = value.password ? { ...data, password: value.password } : data
+  // Set inside the action, so typed by assertion: TypeScript would take it for null after it.
+  let created = null as api.AdminUser | null
   const saved = await run(
     async () => {
-      if (value.id) {
-        await api.updateAdminUser(value.id, value.password ? { ...data, password: value.password } : data)
-      } else {
-        const password = value.password || generatePassword()
-        await api.createAdminUser({ ...data, password })
-        if (!value.password) generatedPassword.value = password
-      }
+      if (value.id) await api.updateAdminUser(value.id, withPassword)
+      else created = await api.createAdminUser(withPassword)
       await load()
     },
     { failure: t('app.saveFailed') },
   )
-  if (saved) form.value = null
+  if (!saved) return
+  form.value = null
+  if (created) await sendInvitation(created)
+}
+
+/** Asks whether to email the user, after adding them or again later; one without a password chooses
+ * it from the link in there. */
+async function sendInvitation(user: api.AdminUser) {
+  const text = user.has_password ? 'app.inviteUserText' : 'app.inviteUserTextNoPassword'
+  if (!(await confirm(t(text, { name: user.display_name, email: user.email }), t('app.inviteUserTitle')))) return
+  await run(() => api.inviteAdminUser(user.id), {
+    success: t('app.inviteUserSent', { email: user.email }),
+    failure: t('app.inviteUserFailed'),
+  })
+}
+
+function openRowMenu(event: MouseEvent, user: api.AdminUser) {
+  const rect = (event.currentTarget as Element).getBoundingClientRect()
+  const items: MenuItem[] = [
+    { label: t('app.inviteUser'), action: () => void sendInvitation(user) },
+    { label: t('app.resetPassword'), action: () => void resetPassword(user) },
+  ]
+  if (user.id !== auth.user?.id) items.push({ label: t('app.delete'), action: () => void remove(user), danger: true })
+  rowMenu.value = { userId: user.id, x: rect.right, y: rect.bottom + 4, items }
 }
 
 async function remove(user: api.AdminUser) {
@@ -185,21 +216,12 @@ async function resetPassword(user: api.AdminUser) {
                   <Pencil :size="18" :stroke-width="2.25" />
                 </IconButton>
                 <IconButton
-                  :label="$t('app.resetPassword')"
-                  tone="primary"
-                  :disabled="busy"
-                  @click="resetPassword(user)"
+                  :label="$t('app.moreActions')"
+                  aria-haspopup="menu"
+                  :aria-expanded="rowMenu?.userId === user.id"
+                  @click="openRowMenu($event, user)"
                 >
-                  <KeyRound :size="18" :stroke-width="2.25" />
-                </IconButton>
-                <IconButton
-                  v-if="user.id !== auth.user?.id"
-                  :label="$t('app.delete')"
-                  tone="danger"
-                  :disabled="busy"
-                  @click="remove(user)"
-                >
-                  <Trash2 :size="18" :stroke-width="2.25" />
+                  <EllipsisVertical :size="18" :stroke-width="2.25" />
                 </IconButton>
               </div>
             </td>
@@ -226,17 +248,21 @@ async function resetPassword(user: api.AdminUser) {
           <input
             v-model="form.password"
             :type="showPassword ? 'text' : 'password'"
-            :placeholder="form.id ? $t('app.passwordUnchanged') : $t('app.passwordGenerated')"
-            class="w-full rounded-lg border border-line px-3 py-2 pr-10"
+            :placeholder="form.id ? $t('app.passwordUnchanged') : $t('app.passwordOptional')"
+            class="w-full rounded-lg border border-line px-3 py-2 pr-20"
           />
-          <IconButton
-            class="absolute right-2 top-1/2 -translate-y-1/2"
-            :label="showPassword ? $t('auth.hidePassword') : $t('auth.showPassword')"
-            @click="showPassword = !showPassword"
-          >
-            <Eye v-if="showPassword" :size="18" :stroke-width="2.25" />
-            <EyeOff v-else :size="18" :stroke-width="2.25" />
-          </IconButton>
+          <div class="absolute right-2 top-1/2 flex -translate-y-1/2 gap-1">
+            <IconButton :label="$t('app.generatePassword')" @click="fillGeneratedPassword">
+              <Dices :size="18" :stroke-width="2.25" />
+            </IconButton>
+            <IconButton
+              :label="showPassword ? $t('auth.hidePassword') : $t('auth.showPassword')"
+              @click="showPassword = !showPassword"
+            >
+              <Eye v-if="showPassword" :size="18" :stroke-width="2.25" />
+              <EyeOff v-else :size="18" :stroke-width="2.25" />
+            </IconButton>
+          </div>
         </div>
       </label>
       <div class="grid gap-3 sm:grid-cols-2">
@@ -295,6 +321,8 @@ async function resetPassword(user: api.AdminUser) {
       </div>
     </div>
   </SettingsPanel>
+
+  <ContextMenu v-if="rowMenu" :x="rowMenu.x" :y="rowMenu.y" :items="rowMenu.items" align-end @close="rowMenu = null" />
 
   <AppModal :open="!!generatedPassword" :title="$t('app.newPassword')" @close="generatedPassword = null">
     <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">

@@ -6,8 +6,11 @@ import AppLogo from '@/components/AppLogo.vue'
 import { errorMessage } from '@/services/errors'
 import { useSettingsStore } from '@/stores/settings'
 
-/** Without a key: asking for the link by email. With the key from that link: setting the new password. */
-const props = defineProps<{ resetKey?: string }>()
+/**
+ * Without a key: asking for the link by email. With the key from that link: setting the new password.
+ * `invite`: the link came with the invitation to a new account, which has no password yet.
+ */
+const props = defineProps<{ resetKey?: string; invite?: boolean }>()
 
 const settings = useSettingsStore()
 const { t } = useI18n()
@@ -46,7 +49,9 @@ async function submit() {
         <h1 class="text-2xl font-bold text-gray-800">{{ settings.appName }}</h1>
       </div>
 
-      <h2 class="text-lg font-medium text-gray-700 mb-4 text-center">{{ $t('auth.resetTitle') }}</h2>
+      <h2 class="text-lg font-medium text-gray-700 mb-4 text-center">
+        {{ settingNew && invite ? $t('auth.inviteTitle') : $t('auth.resetTitle') }}
+      </h2>
 
       <p v-if="done" class="text-sm text-gray-700" role="status">
         {{ settingNew ? $t('auth.resetDone') : $t('auth.resetSent') }}

@@ -250,6 +250,7 @@ const cases: Case[] = [
   ],
   ['deleteAdminUser', () => api.deleteAdminUser('u'), 'DELETE', '/api/admin/users/u'],
   ['resetAdminUserPassword', () => api.resetAdminUserPassword('u'), 'POST', '/api/admin/users/u/reset-password'],
+  ['inviteAdminUser', () => api.inviteAdminUser('u'), 'POST', '/api/admin/users/u/invite'],
   ['listUserGroups', () => api.listUserGroups(), 'GET', '/api/groups'],
   ['createUserGroup', () => api.createUserGroup({ name: 'G' } as never), 'POST', '/api/groups', { name: 'G' }],
   ['getUserGroup', () => api.getUserGroup('g'), 'GET', '/api/groups/g'],
