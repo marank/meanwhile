@@ -3,22 +3,25 @@ Custom django-allauth account adapter.
 """
 
 from types import SimpleNamespace
+from typing import Any
 from urllib.parse import urlparse
 
 from allauth.account.adapter import DefaultAccountAdapter
+from django import forms
 from django.conf import settings as django_settings
+from django.http import HttpRequest
 from django.utils import translation
 
 from core.models import User
 from core.services.mail import app_name, language_of
 
 
-class AccountAdapter(DefaultAccountAdapter):
-    def format_email_subject(self, subject) -> str:
+class AccountAdapter(DefaultAccountAdapter):  # type: ignore[misc]  # allauth ships no types
+    def format_email_subject(self, subject: str) -> str:
         # The app's name, not the Django site's ("example.com"), as in the app's own emails.
         return f"[{app_name()}] {subject}"
 
-    def send_mail(self, template_prefix: str, email: str, context: dict) -> None:
+    def send_mail(self, template_prefix: str, email: str, context: dict[str, Any]) -> None:
         # allauth's emails (e.g. the password reset code) greet from the Django site ("example.com");
         # they come from the app instead, in the language of the account they're for.
         name = app_name()
@@ -28,10 +31,10 @@ class AccountAdapter(DefaultAccountAdapter):
         with translation.override(language_of(user)):
             super().send_mail(template_prefix, email, context)
 
-    def is_open_for_signup(self, request) -> bool:
-        return getattr(django_settings, "ALLOW_REGISTRATION", True)
+    def is_open_for_signup(self, request: HttpRequest) -> bool:
+        return bool(getattr(django_settings, "ALLOW_REGISTRATION", True))
 
-    def save_user(self, request, user, form, commit=True):
+    def save_user(self, request: HttpRequest, user: User, form: forms.Form, commit: bool = True) -> User:
         # Let allauth + our SignupForm set email, password, display_name.
         user = super().save_user(request, user, form, commit=False)
 

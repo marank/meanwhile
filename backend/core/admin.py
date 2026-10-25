@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import UserChangeForm
+from django.db.models import QuerySet
+from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
 from core import models
@@ -28,14 +30,14 @@ APPEARANCE_FIELDSETS: _FieldsetSpec = (
 )
 
 
-class CustomUserChangeForm(UserChangeForm):
+class CustomUserChangeForm(UserChangeForm[models.User]):
     class Meta(UserChangeForm.Meta):
         model = models.User
         fields = "__all__"
 
 
 @admin.register(models.User)
-class CustomUserAdmin(UserAdmin):
+class CustomUserAdmin(UserAdmin[models.User]):
     form = CustomUserChangeForm
     model = models.User
     list_display = ("email", "display_name", "is_admin", "is_superuser", "is_active", "last_login")
@@ -74,21 +76,21 @@ class CustomUserAdmin(UserAdmin):
 
 
 @admin.register(models.UserGroup)
-class UserGroupAdmin(admin.ModelAdmin):
+class UserGroupAdmin(admin.ModelAdmin[models.UserGroup]):
     list_display = ("name", "description", "member_count", "created_at")
     search_fields = ("name", "description")
     readonly_fields = ("created_at", "updated_at")
 
-    def get_queryset(self, request):
+    def get_queryset(self, request: HttpRequest) -> QuerySet[models.UserGroup]:
         return super().get_queryset(request).prefetch_related("user_set")
 
     @admin.display(description=_("Members"))
-    def member_count(self, obj):
+    def member_count(self, obj: models.UserGroup) -> int:
         return len(obj.user_set.all())
 
 
 @admin.register(models.AppSettings)
-class AppSettingsAdmin(admin.ModelAdmin):
+class AppSettingsAdmin(admin.ModelAdmin[models.AppSettings]):
     list_display = ("app_name", "updated_at")
     readonly_fields = ("updated_at",)
     fieldsets = (
@@ -107,16 +109,16 @@ class AppSettingsAdmin(admin.ModelAdmin):
         (None, {"fields": ("updated_at",)}),
     )
 
-    def has_add_permission(self, request):
+    def has_add_permission(self, request: HttpRequest) -> bool:
         # A singleton: there is one row, created on demand.
         return not models.AppSettings.objects.exists()
 
-    def has_delete_permission(self, request, obj=None):
+    def has_delete_permission(self, request: HttpRequest, obj: models.AppSettings | None = None) -> bool:
         return False
 
 
 @admin.register(models.AppPassword)
-class AppPasswordAdmin(admin.ModelAdmin):
+class AppPasswordAdmin(admin.ModelAdmin[models.AppPassword]):
     list_display = ("label", "user", "last_used_at", "created_at")
     list_select_related = ("user",)
     search_fields = ("label", "user__email", "user__display_name")
@@ -126,14 +128,14 @@ class AppPasswordAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Folder)
-class FolderAdmin(admin.ModelAdmin):
+class FolderAdmin(admin.ModelAdmin[models.Folder]):
     list_display = ("name", "user", "parent", "position")
     list_select_related = ("user", "parent")
     search_fields = ("name", "user__email")
     autocomplete_fields = ("user", "parent")
 
 
-class CalendarMemberInline(admin.TabularInline):
+class CalendarMemberInline(admin.TabularInline[models.CalendarMember, models.Calendar]):
     model = models.CalendarMember
     extra = 0
     autocomplete_fields = ("user",)
@@ -142,27 +144,27 @@ class CalendarMemberInline(admin.TabularInline):
     readonly_fields = ("source",)
 
 
-class CalendarGroupInline(admin.TabularInline):
+class CalendarGroupInline(admin.TabularInline[models.CalendarGroup, models.Calendar]):
     model = models.CalendarGroup
     extra = 0
     autocomplete_fields = ("group",)
     fields = ("group", "role")
 
 
-class CalendarApproverInline(admin.TabularInline):
+class CalendarApproverInline(admin.TabularInline[models.CalendarApprover, models.Calendar]):
     model = models.CalendarApprover
     extra = 0
     autocomplete_fields = ("user",)
 
 
-class CategoryInline(admin.TabularInline):
+class CategoryInline(admin.TabularInline[models.Category, models.Calendar]):
     model = models.Category
     extra = 0
     fields = ("name", "color", "description")
 
 
 @admin.register(models.Calendar)
-class CalendarAdmin(admin.ModelAdmin):
+class CalendarAdmin(admin.ModelAdmin[models.Calendar]):
     list_display = ("name", "owner", "is_public", "force_all_day", "created_at")
     list_select_related = ("owner",)
     list_filter = ("is_public", "force_all_day")
@@ -181,7 +183,7 @@ class CalendarAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.CalendarMember)
-class CalendarMemberAdmin(admin.ModelAdmin):
+class CalendarMemberAdmin(admin.ModelAdmin[models.CalendarMember]):
     list_display = ("calendar", "user", "source", "role", "folder")
     list_select_related = ("calendar", "user", "folder")
     list_filter = ("source", "role")
@@ -190,7 +192,7 @@ class CalendarMemberAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.CalendarGroup)
-class CalendarGroupAdmin(admin.ModelAdmin):
+class CalendarGroupAdmin(admin.ModelAdmin[models.CalendarGroup]):
     list_display = ("calendar", "group", "role", "created_at")
     list_select_related = ("calendar", "group")
     list_filter = ("role",)
@@ -200,7 +202,7 @@ class CalendarGroupAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.CalendarApprover)
-class CalendarApproverAdmin(admin.ModelAdmin):
+class CalendarApproverAdmin(admin.ModelAdmin[models.CalendarApprover]):
     list_display = ("calendar", "user")
     list_select_related = ("calendar", "user")
     search_fields = ("calendar__name", "user__email", "user__display_name")
@@ -208,7 +210,7 @@ class CalendarApproverAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.OverviewSettings)
-class OverviewSettingsAdmin(admin.ModelAdmin):
+class OverviewSettingsAdmin(admin.ModelAdmin[models.OverviewSettings]):
     list_display = ("user", "use_calendar_colors", "first_weekday", "show_weekends", "show_week_numbers")
     list_select_related = ("user",)
     search_fields = ("user__email", "user__display_name")
@@ -220,7 +222,7 @@ class OverviewSettingsAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Category)
-class CategoryAdmin(admin.ModelAdmin):
+class CategoryAdmin(admin.ModelAdmin[models.Category]):
     list_display = ("name", "calendar", "color")
     list_select_related = ("calendar",)
     search_fields = ("name", "calendar__name")
@@ -228,14 +230,14 @@ class CategoryAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
 
-class ResourceApproverInline(admin.TabularInline):
+class ResourceApproverInline(admin.TabularInline[models.ResourceApprover, models.Resource]):
     model = models.ResourceApprover
     extra = 0
     autocomplete_fields = ("user",)
 
 
 @admin.register(models.Resource)
-class ResourceAdmin(admin.ModelAdmin):
+class ResourceAdmin(admin.ModelAdmin[models.Resource]):
     list_display = ("name", "calendar", "is_location", "requires_approval", "is_active", "archived_at")
     list_select_related = ("calendar",)
     list_filter = ("is_location", "requires_approval", "is_active")
@@ -246,21 +248,21 @@ class ResourceAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ResourceApprover)
-class ResourceApproverAdmin(admin.ModelAdmin):
+class ResourceApproverAdmin(admin.ModelAdmin[models.ResourceApprover]):
     list_display = ("resource", "user")
     list_select_related = ("resource", "user")
     search_fields = ("resource__name", "user__email", "user__display_name")
     autocomplete_fields = ("resource", "user")
 
 
-class EventParticipantInline(admin.TabularInline):
+class EventParticipantInline(admin.TabularInline[models.EventParticipant, models.Event]):
     model = models.EventParticipant
     extra = 0
     autocomplete_fields = ("user",)
     fields = ("email", "user", "status")
 
 
-class EventCommentInline(admin.TabularInline):
+class EventCommentInline(admin.TabularInline[models.EventComment, models.Event]):
     model = models.EventComment
     extra = 0
     autocomplete_fields = ("author",)
@@ -269,7 +271,7 @@ class EventCommentInline(admin.TabularInline):
 
 
 @admin.register(models.Event)
-class EventAdmin(admin.ModelAdmin):
+class EventAdmin(admin.ModelAdmin[models.Event]):
     list_display = ("title", "calendar", "start", "end", "all_day", "status", "is_recurring")
     list_select_related = ("calendar",)
     list_filter = ("status", "all_day", "calendar")
@@ -296,12 +298,12 @@ class EventAdmin(admin.ModelAdmin):
     )
 
     @admin.display(boolean=True, description=_("Recurring"))
-    def is_recurring(self, obj):
+    def is_recurring(self, obj: models.Event) -> bool:
         return bool(obj.rrule)
 
 
 @admin.register(models.EventParticipant)
-class EventParticipantAdmin(admin.ModelAdmin):
+class EventParticipantAdmin(admin.ModelAdmin[models.EventParticipant]):
     list_display = ("email", "event", "user", "status")
     list_select_related = ("event", "user")
     list_filter = ("status",)
@@ -311,7 +313,7 @@ class EventParticipantAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.EventComment)
-class EventCommentAdmin(admin.ModelAdmin):
+class EventCommentAdmin(admin.ModelAdmin[models.EventComment]):
     list_display = ("short_body", "event", "author", "created_at")
     list_select_related = ("event", "author")
     search_fields = ("body", "event__title", "author__email")
@@ -320,12 +322,12 @@ class EventCommentAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
 
     @admin.display(description=_("Comment"))
-    def short_body(self, obj):
+    def short_body(self, obj: models.EventComment) -> str:
         return obj.body if len(obj.body) <= 60 else f"{obj.body[:57]}..."
 
 
 @admin.register(models.EventActivity)
-class EventActivityAdmin(admin.ModelAdmin):
+class EventActivityAdmin(admin.ModelAdmin[models.EventActivity]):
     list_display = ("action", "event", "actor", "created_at")
     list_select_related = ("event", "actor")
     list_filter = ("action",)
@@ -336,7 +338,7 @@ class EventActivityAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.EventReminder)
-class EventReminderAdmin(admin.ModelAdmin):
+class EventReminderAdmin(admin.ModelAdmin[models.EventReminder]):
     list_display = ("event", "user", "minutes_before", "created_at")
     list_select_related = ("event", "user")
     search_fields = ("event__title", "user__email")
@@ -345,7 +347,7 @@ class EventReminderAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ReminderDelivery)
-class ReminderDeliveryAdmin(admin.ModelAdmin):
+class ReminderDeliveryAdmin(admin.ModelAdmin[models.ReminderDelivery]):
     list_display = ("reminder", "occurrence_start", "delivered_at")
     list_select_related = ("reminder__event", "reminder__user")
     raw_id_fields = ("reminder",)
@@ -354,7 +356,7 @@ class ReminderDeliveryAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.DeletedEvent)
-class DeletedEventAdmin(admin.ModelAdmin):
+class DeletedEventAdmin(admin.ModelAdmin[models.DeletedEvent]):
     list_display = ("href", "calendar_id", "deleted_at")
     search_fields = ("href", "calendar_id")
     readonly_fields = ("deleted_at",)
@@ -362,7 +364,7 @@ class DeletedEventAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.Notification)
-class NotificationAdmin(admin.ModelAdmin):
+class NotificationAdmin(admin.ModelAdmin[models.Notification]):
     list_display = ("title", "type", "user", "is_read", "created_at")
     list_select_related = ("user",)
     list_filter = ("type",)
@@ -372,5 +374,5 @@ class NotificationAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
 
     @admin.display(boolean=True, description=_("Read"))
-    def is_read(self, obj):
+    def is_read(self, obj: models.Notification) -> bool:
         return obj.read_at is not None

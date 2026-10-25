@@ -21,6 +21,7 @@ dependencies = [
     "defusedxml>=0.7.1",
     "asgiref>=3.13.0",
     "pydantic>=2.14.1",
+    "django-stubs-ext>=6.1.2",
 ]
 
 [dependency-groups]
@@ -81,22 +82,7 @@ strict = true
 
 # Not strict yet; shrinks module by module.
 [[tool.mypy.overrides]]
-module = [
-    "config.*",
-    "manage",
-    "core",
-    "core.adapters",
-    "core.admin",
-    "core.api",
-    "core.apps",
-    "core.forms",
-    "core.headless_adapter",
-    "core.signals",
-    "core.tasks",
-    "core.management.*",
-    "core.models.*",
-    "core.tests.*",
-]
+module = ["core.tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 disallow_untyped_calls = false

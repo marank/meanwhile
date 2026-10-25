@@ -4,10 +4,14 @@ Django settings for the Calendar backend.
 
 from pathlib import Path
 
+import django_stubs_ext
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
 
 from .env import env_bool, env_int, env_list, env_str, load_dotenv, parse_app_urls, secret_key
+
+# Lets Django's generic classes be subscripted at runtime as in their stubs (ModelAdmin[Event]).
+django_stubs_ext.monkeypatch()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

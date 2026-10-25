@@ -2,9 +2,12 @@
 Model signal handlers.
 """
 
+from collections.abc import Iterable
 from datetime import timedelta
+from typing import Any
 from uuid import UUID
 
+from django.db.models import Model
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -21,6 +24,7 @@ from core.models import (
     User,
     UserGroup,
 )
+from core.models.base import AnyId
 from core.realtime import broadcast
 from core.services import memberships, reminders
 
@@ -28,7 +32,7 @@ from core.services import memberships, reminders
 DELETED_EVENT_RETENTION = timedelta(days=90)
 
 
-def _deleted_along(origin, model) -> bool:
+def _deleted_along(origin: object, model: type[Model]) -> bool:
     """Whether a deletion started at an object (or a queryset) of `model`."""
     return isinstance(origin, model) or getattr(origin, "model", None) is model
 
@@ -39,13 +43,13 @@ def _touch_series(series_id: UUID) -> None:
 
 
 @receiver(post_save, sender=Event)
-def touch_series_of_saved_occurrence(sender, instance: Event, **kwargs) -> None:
+def touch_series_of_saved_occurrence(sender: object, instance: Event, **kwargs: Any) -> None:
     if instance.parent_id:
         _touch_series(instance.parent_id)
 
 
 @receiver(post_delete, sender=Event)
-def remember_deleted_event(sender, instance: Event, origin=None, **kwargs) -> None:
+def remember_deleted_event(sender: object, instance: Event, origin: object = None, **kwargs: Any) -> None:
     if _deleted_along(origin, Calendar):
         return  # the calendar's record of deleted events goes with it
     if instance.parent_id:
@@ -58,7 +62,9 @@ def remember_deleted_event(sender, instance: Event, origin=None, **kwargs) -> No
 
 @receiver(post_save, sender=Event)
 @receiver(post_delete, sender=Event)
-def work_out_reminders_again(sender, instance: Event, raw: bool = False, origin=None, **kwargs) -> None:
+def work_out_reminders_again(
+    sender: object, instance: Event, raw: bool = False, origin: object = None, **kwargs: Any
+) -> None:
     # A new time, rule or status, or a changed occurrence, moves when the series' reminders are due.
     if raw or _deleted_along(origin, Calendar) or (instance.parent_id is None and _deleted_along(origin, Event)):
         return  # their reminders go too
@@ -66,7 +72,7 @@ def work_out_reminders_again(sender, instance: Event, raw: bool = False, origin=
 
 
 @receiver(post_delete, sender=Calendar)
-def forget_deleted_events_of_calendar(sender, instance: Calendar, **kwargs) -> None:
+def forget_deleted_events_of_calendar(sender: object, instance: Calendar, **kwargs: Any) -> None:
     DeletedEvent.objects.filter(calendar_id=instance.id).delete()
 
 
@@ -75,13 +81,13 @@ def forget_deleted_events_of_calendar(sender, instance: Calendar, **kwargs) -> N
 
 @receiver(post_save, sender=Event)
 @receiver(post_delete, sender=Event)
-def announce_event_change(sender, instance: Event, **kwargs) -> None:
+def announce_event_change(sender: object, instance: Event, **kwargs: Any) -> None:
     broadcast.calendar_changed(instance.calendar_id)
 
 
 @receiver(post_save, sender=EventParticipant)
 @receiver(post_delete, sender=EventParticipant)
-def announce_participant_change(sender, instance: EventParticipant, **kwargs) -> None:
+def announce_participant_change(sender: object, instance: EventParticipant, **kwargs: Any) -> None:
     # Participants see events (e.g. pending bookings) that others don't.
     calendar_id = Event.objects.filter(pk=instance.event_id).values_list("calendar_id", flat=True).first()
     broadcast.calendar_changed(calendar_id)
@@ -89,11 +95,11 @@ def announce_participant_change(sender, instance: EventParticipant, **kwargs) ->
 
 @receiver(post_save, sender=Notification)
 @receiver(post_delete, sender=Notification)
-def announce_notification_change(sender, instance: Notification, **kwargs) -> None:
+def announce_notification_change(sender: object, instance: Notification, **kwargs: Any) -> None:
     broadcast.notifications_changed(instance.user_id)
 
 
-def _calendar_audience(calendar_id) -> set:
+def _calendar_audience(calendar_id: AnyId) -> set[UUID]:
     """Everyone whose list of calendars shows the calendar: its members (granted, from a group or added) and
     the members of linked groups."""
     users = set(CalendarMember.objects.filter(calendar_id=calendar_id).values_list("user_id", flat=True))
@@ -105,25 +111,27 @@ def _calendar_audience(calendar_id) -> set:
 
 
 @receiver(post_save, sender=Calendar)
-def announce_calendar_change(sender, instance: Calendar, **kwargs) -> None:
+def announce_calendar_change(sender: object, instance: Calendar, **kwargs: Any) -> None:
     # Names, colors and settings. A deleted calendar's members hear it through their memberships.
     broadcast.calendars_changed(_calendar_audience(instance.pk))
 
 
 @receiver(post_save, sender=CalendarMember)
 @receiver(post_delete, sender=CalendarMember)
-def announce_membership_change(sender, instance: CalendarMember, **kwargs) -> None:
+def announce_membership_change(sender: object, instance: CalendarMember, **kwargs: Any) -> None:
     broadcast.calendars_changed([instance.user_id])
 
 
 @receiver(post_save, sender=CalendarGroup)
 @receiver(post_delete, sender=CalendarGroup)
-def announce_group_link_change(sender, instance: CalendarGroup, **kwargs) -> None:
+def announce_group_link_change(sender: object, instance: CalendarGroup, **kwargs: Any) -> None:
     broadcast.calendars_changed(User.objects.filter(groups=instance.group_id).values_list("pk", flat=True))
 
 
 @receiver(m2m_changed, sender=User.groups.through)
-def announce_group_membership_change(sender, instance, action, reverse, pk_set, **kwargs) -> None:
+def announce_group_membership_change(
+    sender: object, instance: User | UserGroup, action: str, reverse: bool, pk_set: set[UUID] | None, **kwargs: Any
+) -> None:
     # Joining or leaving a group gives or takes the calendars linked to it.
     if action not in {"post_add", "post_remove", "pre_clear"}:
         return
@@ -131,7 +139,7 @@ def announce_group_membership_change(sender, instance, action, reverse, pk_set, 
         broadcast.calendars_changed([instance.pk])
     elif pk_set:
         broadcast.calendars_changed(pk_set)
-    elif action == "pre_clear":
+    elif action == "pre_clear" and isinstance(instance, UserGroup):
         broadcast.calendars_changed(instance.user_set.values_list("pk", flat=True))
 
 
@@ -140,14 +148,14 @@ def announce_group_membership_change(sender, instance, action, reverse, pk_set, 
 
 
 @receiver(post_save, sender=Calendar)
-def sync_public_memberships(sender, instance: Calendar, raw: bool = False, **kwargs) -> None:
+def sync_public_memberships(sender: object, instance: Calendar, raw: bool = False, **kwargs: Any) -> None:
     if not raw:
         memberships.sync_public(instance)
 
 
 @receiver(post_save, sender=CalendarGroup)
 @receiver(post_delete, sender=CalendarGroup)
-def sync_group_link_memberships(sender, instance: CalendarGroup, raw: bool = False, **kwargs) -> None:
+def sync_group_link_memberships(sender: object, instance: CalendarGroup, raw: bool = False, **kwargs: Any) -> None:
     if raw:
         return
     # Going with its calendar, the link takes nothing along that would have to be replaced.
@@ -157,14 +165,17 @@ def sync_group_link_memberships(sender, instance: CalendarGroup, raw: bool = Fal
 
 
 @receiver(m2m_changed, sender=User.groups.through)
-def sync_group_memberships(sender, instance, action, reverse, pk_set, **kwargs) -> None:
-    if reverse:
+def sync_group_memberships(
+    sender: object, instance: User | UserGroup, action: str, reverse: bool, pk_set: set[UUID] | None, **kwargs: Any
+) -> None:
+    # Reverse: the group's users changed, else the user's groups.
+    if isinstance(instance, UserGroup):
         _group_members_changed(instance, action, pk_set)
     else:
         _user_groups_changed(instance, action, pk_set)
 
 
-def _user_groups_changed(user: User, action: str, group_ids: set | None) -> None:
+def _user_groups_changed(user: User, action: str, group_ids: set[UUID] | None) -> None:
     """user.groups.add/remove/clear: the calendars of these groups (of all, when cleared) may come or go."""
     if action in {"post_add", "post_remove"}:
         memberships.sync_user_groups(user.pk, group_ids)
@@ -172,7 +183,7 @@ def _user_groups_changed(user: User, action: str, group_ids: set | None) -> None
         memberships.sync_user_groups(user.pk)
 
 
-def _group_members_changed(group: UserGroup, action: str, user_ids: set | None) -> None:
+def _group_members_changed(group: UserGroup, action: str, user_ids: Iterable[UUID] | None) -> None:
     """group.user_set.add/remove/clear: these users may gain or lose the group's calendars."""
     if action == "pre_clear":
         # Once cleared, the group can't tell who was in it.
@@ -188,5 +199,5 @@ def _group_members_changed(group: UserGroup, action: str, user_ids: set | None) 
 
 @receiver(post_save, sender=Folder)
 @receiver(post_delete, sender=Folder)
-def announce_folder_change(sender, instance: Folder, **kwargs) -> None:
+def announce_folder_change(sender: object, instance: Folder, **kwargs: Any) -> None:
     broadcast.calendars_changed([instance.user_id])

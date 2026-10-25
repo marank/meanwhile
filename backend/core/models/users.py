@@ -13,7 +13,7 @@ from core.models.base import TimestampedModel, UUIDModel, default_weekend_days
 class UserManager(BaseUserManager["User"]):
     use_in_migrations = True
 
-    def _create_user(self, email: str, password: str | None, **extra) -> User:
+    def _create_user(self, email: str, password: str | None, **extra: Any) -> User:
         if not email:
             raise ValueError("Email is required")
         email = self.normalize_email(email)
@@ -25,11 +25,11 @@ class UserManager(BaseUserManager["User"]):
         user.save(using=self._db)
         return user
 
-    def create_user(self, email: str, password: str | None = None, **extra) -> User:
+    def create_user(self, email: str, password: str | None = None, **extra: Any) -> User:
         extra.setdefault("is_superuser", False)
         return self._create_user(email, password, **extra)
 
-    def create_superuser(self, email: str, password: str | None = None, **extra) -> User:
+    def create_superuser(self, email: str, password: str | None = None, **extra: Any) -> User:
         extra.setdefault("is_superuser", True)
         extra.setdefault("is_admin", True)
         return self._create_user(email, password, **extra)

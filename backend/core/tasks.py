@@ -8,10 +8,11 @@ many workers run.
 
 import logging
 from datetime import timedelta
+from typing import Any
 
 from django.conf import settings
 from django.utils import timezone
-from procrastinate import RetryStrategy, builtin_tasks
+from procrastinate import JobContext, RetryStrategy, builtin_tasks
 from procrastinate.contrib.django import app
 
 from core.models import DeletedEvent, ReminderDelivery
@@ -29,7 +30,7 @@ FAILED_JOB_RETENTION = timedelta(days=30)
 
 # While the mail server is down, tried again after 2, 4, 8, ... seconds, 12 times: for about two hours.
 @app.task(queue="mail", retry=RetryStrategy(max_attempts=12, exponential_wait=2))
-def send_email(message: dict) -> None:
+def send_email(message: dict[str, Any]) -> None:
     """One email (core.services.mail.message_data)."""
     mail.deliver([mail.message_from_data(message)])
 
@@ -61,7 +62,7 @@ def clean_up(timestamp: int) -> None:
 
 @app.periodic(cron="47 3 * * *")
 @app.task(queueing_lock="remove_old_jobs", pass_context=True)
-async def remove_old_jobs(context, timestamp: int) -> None:
+async def remove_old_jobs(context: JobContext, timestamp: int) -> None:
     await builtin_tasks.remove_old_jobs(
         context, max_hours=int(FINISHED_JOB_RETENTION.total_seconds() // 3600), remove_cancelled=True
     )

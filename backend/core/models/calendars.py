@@ -9,7 +9,7 @@ from core.models.calendar_colors import DEFAULT_COLORS
 from core.models.users import User, UserGroup
 
 
-def _color_field(name: str):
+def _color_field(name: str) -> models.CharField[str, str]:
     return models.CharField(max_length=7, default=DEFAULT_COLORS[name])
 
 
