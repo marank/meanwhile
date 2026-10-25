@@ -2,6 +2,7 @@
 Jobs of the task queue (core.tasks): emails go out through it, and regular jobs clean up.
 """
 
+import json
 import logging
 from datetime import timedelta
 
@@ -96,3 +97,15 @@ def test_the_log_names_jobs_without_their_arguments() -> None:
     assert console.filter(record)
     assert record.getMessage() == "Job core.tasks.send_email[35] ended"
     assert "secret-token" not in str(record.__dict__)
+
+
+def test_queued_emails_keep_the_logo_they_carry(task_queue: TaskQueue, settings: Settings) -> None:
+    settings.EMAIL_SEND_IN_BACKGROUND = True
+    outbox.outbox.clear()
+    mail.send([mail.build_message("ann@example.test", "Hello", ["Hi"], "en")])
+    [job] = task_queue.jobs("send_email")
+    json.dumps(job["args"])  # saved as JSON
+    task_queue.run_jobs()
+    [sent] = outbox.outbox
+    images = [p for p in sent.message().walk() if p.get("Content-ID") == "<logo@meanwhile>"]
+    assert len(images) == 1 and images[0].get_content_type() == "image/png"

@@ -19,7 +19,7 @@ let start = 0
 async function session(user: User | null) {
   setActivePinia(createPinia())
   backend = fakeBackend(sessionRoutes(user))
-  await router.replace(`/rsvp/start-${start++}`)
+  await router.replace(`/event/start-${start++}`)
 }
 
 const visit = async (path: string) => {
@@ -89,7 +89,7 @@ describe('router', () => {
   it('opens invitation links without asking for a session', async () => {
     setActivePinia(createPinia())
     backend = fakeBackend(sessionRoutes(null))
-    await router.replace('/rsvp/token-2')
+    await router.replace('/event/token-2')
     expect(backend.calls('GET /api/users/me')).toHaveLength(0)
     // Answering posts, which needs the CSRF cookie.
     expect(backend.calls('GET /api/auth/csrf')).toHaveLength(1)
@@ -97,7 +97,9 @@ describe('router', () => {
 
   it.each([null, makeUser()])('shows invitation and password links to anyone (user %#)', async (user) => {
     await session(user)
-    expect(await visit('/rsvp/token-1?answer=accepted')).toBe('/rsvp/token-1?answer=accepted')
+    expect(await visit('/event/token-1?answer=accepted')).toBe('/event/token-1?answer=accepted')
+    // Links in emails sent before the page moved.
+    expect(await visit('/rsvp/token-3?answer=declined')).toBe('/event/token-3?answer=declined')
     expect(await visit('/reset-password/key-1')).toBe('/reset-password/key-1')
   })
 })

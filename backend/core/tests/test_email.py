@@ -3,7 +3,10 @@ Emails: notifications by email, and scheduling by email (iMIP): invitations, the
 cancellations, and the participants' answers by link or from their mail programs.
 """
 
+import base64
+import re
 from datetime import datetime, timedelta
+from html import unescape
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -114,12 +117,12 @@ def test_invited_guests_get_the_event_as_request_with_links_to_answer(world: Wor
     # Also as a file, for mail programs that don't show invitations.
     assert [a[0] for a in message.attachments] == ["invite.ics"]
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
-    assert f"http://app.test/rsvp/{token}?answer=accepted" in message.body
+    assert f"http://app.test/event/{token}?answer=accepted" in message.body
     # A link to see the whole event, for guests without an account too.
-    assert f"View event: http://app.test/rsvp/{token}\n" in message.body
+    assert f"View event: http://app.test/event/{token}\n" in message.body
     assert isinstance(message, EmailMultiAlternatives)
     html = str(next(content for content, mimetype in message.alternatives if mimetype == "text/html"))
-    assert f'href="http://app.test/rsvp/{token}"' in html and ">Planning</h1>" in html
+    assert f'href="http://app.test/event/{token}"' in html and ">Planning</h1>" in html
     # Light or dark, as the reader's system is set (where the mail program follows it).
     assert 'content="light dark"' in html and "prefers-color-scheme: dark" in html
     # Times are shown in the event's zone to guests (09:00 UTC is 10:00 in Berlin in January).
@@ -159,6 +162,8 @@ def test_emails_are_written_in_the_language_of_the_recipient(world: World) -> No
     [message] = to(other.email)
     assert message.subject.startswith("Einladung: Planning @ Mo., 7. Jan. 2030, 10:00")
     assert "Zusagen" in message.body
+    # The same words as the invitation page's buttons.
+    assert "Vorläufig:" in message.body and "Ablehnen:" in message.body
 
 
 def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(world: World) -> None:
@@ -238,6 +243,43 @@ def test_guests_answer_by_link_without_an_account(world: World) -> None:
     assert message.subject == "Accepted: Planning"
     assert GUEST in message.body
     assert anonymous.get("/api/rsvp/not-a-token").status_code == 404
+
+
+def test_the_invitation_page_shows_who_else_comes_without_their_addresses(world: World) -> None:
+    # Anyone with the link sees the page: others appear by their name, guests not at all by address.
+    event = create(world)
+    invite(world, event)
+    invite(world, event, email="other@example.test")
+    invite(world, event, email="stranger@example.test")
+    token = EventParticipant.objects.get(email=GUEST).rsvp_token
+    anonymous = Client()
+    res = anonymous.get(f"/api/rsvp/{token}")
+    shown = res.json()
+    assert shown["organizer_name"] == "Owner" and "organizer_email" not in shown
+    assert sorted((p["name"] or "", p["you"]) for p in shown["participants"]) == [
+        ("", False),
+        ("Other", False),
+        (GUEST, True),
+    ]
+    assert "stranger@example.test" not in res.content.decode()
+    assert "owner@example.test" not in res.content.decode()
+
+
+def test_the_invitation_page_offers_the_event_as_file_without_the_people(world: World) -> None:
+    event = create(world)
+    invite(world, event)
+    invite(world, event, email="stranger@example.test")
+    token = EventParticipant.objects.get(email=GUEST).rsvp_token
+    anonymous = Client()
+    ics = anonymous.get(f"/api/rsvp/{token}/ics")
+    assert ics.status_code == 200 and ics["Content-Type"].startswith("text/calendar")
+    assert 'filename="invite.ics"' in ics["Content-Disposition"]
+    cal = icalendar.Calendar.from_ical(ics.content)
+    vevent = cal.walk("VEVENT")[0]
+    assert str(vevent["UID"]) == event["uid"] and str(vevent["SUMMARY"]) == "Planning"
+    assert "ATTENDEE" not in vevent and "ORGANIZER" not in vevent
+    assert b"@example.test" not in ics.content
+    assert anonymous.get("/api/rsvp/not-a-token/ics").status_code == 404
 
 
 def test_cancelled_events_cannot_be_answered_by_link(world: World) -> None:
@@ -399,25 +441,154 @@ def test_titles_over_several_lines_make_one_line_subjects() -> None:
     assert "\n" not in sender("Ann\nOther", "App")
 
 
-@pytest.mark.parametrize(
-    ("uploaded", "shown"),
-    [
-        ("", "http://app.test/mail-logo.png"),
-        ("/media/logo.png", "http://app.test/media/logo.png"),
-        ("https://cdn.example.com/logo.png", "https://cdn.example.com/logo.png"),
-        ("data:image/png;base64,AAAA", None),
-    ],
-)
-def test_emails_show_the_logo_mail_programs_can_load(uploaded: str, shown: str | None) -> None:
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
+
+
+def sent_logo(message: EmailMessage) -> tuple[bytes, str] | None:
+    """The image the email carries for its HTML part (cid:), and the type of the part around both."""
+    for part in message.message().walk():
+        if part.get("Content-ID") == "<logo@meanwhile>":
+            payload = part.get_payload(decode=True)
+            assert isinstance(payload, bytes)
+            return payload, part.get_content_type()
+    return None
+
+
+def related_parts(message: EmailMessage) -> list[str]:
+    related = next(p for p in message.message().walk() if p.get_content_type() == "multipart/related")
+    return [p.get_content_type() for p in related.iter_parts()]
+
+
+def logo_test_message(uploaded: str) -> EmailMessage:
     from core.models.users import get_or_create_app_settings
     from core.services.mail import build_message
 
     app_settings = get_or_create_app_settings()
     app_settings.logo_url = uploaded
     app_settings.save()
-    message = build_message("ann@example.test", "Hello", ["Hi"], "en")
-    html = str(message.alternatives[0][0])
+    return build_message("ann@example.test", "Hello", ["Hi"], "en")
+
+
+def html_of(message: EmailMessage) -> str:
+    assert isinstance(message, EmailMultiAlternatives)
+    return str(next(content for content, mimetype in message.alternatives if mimetype == "text/html"))
+
+
+@pytest.mark.parametrize(
+    ("uploaded", "image"),
+    [
+        # Ours, or one uploaded (a data: URL) in a format mail programs show.
+        ("", (Path(__file__).parents[1] / "assets" / "mail-logo.png").read_bytes()),
+        (f"data:image/png;base64,{base64.b64encode(PNG).decode()}", PNG),
+    ],
+)
+def test_emails_carry_the_logo_they_show(uploaded: str, image: bytes) -> None:
+    # Mail programs show images that come with the email at once, but load linked ones only when asked.
+    message = logo_test_message(uploaded)
+    assert '<img src="cid:logo@meanwhile"' in html_of(message)
+    assert sent_logo(message) == (image, "image/png")
+    assert related_parts(message) == ["text/html", "image/png"]
+
+
+@pytest.mark.parametrize(
+    ("uploaded", "shown"),
+    [
+        ("/media/logo.png", "http://app.test/media/logo.png"),
+        ("https://cdn.example.com/logo.png", "https://cdn.example.com/logo.png"),
+        # Gmail and Outlook show no SVG, and a big image would weigh down every email: the name alone.
+        ("data:image/svg+xml;base64,PHN2Zy8+", None),
+        (f"data:image/png;base64,{base64.b64encode(PNG * 6000).decode()}", None),
+        ("data:image/png;base64,not base64!", None),
+    ],
+)
+def test_logos_that_cannot_come_along_are_linked_or_left_out(uploaded: str, shown: str | None) -> None:
+    message = logo_test_message(uploaded)
+    html = html_of(message)
     assert (f'<img src="{shown}"' in html) if shown else ("<img" not in html)
+    assert sent_logo(message) is None
+
+
+def test_invitations_color_the_answers_like_the_invitation_page(world: World) -> None:
+    invite(world, create(world))
+    html = html_of(to(GUEST)[-1])
+    for tone, label in (("accept", "Accept"), ("tentative", "Tentative"), ("decline", "Decline")):
+        assert re.search(rf'class="mw-tone mw-tone-{tone}"[^>]*>{label}</a>', html)
+
+
+def shown_text(html: str) -> str:
+    """What the reader sees of the body, as one line."""
+    body = html[html.index("<body") :]
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", body)).split())
+
+
+def test_invitations_look_like_the_events_page(world: World) -> None:
+    # Who invites, the title, a leaf of a calendar with the day written out beside it, then the answers.
+    invite(world, create(world, rrule="FREQ=WEEKLY", location="Room 1"))
+    text_ = shown_text(html_of(to(GUEST)[-1]))
+    token = EventParticipant.objects.get(email=GUEST).rsvp_token
+    assert "Invitation from Owner Planning" in text_
+    assert f"{BASE.strftime('%b').upper()} {BASE.day} " in text_
+    assert BASE.strftime("%A, %B ") in text_ and "(Europe/Berlin) Weekly" in text_
+    assert "Where Room 1 Organizer Owner <owner@example.test>" in text_
+    assert "Your answer Accept Tentative Decline You can also answer in your mail program." in text_
+    assert f"Invited as {GUEST} View event" in text_
+    assert f'href="http://app.test/event/{token}"' in html_of(to(GUEST)[-1])
+
+
+def test_cancellations_say_so_on_top_and_strike_the_title_through(world: World) -> None:
+    event = create(world)
+    invite(world, event)
+    world["api"]["owner"].delete(f"/events/{event['id']}")
+    html = html_of(to(GUEST)[-1])
+    assert shown_text(html).startswith('Meanwhile Owner cancelled "Planning". Cancelled by Owner Planning')
+    assert re.search(r"<h1[^>]*line-through[^>]*>Planning</h1>", html)
+    assert "Your answer" not in html
+
+
+@pytest.mark.parametrize(
+    ("rrule", "said"),
+    [("FREQ=DAILY", "Daily"), ("FREQ=MONTHLY;BYMONTHDAY=5", "Monthly"), ("FREQ=WEEKLY;INTERVAL=2", "Repeats")],
+)
+def test_invitations_say_how_a_series_repeats(world: World, rrule: str, said: str) -> None:
+    invite(world, create(world, rrule=rrule))
+    assert f"(Europe/Berlin) {said} " in shown_text(html_of(to(GUEST)[-1]))
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "all_day", "language", "shown"),
+    [
+        # All-day values are midnight UTC, the end inclusive: the same days in every zone.
+        ("2030-01-07T00:00Z", "2030-01-07T00:00Z", True, "de", ("JAN", 7, "Montag, 7. Januar 2030", "All day")),
+        (
+            "2030-03-30T00:00Z",
+            "2030-04-01T00:00Z",
+            True,
+            "en",
+            ("MAR", 30, "Saturday, March 30, 2030 – Monday, April 1, 2030", "All day"),
+        ),
+        # In the reader's zone; over midnight there, both days are named.
+        (
+            "2030-01-07T22:00Z",
+            "2030-01-08T01:00Z",
+            False,
+            "de",
+            ("JAN", 7, "Mo., 7. Jan. 2030, 23:00 – Di., 8. Jan. 2030, 02:00 (Europe/Berlin)", ""),
+        ),
+    ],
+)
+def test_the_time_of_an_invitation_is_written_out(
+    start: str, end: str, all_day: bool, language: str, shown: tuple[str, int, str, str]
+) -> None:
+    from core.services.mail import Reader, when_parts
+
+    when = when_parts(
+        datetime.fromisoformat(start),
+        datetime.fromisoformat(end),
+        all_day,
+        Reader(language, "Europe/Berlin", twelve_hour=False),
+        "All day",
+    )
+    assert (when.month, when.day, when.date, when.time) == shown
 
 
 # Occurrences, addresses and answers in detail -----------------------------------------------------
@@ -474,6 +645,10 @@ def test_who_is_invited_to_one_occurrence_gets_that_one_only(world: World) -> No
     assert len(vevents) == 1 and "RRULE" not in vevents[0] and "RECURRENCE-ID" in vevents[0]
     assert "ORGANIZER" in vevents[0]
     assert "Moved" in to(GUEST)[-1].subject
+    # The file on their invitation page has that occurrence only, too.
+    token = EventParticipant.objects.get(id=participant["id"]).rsvp_token
+    downloaded = icalendar.Calendar.from_ical(Client().get(f"/api/rsvp/{token}/ics").content).walk("VEVENT")
+    assert len(downloaded) == 1 and str(downloaded[0]["SUMMARY"]) == "Moved" and "RRULE" not in downloaded[0]
 
     # Taken off it again, they hear so for that occurrence.
     world["api"]["owner"].delete(f"/events/{override['id']}/participants/{participant['id']}")

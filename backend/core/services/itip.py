@@ -20,7 +20,7 @@ from collections.abc import Callable
 from datetime import datetime
 from email.message import Message
 from email.utils import getaddresses
-from typing import Any
+from typing import Any, Literal
 
 import icalendar
 from django.conf import settings
@@ -153,25 +153,48 @@ def _message(
 
     subject_kind = "cancel" if kind == "removed" else kind
     paragraphs = [text(language, f"{kind}_body", organizer=name, title=title)]
-    details = [(text(language, "when"), when)]
-    if shown.location:
-        details.append((text(language, "location"), shown.location))
-    details.append((text(language, "organizer"), f"{name} <{organizer.email}>"))
-    if shown.description and method == "REQUEST":
-        details.append((text(language, "description"), shown.description))
+    place_and_organizer = [(text(language, "location"), shown.location)] if shown.location else []
+    place_and_organizer.append((text(language, "organizer"), f"{name} <{organizer.email}>"))
+    description = shown.description if method == "REQUEST" else ""
+    details = [(text(language, "when"), when), *place_and_organizer]
+    if description:
+        details.append((text(language, "description"), description))
 
     links: list[mail.Link] = []
+    view: mail.Link | None = None
     if method == "REQUEST":
         paragraphs.append(text(language, "rsvp_prompt"))
         # The answer page shows the whole event, also to guests without an account.
-        url = mail.app_link(f"/rsvp/{participant.rsvp_token}")
+        url = mail.app_link(f"/event/{participant.rsvp_token}")
         if url:
-            links.append(mail.Link(text(language, "view_event"), url, primary=True))
-        for answer, label in (("accepted", "accept"), ("tentative", "tentative"), ("declined", "decline")):
-            url = mail.app_link(f"/rsvp/{participant.rsvp_token}?answer={answer}")
+            view = mail.Link(text(language, "view_event"), url)
+            links.append(mail.Link(view.label, url, primary=True))
+        answers: list[tuple[str, Literal["accept", "tentative", "decline"]]] = [
+            ("accepted", "accept"),
+            ("tentative", "tentative"),
+            ("declined", "decline"),
+        ]
+        for answer, label in answers:
+            url = mail.app_link(f"/event/{participant.rsvp_token}?answer={answer}")
             if url:
-                links.append(mail.Link(text(language, label), url))
+                links.append(mail.Link(text(language, label), url, tone=label))
 
+    answer_links = [link for link in links if link.tone]
+    card = mail.EventCard(
+        kicker=text(language, f"{kind}_kicker", organizer=name),
+        title=title,
+        when=mail.when_parts(shown.start, shown.end, shown.all_day, reader, text(language, "all_day")),
+        repeats=_repeats(shown.rrule if shown is series else None, language),
+        rows=place_and_organizer,
+        description=description,
+        # Called off, or taken off it: said on top, as on the event's page.
+        notice=paragraphs[0] if method == "CANCEL" else "",
+        answers_heading=text(language, "your_answer"),
+        answers_hint=text(language, "answer_hint") if answer_links else "",
+        answers=answer_links,
+        invited_as=text(language, "invited_as", email=participant.email),
+        view=view,
+    )
     message = mail.build_message(
         to=participant.email,
         subject=text(language, f"{subject_kind}_subject", title=title, when=when),
@@ -181,12 +204,21 @@ def _message(
         links=links,
         from_name=name,
         reply_to=organizer.email,
-        heading=title,
+        card=card,
     )
     # Inline for mail programs that show invitations, and as file for those that don't.
     message.attach_alternative(ical_text, f"text/calendar; method={method}")
     message.attach("invite.ics", ical_text, f"text/calendar; method={method}")
     return message
+
+
+def _repeats(rrule: str | None, language: str) -> str:
+    """How a series repeats, in a word where its rule says it simply ("Weekly"), else just that it does."""
+    if not rrule:
+        return ""
+    parts = dict(part.partition("=")[::2] for part in rrule.upper().split(";"))
+    simple = parts.get("INTERVAL", "1") == "1" and parts.get("FREQ") in ("DAILY", "WEEKLY", "MONTHLY", "YEARLY")
+    return text(language, f"repeats_{parts['FREQ']}") if simple else text(language, "repeats")
 
 
 def send_request(event: Event, participants: list[EventParticipant] | None = None, update: bool = False) -> None:

@@ -75,6 +75,11 @@ export function monthName(month: number, style: 'long' | 'short' = 'long'): stri
   return formatter({ month: style }).format(new Date(2024, month - 1, 1))
 }
 
+/** A day written out, e.g. "Montag, 5. Januar 2026" or "Monday, January 5, 2026". */
+export function formatLongDate(date: Date): string {
+  return formatter({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date)
+}
+
 /** Day and month, e.g. "7. Oktober" or "October 7". */
 export function formatDayMonth(date: Date): string {
   return formatter({ day: 'numeric', month: 'long' }).format(date)

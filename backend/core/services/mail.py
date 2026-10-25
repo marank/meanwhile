@@ -6,13 +6,20 @@ queue (core.tasks), which are saved along with the request's changes: a slow or 
 server neither holds up nor fails the request, and the worker tries again until it takes them.
 """
 
+import base64
+import binascii
+import email.message
+import email.policy
 import logging
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from email.policy import Policy
 from email.utils import formataddr
 from html import escape
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
@@ -52,13 +59,40 @@ def app_link(path: str) -> str | None:
     return f"{settings.APP_URL}{path}" if settings.APP_URL else None
 
 
-def logo_link() -> str | None:
-    """The logo at the top of emails: the uploaded one, else ours (a PNG: Gmail and Outlook show no
-    SVG). None for an uploaded data: URL, which mail programs block."""
-    logo = get_or_create_app_settings().logo_url or "/mail-logo.png"
-    if logo.startswith("/"):
-        return app_link(logo)
-    return logo if logo.startswith(("https://", "http://")) else None
+# Logo ----------------------------------------------------------------------------------------
+
+_DEFAULT_LOGO = Path(__file__).resolve().parent.parent / "assets" / "mail-logo.png"
+# Every email carries the logo, so a big upload isn't sent along (the app's name is shown alone).
+_MAX_LOGO_BYTES = 200_000
+_UPLOADED_IMAGE = re.compile(r"data:image/(png|jpeg|gif);base64,(.+)", re.DOTALL)
+LOGO_CID = "logo@meanwhile"
+
+
+@dataclass
+class InlineImage:
+    data: bytes
+    subtype: str
+
+
+def logo() -> InlineImage | str | None:
+    """The logo at the top of emails: the uploaded one, else ours. Images come along with the email, as
+    mail programs show those at once but load linked ones only when asked; PNG, JPEG and GIF only (Gmail
+    and Outlook show no SVG). A logo given as an address stays a link; None for one that can't be sent."""
+    uploaded = get_or_create_app_settings().logo_url
+    if not uploaded:
+        return InlineImage(_DEFAULT_LOGO.read_bytes(), "png")
+    if uploaded.startswith("/"):
+        return app_link(uploaded)
+    if uploaded.startswith(("https://", "http://")):
+        return uploaded
+    match = _UPLOADED_IMAGE.fullmatch(uploaded)
+    if not match:
+        return None
+    try:
+        data = base64.b64decode(match[2], validate=True)
+    except binascii.Error:
+        return None
+    return InlineImage(data, match[1]) if len(data) <= _MAX_LOGO_BYTES else None
 
 
 # Times ----------------------------------------------------------------------------------------
@@ -70,6 +104,40 @@ _WEEKDAYS = {
 _MONTHS = {
     "en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
     "de": ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."],
+}
+_WEEKDAYS_LONG = {
+    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    "de": ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
+}
+_MONTHS_LONG = {
+    "en": [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ],
+    "de": [
+        "Januar",
+        "Februar",
+        "März",
+        "April",
+        "Mai",
+        "Juni",
+        "Juli",
+        "August",
+        "September",
+        "Oktober",
+        "November",
+        "Dezember",
+    ],
 }
 
 
@@ -91,6 +159,14 @@ class Reader:
 def _date(day: date, reader: Reader) -> str:
     weekday = _WEEKDAYS[reader.language][day.weekday()]
     month = _MONTHS[reader.language][day.month - 1]
+    if reader.language == "de":
+        return f"{weekday}, {day.day}. {month} {day.year}"
+    return f"{weekday}, {month} {day.day}, {day.year}"
+
+
+def _long_date(day: date, reader: Reader) -> str:
+    weekday = _WEEKDAYS_LONG[reader.language][day.weekday()]
+    month = _MONTHS_LONG[reader.language][day.month - 1]
     if reader.language == "de":
         return f"{weekday}, {day.day}. {month} {day.year}"
     return f"{weekday}, {month} {day.day}, {day.year}"
@@ -118,6 +194,41 @@ def format_when(start: datetime, end: datetime, all_day: bool, reader: Reader) -
     return f"{begin} – {finish} ({reader.timezone})"
 
 
+@dataclass
+class When:
+    """An event's time as an invitation shows it: a leaf of a tear-off calendar, the day written out and
+    the time below it."""
+
+    month: str
+    day: int
+    date: str
+    time: str
+
+
+def when_parts(start: datetime, end: datetime, all_day: bool, reader: Reader, all_day_text: str) -> When:
+    """All-day ends are inclusive; an event over several days names both."""
+    if all_day:
+        first, last = as_utc(start).date(), as_utc(end).date()
+        dates = (
+            _long_date(first, reader) if last <= first else f"{_long_date(first, reader)} – {_long_date(last, reader)}"
+        )
+        return When(_tile_month(first, reader), first.day, dates, all_day_text)
+    tz = zone(reader.timezone)
+    local_start, local_end = start.astimezone(tz), end.astimezone(tz)
+    tile = _tile_month(local_start.date(), reader), local_start.day
+    if local_end.date() == local_start.date() or local_end - local_start < timedelta(0):
+        return When(
+            *tile,
+            _long_date(local_start.date(), reader),
+            f"{_time(local_start, reader)} – {_time(local_end, reader)} ({reader.timezone})",
+        )
+    return When(*tile, format_when(start, end, all_day, reader), "")
+
+
+def _tile_month(day: date, reader: Reader) -> str:
+    return _MONTHS[reader.language][day.month - 1].rstrip(".").upper()
+
+
 # Messages -------------------------------------------------------------------------------------
 
 
@@ -127,6 +238,16 @@ class Link:
     url: str
     # The main action, as a filled button; the others are outlined.
     primary: bool = False
+    # Answers to invitations, outlined in the colour of the answer as on the invitation page.
+    tone: Literal["accept", "tentative", "decline"] | None = None
+
+
+# Light: border and text; the dark mode's text comes from _DARK_STYLE.
+_TONES = {
+    "accept": ("#16a34a", "#15803d"),
+    "tentative": ("#f59e0b", "#b45309"),
+    "decline": ("#dc2626", "#b91c1c"),
+}
 
 
 _FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
@@ -144,23 +265,147 @@ _DARK_STYLE = (
     ".mw-box { background:#111827 !important; border-color:#374151 !important; }"
     ".mw-button { background:#1f2937 !important; border-color:#4b5563 !important; color:#f9fafb !important; }"
     ".mw-footer { color:#6b7280 !important; }"
+    ".mw-tone { background:#1f2937 !important; }"
+    ".mw-notice { background:#450a0a !important; color:#fecaca !important; }"
+    ".mw-band { background:#111827 !important; border-color:#374151 !important; }"
+    ".mw-rule, .mw-tile { border-color:#374151 !important; }"
+    ".mw-tone-accept { color:#4ade80 !important; }"
+    ".mw-tone-tentative { color:#fbbf24 !important; }"
+    ".mw-tone-decline { color:#f87171 !important; }"
     "}"
 )
 
 
-def _button(link: Link) -> str:
+_LAYOUTS = {
+    # In a row of buttons, which wraps on narrow screens.
+    "inline": "display:inline-block;margin:0 8px 8px 0",
+    # Filling a table cell, for buttons side by side in equal widths.
+    "block": "display:block;margin:0;text-align:center",
+    "alone": "display:inline-block;margin:0",
+}
+
+
+def _button(link: Link, layout: Literal["inline", "block", "alone"] = "inline") -> str:
     # The filled blue button reads well on both, so only outlined ones change in the dark.
-    colors = (
-        "background:#2563eb;border:1px solid #2563eb;color:#ffffff"
-        if link.primary
-        else "background:#ffffff;border:1px solid #d1d5db;color:#111827"
-    )
-    css_class = "" if link.primary else ' class="mw-button"'
+    if link.primary:
+        colors, css_class = "background:#2563eb;border:1px solid #2563eb;color:#ffffff", ""
+    elif link.tone:
+        border, color = _TONES[link.tone]
+        colors = f"background:#ffffff;border:1.5px solid {border};color:{color}"
+        css_class = f' class="mw-tone mw-tone-{link.tone}"'
+    else:
+        colors, css_class = "background:#ffffff;border:1px solid #d1d5db;color:#111827", ' class="mw-button"'
     return (
-        f'<a href="{escape(link.url)}"{css_class} style="display:inline-block;margin:0 8px 8px 0;padding:10px 18px;'
+        f'<a href="{escape(link.url)}"{css_class} style="{_LAYOUTS[layout]};padding:10px 18px;'
         f'border-radius:8px;{colors};font-size:14px;font-weight:600;line-height:20px;text-decoration:none">'
         f"{escape(link.label)}</a>"
     )
+
+
+@dataclass
+class EventCard:
+    """An invitation laid out like the event's page in the app: who invites, the title, a leaf of a
+    tear-off calendar with the day and time beside it, place and organizer, the description, then the
+    answers in a band of their own."""
+
+    kicker: str
+    title: str
+    when: When
+    repeats: str = ""
+    # Labelled lines: place and organizer.
+    rows: Sequence[tuple[str, str]] = ()
+    description: str = ""
+    # Cancelled or taken off it: a red line on top, and the title struck through.
+    notice: str = ""
+    answers_heading: str = ""
+    answers_hint: str = ""
+    answers: Sequence[Link] = ()
+    invited_as: str = ""
+    view: Link | None = None
+
+
+_SMALL = "font-size:14px;line-height:20px"
+
+
+def _card_html(card: EventCard) -> str:
+    out = []
+    if card.notice:
+        out.append(
+            '<div class="mw-notice" style="padding:12px 28px;background:#fef2f2;color:#b91c1c;font-size:14px;'
+            f'font-weight:600;border-radius:12px 12px 0 0">{escape(card.notice)}</div>'
+        )
+    title_style = "text-decoration:line-through;opacity:0.6;" if card.notice else ""
+    tile = (
+        '<table class="mw-tile" role="presentation" cellpadding="0" cellspacing="0" width="56" '
+        'style="width:56px;border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate">'
+        '<tr><td style="padding:2px 0;background:#2563eb;border-radius:7px 7px 0 0;color:#ffffff;font-size:11px;'
+        f'font-weight:600;line-height:16px;text-align:center;letter-spacing:0.05em">{escape(card.when.month)}</td></tr>'
+        '<tr><td class="mw-heading" style="padding:4px 0;color:#111827;font-size:20px;font-weight:600;'
+        f'line-height:28px;text-align:center">{card.when.day}</td></tr></table>'
+    )
+    when_lines = [f'<div class="mw-value" style="color:#111827;font-weight:600">{escape(card.when.date)}</div>']
+    when_lines += [
+        f'<div class="mw-text" style="color:#4b5563">{escape(line)}</div>'
+        for line in (card.when.time, card.repeats)
+        if line
+    ]
+    rows = "".join(
+        '<tr><td class="mw-label" style="padding:3px 16px 3px 0;color:#6b7280;vertical-align:top;white-space:nowrap">'
+        f"{escape(label)}</td>"
+        f'<td class="mw-value" style="padding:3px 0;color:#111827;vertical-align:top">{escape(value)}</td></tr>'
+        for label, value in card.rows
+    )
+    main = [
+        '<p class="mw-label" style="margin:0;color:#6b7280;font-size:12px;font-weight:600;line-height:16px;'
+        f'letter-spacing:0.05em;text-transform:uppercase">{escape(card.kicker)}</p>',
+        '<h1 class="mw-heading" style="margin:4px 0 20px;color:#111827;font-size:24px;font-weight:600;'
+        f'line-height:32px;{title_style}">{escape(card.title)}</h1>',
+        f'<table role="presentation" cellpadding="0" cellspacing="0" style="{_SMALL}"><tr>'
+        f'<td style="vertical-align:top;padding-right:16px">{tile}</td>'
+        f'<td style="vertical-align:top">{"".join(when_lines)}</td></tr></table>',
+    ]
+    if rows:
+        main.append(
+            '<table role="presentation" cellpadding="0" cellspacing="0" '
+            f'style="margin-top:20px;{_SMALL}">{rows}</table>'
+        )
+    if card.description:
+        main.append(
+            '<div class="mw-rule mw-text" style="margin-top:20px;padding-top:20px;border-top:1px solid #e5e7eb;'
+            f'color:#374151;white-space:pre-line;{_SMALL}">{escape(card.description)}</div>'
+        )
+    out.append(f'<div style="padding:28px">{"".join(main)}</div>')
+
+    if card.answers:
+        width = f"{100 // len(card.answers)}%"
+        cells = "".join(
+            f'<td width="{width}" style="padding:0 {4 if i < len(card.answers) - 1 else 0}px 0 {4 if i else 0}px">'
+            f"{_button(link, 'block')}</td>"
+            for i, link in enumerate(card.answers)
+        )
+        hint = (
+            f'<p class="mw-label" style="margin:12px 0 0;color:#6b7280;font-size:12px;line-height:16px">'
+            f"{escape(card.answers_hint)}</p>"
+            if card.answers_hint
+            else ""
+        )
+        out.append(
+            '<div class="mw-band" style="padding:20px 28px;background:#f9fafb;border-top:1px solid #e5e7eb">'
+            f'<p class="mw-heading" style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600">'
+            f"{escape(card.answers_heading)}</p>"
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{cells}</tr></table>'
+            f"{hint}</div>"
+        )
+    if card.invited_as or card.view:
+        view = _button(card.view, "alone") if card.view else ""
+        out.append(
+            '<table class="mw-rule" role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            'style="border-top:1px solid #e5e7eb"><tr>'
+            '<td class="mw-label" style="padding:16px 28px;color:#6b7280;font-size:12px">'
+            f"{escape(card.invited_as)}</td>"
+            f'<td align="right" style="padding:12px 28px">{view}</td></tr></table>'
+        )
+    return "".join(out)
 
 
 def _html(
@@ -172,9 +417,11 @@ def _html(
     footer: str,
     app: str,
     language: str,
-    logo: str | None,
+    logo_src: str | None,
+    card: EventCard | None = None,
 ) -> str:
-    """The HTML part: a card on a grey page, with tables and inline styles as mail programs need."""
+    """The HTML part: a card on a grey page, with tables and inline styles as mail programs need. An
+    invitation fills the card with the event (`card`) instead of heading, paragraphs and details."""
     body = []
     if heading:
         body.append(
@@ -202,9 +449,9 @@ def _html(
             f'style="font-size:14px;line-height:20px">{rows}</table></td></tr></table>'
         )
     header = escape(app)
-    if logo:
+    if logo_src:
         header = (
-            f'<img src="{escape(logo)}" width="32" height="32" alt="" '
+            f'<img src="{escape(logo_src)}" width="32" height="32" alt="" '
             'style="display:inline-block;width:32px;height:32px;margin-right:10px;border:0;border-radius:7px;'
             f'vertical-align:middle">{header}'
         )
@@ -226,8 +473,8 @@ def _html(
         f'style="padding:0 4px 12px;font-family:{_FONT};font-size:14px;font-weight:600;color:#6b7280">'
         f"{header}</td></tr>"
         '<tr><td class="mw-card" '
-        'style="padding:28px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;'
-        f'font-family:{_FONT}">{"".join(body)}</td></tr>'
+        f'style="padding:{0 if card else 28}px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;'
+        f'font-family:{_FONT}">{_card_html(card) if card else "".join(body)}</td></tr>'
         '<tr><td class="mw-footer" '
         f'style="padding:16px 4px 0;font-family:{_FONT};font-size:12px;line-height:18px;color:#9ca3af">'
         f"{escape(footer)}</td></tr>"
@@ -247,6 +494,7 @@ def build_message(
     footer: str = "footer",
     app: str | None = None,
     heading: str | None = None,
+    card: EventCard | None = None,
 ) -> EmailMultiAlternatives:
     """A plain-text and HTML email: a heading, paragraphs, then labelled details, then links as buttons.
 
@@ -262,16 +510,40 @@ def build_message(
         plain.append("\n".join(f"{link.label}: {link.url}" for link in links))
     plain.append(f"-- \n{footer}")
 
-    message = EmailMultiAlternatives(
+    message = Message(
         subject=subject,
         body="\n\n".join(plain) + "\n",
         from_email=sender(from_name, app),
         to=[to],
         reply_to=[reply_to] if reply_to else None,
     )
-    html = _html(subject, heading, paragraphs, details, links, footer, app, language, logo_link())
+    shown = logo()
+    if isinstance(shown, InlineImage):
+        message.logo = shown
+        shown = f"cid:{LOGO_CID}"
+    html = _html(subject, heading, paragraphs, details, links, footer, app, language, shown, card)
     message.attach_alternative(html, "text/html")
     return message
+
+
+class Message(EmailMultiAlternatives):
+    """An email whose HTML part may come with the logo it shows (cid:), in a multipart/related."""
+
+    logo: InlineImage | None = None
+
+    def message(self, *, policy: Policy | None = email.policy.default) -> email.message.EmailMessage:
+        msg = super().message(policy=policy)
+        if self.logo is not None:
+            html = next(part for part in msg.walk() if part.get_content_type() == "text/html")
+            html.add_related(
+                self.logo.data,
+                maintype="image",
+                subtype=self.logo.subtype,
+                cid=f"<{LOGO_CID}>",
+                disposition="inline",
+                filename=f"logo.{self.logo.subtype}",
+            )
+        return msg
 
 
 # Sending --------------------------------------------------------------------------------------
@@ -321,11 +593,17 @@ def message_data(message: EmailMultiAlternatives) -> dict[str, Any]:
         "reply_to": message.reply_to,
         "alternatives": [[content, mimetype] for content, mimetype in message.alternatives],
         "attachments": [[name, content, mimetype] for name, content, mimetype in message.attachments],
+        "logo": _logo_data(message),
     }
 
 
+def _logo_data(message: EmailMultiAlternatives) -> list[str] | None:
+    image = message.logo if isinstance(message, Message) else None
+    return [base64.b64encode(image.data).decode(), image.subtype] if image else None
+
+
 def message_from_data(data: dict[str, Any]) -> EmailMultiAlternatives:
-    message = EmailMultiAlternatives(
+    message = Message(
         subject=data["subject"],
         body=data["body"],
         from_email=data["from_email"],
@@ -336,4 +614,8 @@ def message_from_data(data: dict[str, Any]) -> EmailMultiAlternatives:
         message.attach_alternative(content, mimetype)
     for name, content, mimetype in data["attachments"]:
         message.attach(name, content, mimetype)
+    # Jobs saved before emails carried the logo have none.
+    if data.get("logo"):
+        content, subtype = data["logo"]
+        message.logo = InlineImage(base64.b64decode(content), subtype)
     return message

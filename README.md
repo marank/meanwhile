@@ -28,7 +28,8 @@ calendar/
   backend_fastapi/    Reference FastAPI implementation
   frontend/           Vue SPA
   branding/           Logo (logo.svg; logo-alt.svg is the spare design) and build.sh, which renders
-                      favicon, email and home screen icons into frontend/public/
+                      favicon and home screen icons into frontend/public/ and the logo emails
+                      carry into backend/core/assets/
   scripts/            sync_env.py: brings a .env up to date with .env.example
   docker/             nginx, supervisord, entrypoint, healthcheck and backup script of the production image
   Dockerfile          Production image (frontend + backend in one container)
@@ -210,7 +211,9 @@ Notifications can also come by email: approval requests, decisions on bookings, 
 access, participants' answers and (off by default) reminders. Each user chooses which in
 *Account → Email notifications*. Emails are written in the user's language and show times in their
 zone. They are saved as jobs of the task queue along with the request's changes, and the worker sends
-them; while the mail server fails, it tries again for about two hours.
+them; while the mail server fails, it tries again for about two hours. They carry the logo (the
+uploaded one if it is a PNG, JPEG or GIF of up to 200 KB, else ours) as an inline image, which mail
+programs show without loading anything.
 
 Participants of an event are invited by email (iMIP, RFC 6047): the email carries the event as
 iTIP `REQUEST`, inline and as `invite.ics`, so Thunderbird, Outlook, Apple Mail, Gmail and others
@@ -226,7 +229,9 @@ Participants answer either
   only counts when it comes from the participant's own address (or the one they named as `SENT-BY`).
   `process_imip FILE.eml` (or `-` for standard input, e.g. from a mail server's pipe) applies saved
   messages; or
-- with the links in the email, which open `/rsvp/<token>` in the app, no account needed. The
+- with the links in the email, which open `/event/<token>` in the app, no account needed (older
+  emails' `/rsvp/<token>` lead there too). The page shows the event with who else is invited (by
+  name only: anyone with the link can open it) and offers it as a file for calendar apps. The
   link only preselects the answer; a click on the page gives it (mail scanners open links).
 
 The organizer is told of every answer in the app (and by email, as chosen).

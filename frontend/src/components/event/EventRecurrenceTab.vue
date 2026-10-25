@@ -4,7 +4,8 @@ import { Translation as I18nT, useI18n } from 'vue-i18n'
 import AppSelect from '@/components/AppSelect.vue'
 import NumberListInput from '@/components/NumberListInput.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
-import { formatDayMonth, weekdayName } from '@/services/datetime'
+import { weekdayName } from '@/services/datetime'
+import { recurrencePresetLabel } from '@/services/labels'
 import {
   defaultRecurrenceRule,
   matchingPreset,
@@ -35,8 +36,6 @@ const { t } = useI18n()
 
 const WEEK = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
 const FREQUENCIES: RecurrenceFrequency[] = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']
-const ORDINAL_KEYS: Record<number, string> = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', [-1]: 'last' }
-
 const startDate = computed(() => new Date(`${props.start}T00:00:00`))
 const defaults = computed(() => recurrenceDefaults(startDate.value))
 // Once open, the custom editor stays open even while the rule matches a preset: edits mustn't
@@ -59,27 +58,12 @@ watch(
   { immediate: true },
 )
 
-const choices = computed(() => {
-  const { weekday, monthDay, ordinal } = defaults.value
-  const presetLabels: Record<RecurrencePreset, string> = {
-    daily: t('recurrence.daily'),
-    weekdays: t('recurrence.weekdays'),
-    weekly: t('recurrence.weekly', { weekday: weekdayName(weekday) }),
-    biweekly: t('recurrence.biweekly', { weekday: weekdayName(weekday) }),
-    monthlyDate: t('recurrence.monthlyDate', { day: monthDay }),
-    monthlyWeekday: t('recurrence.monthlyWeekday', {
-      ordinal: t(`recurrence.ordinal.${ORDINAL_KEYS[ordinal]}`),
-      weekday: weekdayName(weekday),
-    }),
-    yearly: t('recurrence.yearly', { date: formatDayMonth(startDate.value) }),
-  }
-  return [
-    ...(foreign.value ? [{ value: 'keep' as const, label: t('recurrence.keep') }] : []),
-    { value: 'none' as const, label: t('recurrence.none') },
-    ...recurrencePresets.map((preset) => ({ value: preset, label: presetLabels[preset] })),
-    { value: 'custom' as const, label: t('recurrence.custom') },
-  ]
-})
+const choices = computed(() => [
+  ...(foreign.value ? [{ value: 'keep' as const, label: t('recurrence.keep') }] : []),
+  { value: 'none' as const, label: t('recurrence.none') },
+  ...recurrencePresets.map((preset) => ({ value: preset, label: recurrencePresetLabel(preset, startDate.value) })),
+  { value: 'custom' as const, label: t('recurrence.custom') },
+])
 
 function choose(value: Choice) {
   if (value === 'keep') return

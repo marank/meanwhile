@@ -3503,6 +3503,29 @@
           "required": true
         }
       }
+    },
+    "/api/rsvp/{token}/ics": {
+      "get": {
+        "operationId": "core_views_rsvp_invitation_ics",
+        "summary": "Invitation Ics",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "The event as a file for calendar apps, without organizer and participants: anyone with the link may\nload it, and answers are given on the page."
+      }
     }
   },
   "components": {
@@ -8195,6 +8218,13 @@
           "cancelled": {
             "title": "Cancelled",
             "type": "boolean"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/RsvpParticipantOut"
+            },
+            "title": "Participants",
+            "type": "array"
           }
         },
         "required": [
@@ -8209,9 +8239,39 @@
           "organizer_name",
           "email",
           "status",
-          "cancelled"
+          "cancelled",
+          "participants"
         ],
         "title": "RsvpOut",
+        "type": "object"
+      },
+      "RsvpParticipantOut": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ParticipantStatus"
+          },
+          "you": {
+            "title": "You",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "you"
+        ],
+        "title": "RsvpParticipantOut",
         "type": "object"
       },
       "RsvpAnswer": {

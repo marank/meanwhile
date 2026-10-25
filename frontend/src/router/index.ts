@@ -43,12 +43,17 @@ const router = createRouter({
       meta: { anyone: true },
     },
     {
-      // Answering an invitation from the link in its email; the token is the key.
-      path: '/rsvp/:token',
-      name: 'rsvp',
-      component: () => import('@/views/RsvpView.vue'),
+      // The event an invitation is for, and the answer to it, from the link in its email; the token is the key.
+      path: '/event/:token',
+      name: 'invitation',
+      component: () => import('@/views/InvitationView.vue'),
       props: true,
       meta: { anyone: true },
+    },
+    {
+      // Where emails sent before linked to.
+      path: '/rsvp/:token',
+      redirect: (to) => ({ name: 'invitation', params: to.params, query: to.query }),
     },
     {
       path: '/',

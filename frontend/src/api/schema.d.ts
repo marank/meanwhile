@@ -1039,6 +1039,27 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/rsvp/{token}/ics': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Invitation Ics
+     * @description The event as a file for calendar apps, without organizer and participants: anyone with the link may
+     *     load it, and answers are given on the page.
+     */
+    get: operations['core_views_rsvp_invitation_ics']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -2723,6 +2744,16 @@ export interface components {
       status: components['schemas']['ParticipantStatus']
       /** Cancelled */
       cancelled: boolean
+      /** Participants */
+      participants: components['schemas']['RsvpParticipantOut'][]
+    }
+    /** RsvpParticipantOut */
+    RsvpParticipantOut: {
+      /** Name */
+      name: string | null
+      status: components['schemas']['ParticipantStatus']
+      /** You */
+      you: boolean
     }
     /** RsvpAnswer */
     RsvpAnswer: {
@@ -4860,6 +4891,26 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RsvpOut']
         }
+      }
+    }
+  }
+  core_views_rsvp_invitation_ics: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

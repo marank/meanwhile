@@ -84,7 +84,7 @@ from core.schemas.resources import (
     ResourceOut,
     ResourceUpdate,
 )
-from core.schemas.rsvp import RsvpAnswer, RsvpOut
+from core.schemas.rsvp import RsvpAnswer, RsvpOut, RsvpParticipantOut
 from core.schemas.search import SearchResult
 from core.schemas.users import (
     AppPasswordCreate,
@@ -184,6 +184,7 @@ __all__ = [
     "ResourceUpdate",
     "RsvpAnswer",
     "RsvpOut",
+    "RsvpParticipantOut",
     "Schema",
     "SearchResult",
     "Text",

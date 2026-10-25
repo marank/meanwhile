@@ -148,6 +148,8 @@ export const updateProfile = (data: ProfileUpdate) => api<User>('/api/users/me',
 
 // Answering an invitation from the link in its email; the token is the key, no session needed.
 export const getInvitation = (token: string) => api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`)
+/** The invitation as a file for calendar apps, for a download link. */
+export const invitationIcsUrl = (token: string) => `/api/rsvp/${encodeURIComponent(token)}/ics`
 export const answerInvitation = (token: string, status: InvitationAnswer) =>
   api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`, { method: 'POST', body: { status } })
 
