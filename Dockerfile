@@ -15,9 +15,12 @@ RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build-only
 
+# --- uv ---------------------------------------------------------------------------------------
+# Only mounted while the venv is built; the final image has no package installer for the app.
+FROM ghcr.io/astral-sh/uv:0.13 AS uv
+
 # --- App --------------------------------------------------------------------------------------
 FROM python:3.14-slim-trixie
-COPY --from=ghcr.io/astral-sh/uv:0.13 /uv /usr/local/bin/uv
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -32,14 +35,19 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends nginx gettext-base \
  && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled /etc/nginx/conf.d \
  # supervisord lives outside the app's venv; it's infrastructure, not an app dependency.
- && pip install --no-cache-dir --root-user-action=ignore supervisor \
+ && pip install --no-cache-dir --root-user-action=ignore supervisor==4.3.0 \
  && groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
- && mkdir -p /data && chown app:app /data
+ && mkdir -p /data && chown app:app /data \
+ # No setuid/setgid programs (su, passwd, mount, ...): nothing in the container may gain rights.
+ && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 
 WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# uv's download cache stays in a BuildKit cache, outside the image (HOME is /tmp).
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/tmp/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 COPY backend/ ./
 # The app's own modules too: the root filesystem is read-only at runtime.
