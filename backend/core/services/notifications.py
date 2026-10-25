@@ -131,7 +131,7 @@ def _notification_email(
         url = mail.app_link(f"/calendar/{calendar.id}")
     else:
         url = mail.app_link("/notifications")
-    links = [mail.Link(text(language, "open", app=app), url)] if url else []
+    links = [mail.Link(text(language, "open", app=app), url, primary=True)] if url else []
 
     return mail.build_message(
         to=user.email,

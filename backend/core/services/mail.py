@@ -116,6 +116,106 @@ def format_when(start: datetime, end: datetime, all_day: bool, reader: Reader) -
 class Link:
     label: str
     url: str
+    # The main action, as a filled button; the others are outlined.
+    primary: bool = False
+
+
+_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+# Dark colours for the mail programs that follow the system (Apple Mail, Outlook for Mac and iOS,
+# Thunderbird); they override the inline light ones, hence !important. Gmail and Outlook for Windows
+# ignore this and darken the light colours themselves.
+_DARK_STYLE = (
+    "@media (prefers-color-scheme: dark) {"
+    ".mw-page { background:#111827 !important; }"
+    ".mw-card { background:#1f2937 !important; border-color:#374151 !important; }"
+    ".mw-heading, .mw-value { color:#f9fafb !important; }"
+    ".mw-text { color:#d1d5db !important; }"
+    ".mw-app, .mw-label { color:#9ca3af !important; }"
+    ".mw-box { background:#111827 !important; border-color:#374151 !important; }"
+    ".mw-button { background:#1f2937 !important; border-color:#4b5563 !important; color:#f9fafb !important; }"
+    ".mw-footer { color:#6b7280 !important; }"
+    "}"
+)
+
+
+def _button(link: Link) -> str:
+    # The filled blue button reads well on both, so only outlined ones change in the dark.
+    colors = (
+        "background:#2563eb;border:1px solid #2563eb;color:#ffffff"
+        if link.primary
+        else "background:#ffffff;border:1px solid #d1d5db;color:#111827"
+    )
+    css_class = "" if link.primary else ' class="mw-button"'
+    return (
+        f'<a href="{escape(link.url)}"{css_class} style="display:inline-block;margin:0 8px 8px 0;padding:10px 18px;'
+        f'border-radius:8px;{colors};font-size:14px;font-weight:600;line-height:20px;text-decoration:none">'
+        f"{escape(link.label)}</a>"
+    )
+
+
+def _html(
+    subject: str,
+    heading: str | None,
+    paragraphs: list[str],
+    details: Sequence[tuple[str, str]],
+    links: Sequence[Link],
+    footer: str,
+    app: str,
+    language: str,
+) -> str:
+    """The HTML part: a card on a grey page, with tables and inline styles as mail programs need."""
+    body = []
+    if heading:
+        body.append(
+            '<h1 class="mw-heading" '
+            'style="margin:0 0 12px;font-size:20px;line-height:28px;font-weight:600;color:#111827">'
+            f"{escape(heading)}</h1>"
+        )
+    body += [
+        f'<p class="mw-text" style="margin:0 0 12px;font-size:15px;line-height:22px;color:#374151">{escape(p)}</p>'
+        for p in paragraphs
+    ]
+    if details:
+        rows = "".join(
+            '<tr><td class="mw-label" '
+            'style="padding:4px 16px 4px 0;color:#6b7280;vertical-align:top;white-space:nowrap">'
+            f"{escape(label)}</td>"
+            '<td class="mw-value" style="padding:4px 0;color:#111827;vertical-align:top;white-space:pre-line">'
+            f"{escape(value)}</td></tr>"
+            for label, value in details
+        )
+        body.append(
+            '<table class="mw-box" role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            'style="margin:8px 0 20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px">'
+            f'<tr><td style="padding:12px 16px"><table role="presentation" cellpadding="0" cellspacing="0" '
+            f'style="font-size:14px;line-height:20px">{rows}</table></td></tr></table>'
+        )
+    for group in ([link for link in links if link.primary], [link for link in links if not link.primary]):
+        if group:
+            body.append(f'<div style="margin:0">{"".join(_button(link) for link in group)}</div>')
+
+    return (
+        f'<!DOCTYPE html><html lang="{language}"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
+        f"<title>{escape(subject)}</title><style>:root {{ color-scheme: light dark; }} {_DARK_STYLE}</style></head>"
+        f'<body class="mw-page" style="margin:0;padding:0;background:#f3f4f6;font-family:{_FONT}">'
+        '<table class="mw-page" role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background:#f3f4f6">'
+        '<tr><td align="center" style="padding:24px 12px">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">'
+        '<tr><td class="mw-app" '
+        f'style="padding:0 4px 12px;font-family:{_FONT};font-size:14px;font-weight:600;color:#6b7280">'
+        f"{escape(app)}</td></tr>"
+        '<tr><td class="mw-card" '
+        'style="padding:28px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;'
+        f'font-family:{_FONT}">{"".join(body)}</td></tr>'
+        '<tr><td class="mw-footer" '
+        f'style="padding:16px 4px 0;font-family:{_FONT};font-size:12px;line-height:18px;color:#9ca3af">'
+        f"{escape(footer)}</td></tr>"
+        "</table></td></tr></table></body></html>"
+    )
 
 
 def build_message(
@@ -129,13 +229,15 @@ def build_message(
     reply_to: str | None = None,
     footer: str = "footer",
     app: str | None = None,
+    heading: str | None = None,
 ) -> EmailMultiAlternatives:
-    """A plain-text and HTML email: paragraphs, then labelled details, then links as buttons.
+    """A plain-text and HTML email: a heading, paragraphs, then labelled details, then links as buttons.
 
     `app`: the app's name, when the caller has it already (it's looked up otherwise).
     """
     app = app or app_name()
     footer = text(language, footer, app=app)
+    subject = one_line(subject)
     plain = ["\n\n".join(paragraphs)]
     if details:
         plain.append("\n".join(f"{label}: {value}" for label, value in details))
@@ -143,34 +245,14 @@ def build_message(
         plain.append("\n".join(f"{link.label}: {link.url}" for link in links))
     plain.append(f"-- \n{footer}")
 
-    html = [f"<p>{escape(p)}</p>" for p in paragraphs]
-    if details:
-        rows = "".join(
-            f'<tr><td style="padding:2px 12px 2px 0;color:#6b7280;vertical-align:top">{escape(label)}</td>'
-            f'<td style="padding:2px 0;white-space:pre-line">{escape(value)}</td></tr>'
-            for label, value in details
-        )
-        html.append(f'<table style="border-collapse:collapse;margin:12px 0">{rows}</table>')
-    if links:
-        buttons = " ".join(
-            f'<a href="{escape(link.url)}" style="display:inline-block;margin:4px 8px 4px 0;padding:8px 14px;'
-            f'border-radius:8px;background:#2563eb;color:#fff;text-decoration:none">{escape(link.label)}</a>'
-            for link in links
-        )
-        html.append(f"<p>{buttons}</p>")
-    html.append(f'<p style="margin-top:24px;color:#9ca3af;font-size:12px">{escape(footer)}</p>')
-
     message = EmailMultiAlternatives(
-        subject=one_line(subject),
+        subject=subject,
         body="\n\n".join(plain) + "\n",
         from_email=sender(from_name, app),
         to=[to],
         reply_to=[reply_to] if reply_to else None,
     )
-    message.attach_alternative(
-        f'<div style="font-family:system-ui,sans-serif;font-size:14px;color:#111827">{"".join(html)}</div>',
-        "text/html",
-    )
+    message.attach_alternative(_html(subject, heading, paragraphs, details, links, footer, app, language), "text/html")
     return message
 
 

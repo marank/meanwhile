@@ -163,6 +163,10 @@ def _message(
     links: list[mail.Link] = []
     if method == "REQUEST":
         paragraphs.append(text(language, "rsvp_prompt"))
+        # The answer page shows the whole event, also to guests without an account.
+        url = mail.app_link(f"/rsvp/{participant.rsvp_token}")
+        if url:
+            links.append(mail.Link(text(language, "view_event"), url, primary=True))
         for answer, label in (("accepted", "accept"), ("tentative", "tentative"), ("declined", "decline")):
             url = mail.app_link(f"/rsvp/{participant.rsvp_token}?answer={answer}")
             if url:
@@ -177,6 +181,7 @@ def _message(
         links=links,
         from_name=name,
         reply_to=organizer.email,
+        heading=title,
     )
     # Inline for mail programs that show invitations, and as file for those that don't.
     message.attach_alternative(ical_text, f"text/calendar; method={method}")

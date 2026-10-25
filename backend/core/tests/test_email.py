@@ -115,6 +115,13 @@ def test_invited_guests_get_the_event_as_request_with_links_to_answer(world: Wor
     assert [a[0] for a in message.attachments] == ["invite.ics"]
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
     assert f"http://app.test/rsvp/{token}?answer=accepted" in message.body
+    # A link to see the whole event, for guests without an account too.
+    assert f"View event: http://app.test/rsvp/{token}\n" in message.body
+    assert isinstance(message, EmailMultiAlternatives)
+    html = str(next(content for content, mimetype in message.alternatives if mimetype == "text/html"))
+    assert f'href="http://app.test/rsvp/{token}"' in html and ">Planning</h1>" in html
+    # Light or dark, as the reader's system is set (where the mail program follows it).
+    assert 'content="light dark"' in html and "prefers-color-scheme: dark" in html
     # Times are shown in the event's zone to guests (09:00 UTC is 10:00 in Berlin in January).
     assert "10:00 AM" in message.body and "(Europe/Berlin)" in message.body
 
