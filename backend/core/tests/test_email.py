@@ -4,6 +4,8 @@ cancellations, and the participants' answers by link or from their mail programs
 """
 
 import base64
+import email.message
+import email.policy
 import re
 from datetime import datetime, timedelta
 from html import unescape
@@ -487,7 +489,8 @@ def test_emails_carry_the_logo_they_show(uploaded: str, image: bytes) -> None:
     message = logo_test_message(uploaded)
     assert '<img src="cid:logo@meanwhile"' in html_of(message)
     assert sent_logo(message) == (image, "image/png")
-    assert related_parts(message) == ["text/html", "image/png"]
+    # Around all the alternatives, as Apple Mail sends it (see the invitations).
+    assert related_parts(message) == ["multipart/alternative", "image/png"]
 
 
 @pytest.mark.parametrize(
@@ -783,11 +786,23 @@ def test_invitations_show_their_html_while_carrying_the_invitation(world: World)
     event = create(world)
     invite(world, event)
     [message] = to(GUEST)
-    raw = message.message()
-    [alternative] = [part for part in raw.walk() if part.get_content_type() == "multipart/alternative"]
-    # Mail programs show the last alternative they can: the email itself, not the calendar data
-    # (which Apple Mail and Thunderbird can show too); the invitation is still among them.
-    parts = [part.get_content_type() for part in alternative.iter_parts()]
-    assert parts == ["text/plain", "text/calendar", "multipart/related"]
-    attached = [part for part in raw.iter_attachments() if part.get_filename() == "invite.ics"]
-    assert len(attached) == 1
+    raw = message.message(policy=email.policy.SMTP)
+
+    def tree(part: email.message.EmailMessage) -> Any:
+        if not part.is_multipart():
+            return part.get_content_type()
+        return {part.get_content_type(): [tree(child) for child in part.iter_parts()]}  # type: ignore[arg-type]  # parts are EmailMessages under policy.SMTP
+
+    # The HTML next to the calendar data, as Apple Mail and Thunderbird need it to show the email; the
+    # logo in a multipart/related around both.
+    assert tree(raw) == {
+        "multipart/mixed": [
+            {
+                "multipart/related": [
+                    {"multipart/alternative": ["text/plain", "text/html", "text/calendar"]},
+                    "image/png",
+                ]
+            },
+            "text/calendar",
+        ]
+    }

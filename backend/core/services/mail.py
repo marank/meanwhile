@@ -637,9 +637,44 @@ def build_message(
     return message
 
 
+def _add_logo(msg: email.message.EmailMessage, logo: InlineImage) -> None:
+    """Puts the logo the HTML shows (cid:) in a multipart/related around all the alternatives, as Apple
+    Mail sends it, not around the HTML alone: next to an invitation's calendar data, Apple Mail and
+    Thunderbird take only an HTML part right beside it for the email to show."""
+    image = email.message.MIMEPart(policy=msg.policy)
+    image.set_content(
+        logo.data,
+        maintype="image",
+        subtype=logo.subtype,
+        cid=f"<{LOGO_CID}>",
+        disposition="inline",
+        filename=f"logo.{logo.subtype}",
+    )
+    related_type = 'multipart/related; type="multipart/alternative"'
+    alternatives = next(part for part in msg.walk() if part.get_content_type() == "multipart/alternative")
+    if alternatives is msg:
+        # Without attachments the alternatives are the message itself: they move into its first part.
+        inner = email.message.MIMEPart(policy=msg.policy)
+        inner["Content-Type"] = msg["Content-Type"]
+        inner.set_payload(msg.get_payload())
+        del msg["Content-Type"]
+        msg["Content-Type"] = related_type
+        msg.set_payload([inner, image])
+        return
+    related = email.message.MIMEPart(policy=msg.policy)
+    related["Content-Type"] = related_type
+    related.set_payload([alternatives, image])
+    parent = next(
+        part for part in msg.walk() if part.is_multipart() and any(p is alternatives for p in part.get_payload())
+    )
+    siblings = parent.get_payload()
+    assert isinstance(siblings, list)  # a multipart's payload is its parts
+    parent.set_payload([related if p is alternatives else p for p in siblings])
+
+
 class Message(EmailMultiAlternatives):
-    """An email whose HTML part may come with the logo it shows (cid:), in a multipart/related, and
-    whose unsubscribe header stays readable."""
+    """An email whose HTML part may come with the logo it shows (cid:), and whose unsubscribe header
+    stays readable."""
 
     logo: InlineImage | None = None
 
@@ -651,15 +686,7 @@ class Message(EmailMultiAlternatives):
             policy = (policy or email.policy.default).clone(max_line_length=998)
         msg = super().message(policy=policy)
         if self.logo is not None:
-            html = next(part for part in msg.walk() if part.get_content_type() == "text/html")
-            html.add_related(
-                self.logo.data,
-                maintype="image",
-                subtype=self.logo.subtype,
-                cid=f"<{LOGO_CID}>",
-                disposition="inline",
-                filename=f"logo.{self.logo.subtype}",
-            )
+            _add_logo(msg, self.logo)
         return msg
 
 
