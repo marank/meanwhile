@@ -173,7 +173,7 @@ DATABASES = {
 AUTH_USER_MODEL = "core.User"
 
 AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
+    "core.auth_backends.AppModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
