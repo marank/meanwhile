@@ -5,6 +5,8 @@ Mounts the embedded CalDAV server (Radicale) alongside the Django app.
 """
 
 import os
+from collections.abc import Iterable
+from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 from django.core.wsgi import get_wsgi_application
 
@@ -25,11 +27,11 @@ _caldav_prefix = settings.CALDAV_PATH.rstrip("/") or "/caldav"
 class _PathDispatcher:
     """Minimal WSGI middleware that routes a path prefix to another app."""
 
-    def __init__(self, default_app, mounts: dict[str, object]) -> None:
+    def __init__(self, default_app: WSGIApplication, mounts: dict[str, WSGIApplication]) -> None:
         self.default_app = default_app
         self.mounts = mounts
 
-    def __call__(self, environ, start_response):
+    def __call__(self, environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "")
         for prefix, app in self.mounts.items():
             if path == prefix or path.startswith(prefix + "/"):

@@ -6,7 +6,8 @@ e.g. `uvicorn config.asgi:application`.
 """
 
 import os
-from typing import cast
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any, cast
 
 from django.core.asgi import get_asgi_application
 
@@ -31,12 +32,17 @@ _caldav_prefix = settings.CALDAV_PATH.rstrip("/") or "/caldav"
 _caldav_application = WSGIMiddleware(create_application(), workers=20)
 
 
-async def http_application(scope, receive, send):
+async def http_application(
+    scope: dict[str, Any],
+    receive: Callable[[], Awaitable[dict[str, Any]]],
+    send: Callable[[Mapping[str, Any]], Awaitable[None]],
+) -> None:
     """Requests under the CalDAV prefix go to Radicale, mounted there; all others to Django."""
     path = scope["path"]
     if path == _caldav_prefix or path.startswith(_caldav_prefix + "/"):
         scope = {**scope, "root_path": scope.get("root_path", "") + _caldav_prefix}
-        return await _caldav_application(scope, receive, send)
+        # a2wsgi has ASGI types of its own (as do asgiref and Django); these are the same messages.
+        return await _caldav_application(scope, receive, send)  # type: ignore[arg-type]
     return await django_application(scope, receive, send)
 
 
