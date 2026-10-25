@@ -16,6 +16,7 @@ import { formatDateTime } from '@/services/datetime'
 import { errorMessage } from '@/services/errors'
 import { hasRole } from '@/services/roles'
 import { useAuthStore } from '@/stores/auth'
+import { useCalendarChoices } from '@/composables/useCalendarChoices'
 import { useEventAvailability } from '@/composables/useEventAvailability'
 import { useEventParticipants, useEventReminders } from '@/composables/useEventExtras'
 import { useEventForm } from '@/composables/useEventForm'
@@ -89,6 +90,8 @@ const availability = useEventAvailability({
   slot,
 })
 const { people: availabilityPeople, cache: availabilityCache } = availability
+const choices = useCalendarChoices()
+const { hasCategories, hasResources } = choices
 
 /** The activity tab is loaded once, when first opened, and kept while the dialog is open. */
 const activityOpened = ref(false)
@@ -165,7 +168,8 @@ onMounted(async () => {
     if (props.eventId) event.value = await api.getEvent(props.eventId)
     const calendarId = event.value?.calendar_id ?? props.calendarId
     if (!calendarId) return
-    calendar.value = await api.getCalendar(calendarId)
+    // Along with the calendar, so the dialog opens with the fields it will keep.
+    ;[calendar.value] = await Promise.all([api.getCalendar(calendarId), choices.load(calendarId)])
   } catch (e) {
     error.value = errorMessage(e, t('app.loadFailed'))
     return
@@ -269,6 +273,8 @@ onMounted(async () => {
           :end-before-start="endBeforeStart"
           :location-requires-approval="locationRequiresApproval"
           :resource-requires-approval="resourceRequiresApproval"
+          :has-categories="hasCategories"
+          :has-resources="hasResources"
           @select-location="onLocationSelect"
           @select-resource="onResourceSelect"
         />

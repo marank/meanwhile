@@ -370,6 +370,68 @@ describe('EventModal', () => {
     })
   })
 
+  describe('categories and resources', () => {
+    /** The search answers with nothing for the entities left out of `found`. */
+    const searchOnly = (...found: string[]) => ({
+      'GET /api/search': (request: FakeRequest) => {
+        const entity = request.query.get('entity')!
+        return found.includes(entity) ? (searchResults[entity] ?? []) : []
+      },
+    })
+    const labels = () =>
+      page()
+        .findAll('label')
+        .map((l) => l.text())
+
+    it('come last, after title, time, place and description', async () => {
+      serve()
+      await openNew()
+      expect(labels()).toEqual(['Title', 'Start', 'End', 'Location', 'Description', 'Category', 'Resource'])
+    })
+
+    it('leaves out their fields when the calendar has none', async () => {
+      serve(calendar(), event(), searchOnly('locations'))
+      await openNew()
+      expect(labels()).not.toContain('Category')
+      expect(labels().some((l) => l.startsWith('Resource'))).toBe(false)
+      expect(labels()).toContain('Location')
+      const asked = backend.calls('GET /api/search').filter((c) => c.query.get('limit') === '1')
+      expect(asked.map((c) => [c.query.get('entity'), c.query.get('calendar_id')])).toEqual([
+        ['categories', 'cal1'],
+        ['resources', 'cal1'],
+      ])
+    })
+
+    it('shows only the field of what there is', async () => {
+      serve(calendar(), event(), searchOnly('categories'))
+      await openNew()
+      expect(labels()).toContain('Category')
+      expect(labels().some((l) => l.startsWith('Resource'))).toBe(false)
+
+      wrapper.unmount()
+      serve(calendar(), event(), searchOnly('resources'))
+      await openNew()
+      expect(labels()).not.toContain('Category')
+      await chooseOption('Resource', 'Beamer')
+      await click('Save')
+      expect(backend.calls('POST /api/calendars/cal1/events')[0]!.body).toMatchObject({ resource_id: 'r1' })
+    })
+
+    it('keeps showing what an event has, though the calendar offers it no longer', async () => {
+      serve(calendar(), event({ category_id: 'k1', resource_id: 'r2' }), searchOnly())
+      await openExisting()
+      expect(labels()).toContain('Category')
+      expect(labels().some((l) => l.startsWith('Resource'))).toBe(true)
+    })
+
+    it('shows both when it cannot tell', async () => {
+      serve(calendar(), event(), { 'GET /api/search': reply(500) })
+      await openNew()
+      expect(labels()).toContain('Category')
+      expect(labels().some((l) => l.startsWith('Resource'))).toBe(true)
+    })
+  })
+
   describe('an existing event', () => {
     it('shows what was saved, and who created and changed it', async () => {
       serve(

@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
 import type * as api from '@/api'
 import AppSwitch from '@/components/AppSwitch.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import type { useEventForm } from '@/composables/useEventForm'
 
-/** The event's title, place, description, time, category and resource. */
-defineProps<{
+/** The event's title, time, place, description, category and resource. */
+const props = defineProps<{
   calendarId: string
   /** The calendar takes all-day events only. */
   forceAllDay: boolean
   endBeforeStart: boolean
   locationRequiresApproval: boolean
   resourceRequiresApproval: boolean
+  /** The calendar has categories, resources to choose; without, their fields are left out. */
+  hasCategories: boolean
+  hasResources: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +27,10 @@ const emit = defineEmits<{
 const form = defineModel<ReturnType<typeof useEventForm>['form']>('form', { required: true })
 
 const fieldId = useId()
+
+// An event keeps showing what it has, e.g. a category deleted since or a resource no longer offered.
+const showCategory = computed(() => props.hasCategories || !!form.value.categoryId)
+const showResource = computed(() => props.hasResources || !!form.value.resourceId)
 </script>
 
 <template>
@@ -33,40 +40,6 @@ const fieldId = useId()
         <span class="block text-sm font-medium text-gray-700">{{ $t('event.title') }}</span>
         <input v-model="form.title" data-autofocus class="mt-1 w-full rounded-lg border px-3 py-2" />
       </label>
-
-      <div>
-        <div class="flex items-baseline justify-between gap-2">
-          <label :for="`${fieldId}-location`" class="block text-sm font-medium text-gray-700">{{
-            $t('event.location')
-          }}</label>
-          <span v-if="locationRequiresApproval" class="text-xs text-amber-600 dark:text-amber-400">{{
-            $t('event.approvalRequired')
-          }}</span>
-        </div>
-        <SearchableSelect
-          :model-value="form.location || null"
-          :input-id="`${fieldId}-location`"
-          entity="locations"
-          :calendar-id="calendarId"
-          allow-free-text
-          live-free-text
-          open-on-focus
-          clearable
-          class="mt-1"
-          :placeholder="$t('event.locationPlaceholder')"
-          @select="(value, option) => emit('selectLocation', value, option)"
-        />
-      </div>
-
-      <label class="block">
-        <span class="block text-sm font-medium text-gray-700">{{ $t('event.description') }}</span>
-        <textarea v-model="form.description" class="mt-1 w-full rounded-lg border px-3 py-2" rows="3"></textarea>
-      </label>
-    </section>
-
-    <section class="space-y-3 border-t border-line pt-4 sm:pt-5">
-      <AppSwitch v-model="form.allDay" :label="$t('event.allDay')" :disabled="forceAllDay" />
-      <p v-if="forceAllDay" class="text-xs text-gray-500">{{ $t('event.allDayRequired') }}</p>
 
       <div class="grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
         <div>
@@ -112,11 +85,46 @@ const fieldId = useId()
         </div>
       </div>
       <p v-if="endBeforeStart" class="text-xs text-red-600" role="alert">{{ $t('event.endBeforeStart') }}</p>
+
+      <!-- Under the times it turns into dates only, as in most calendars. -->
+      <AppSwitch v-model="form.allDay" :label="$t('event.allDay')" :disabled="forceAllDay" />
+      <p v-if="forceAllDay" class="text-xs text-gray-500">{{ $t('event.allDayRequired') }}</p>
     </section>
 
     <section class="space-y-3 border-t border-line pt-4 sm:pt-5">
+      <div>
+        <div class="flex items-baseline justify-between gap-2">
+          <label :for="`${fieldId}-location`" class="block text-sm font-medium text-gray-700">{{
+            $t('event.location')
+          }}</label>
+          <span v-if="locationRequiresApproval" class="text-xs text-amber-600 dark:text-amber-400">{{
+            $t('event.approvalRequired')
+          }}</span>
+        </div>
+        <SearchableSelect
+          :model-value="form.location || null"
+          :input-id="`${fieldId}-location`"
+          entity="locations"
+          :calendar-id="calendarId"
+          allow-free-text
+          live-free-text
+          open-on-focus
+          clearable
+          class="mt-1"
+          :placeholder="$t('event.locationPlaceholder')"
+          @select="(value, option) => emit('selectLocation', value, option)"
+        />
+      </div>
+
+      <label class="block">
+        <span class="block text-sm font-medium text-gray-700">{{ $t('event.description') }}</span>
+        <textarea v-model="form.description" class="mt-1 w-full rounded-lg border px-3 py-2" rows="3"></textarea>
+      </label>
+    </section>
+
+    <section v-if="showCategory || showResource" class="space-y-3 border-t border-line pt-4 sm:pt-5">
       <div class="grid gap-3 sm:grid-cols-2">
-        <div>
+        <div v-if="showCategory">
           <label :for="`${fieldId}-category`" class="block text-sm font-medium text-gray-700">{{
             $t('event.category')
           }}</label>
@@ -132,7 +140,7 @@ const fieldId = useId()
           />
         </div>
 
-        <div>
+        <div v-if="showResource">
           <div class="flex items-baseline justify-between gap-2">
             <label :for="`${fieldId}-resource`" class="block text-sm font-medium text-gray-700">{{
               $t('event.resource')
