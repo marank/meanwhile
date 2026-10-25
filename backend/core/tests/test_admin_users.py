@@ -1,5 +1,5 @@
 """
-Superusers (the Django admin at /admin/): only `manage.py set_superuser` hands it out, not the app's
+Superusers (the Django admin at /django-admin/): only `manage.py set_superuser` hands it out, not the app's
 API; being superuser also lets the user sign in there (is_staff).
 """
 

@@ -25,8 +25,15 @@ def test_users_in_groups_have_just_their_own_permissions() -> None:
 
 def test_the_admin_turns_away_users_who_are_not_superusers(client: Client) -> None:
     client.force_login(make_user("member"))
-    res = client.get("/admin/login/")
+    res = client.get("/django-admin/login/")
     assert res.status_code == 200 and b"not authorized to access this page" in res.content
+
+
+def test_the_django_admin_leaves_admin_to_the_apps_page(client: Client) -> None:
+    # /admin is the SPA's administration page; nginx serves index.html for it.
+    assert client.get("/django-admin/login/").status_code == 200
+    assert client.get("/admin/").status_code == 404
+    assert client.get("/admin/login/").status_code == 404
 
 
 def test_sessions_from_before_the_backend_changed_stay_signed_in() -> None:

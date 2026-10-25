@@ -76,4 +76,5 @@ VS Code tasks (`.vscode/tasks.json`) hold the everyday commands; the README list
 - supervisord runs nginx, uvicorn (ASGI: API, CalDAV, WebSockets) and the task queue's worker; if
   one keeps failing, the container stops.
 - nginx believes `X-Forwarded-*` only from `TRUSTED_PROXIES`. It sends no HSTS: the proxy in front
-  owns that. `/admin` is closed unless `ADMIN_ENABLED=true`.
+  owns that. The Django admin (`/django-admin`) is closed unless `ADMIN_ENABLED=true`; `/admin` is
+  the app's own administration page.

@@ -79,7 +79,7 @@ if DEBUG:
 else:
     SECURE_CSP = _CSP
 
-# /admin: on in DEBUG, off otherwise, unless ADMIN_ENABLED says differently.
+# The Django admin (/django-admin): on in DEBUG, off otherwise, unless ADMIN_ENABLED says differently.
 ADMIN_ENABLED = env_bool("ADMIN_ENABLED", DEBUG)
 
 

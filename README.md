@@ -102,7 +102,7 @@ hasher and no delay for wrong CalDAV passwords.
 
 ### Superusers (Django admin)
 
-Superusers may sign in to the Django admin (`/admin/`) and do everything there. The app doesn't
+Superusers may sign in to the Django admin (`/django-admin/`) and do everything there. The app doesn't
 hand this out; the admin user of `ADMIN_EMAIL` is one, and others are made (or no longer) with:
 
 ```bash
@@ -157,7 +157,7 @@ pnpm format         # Prettier
 pnpm type-check     # vue-tsc
 ```
 
-The Vite dev proxy forwards `/api`, `/admin`, `/django-static`, `/ics`, `/caldav` and `/ws` to
+The Vite dev proxy forwards `/api`, `/django-admin`, `/django-static`, `/ics`, `/caldav` and `/ws` to
 `http://localhost:8000` (`BACKEND_URL` changes it), keeping the browser's `Host`.
 
 ## Configuration
@@ -170,7 +170,7 @@ Backend settings are read from environment variables:
 | `DEBUG` | `false` | `true` for running the backend without Docker: DEBUG, the dev `SECRET_KEY` and database password, the defaults marked as such below. |
 | `SECRET_KEY` | dev key in DEBUG | At least 40 random characters; the app refuses to start with a placeholder. |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | `meanwhile`, `meanwhile`, `meanwhile` in DEBUG, `localhost`, `5432` | PostgreSQL only (the one of `compose.dev.yml` by default). |
-| `ADMIN_ENABLED` | value of `DEBUG` | Serve the Django admin under `/admin/`. |
+| `ADMIN_ENABLED` | value of `DEBUG` | Serve the Django admin under `/django-admin/`. |
 | `TIME_ZONE`, `LANGUAGE_CODE` | `UTC`, `en-us` | Server defaults; users choose their own zone and language in the app. |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `DATA_DIR` | `backend/data` | Writable data directory; `/data` in the container. |
@@ -303,7 +303,7 @@ This starts PostgreSQL, Redis, the `app` container, built by the `Dockerfile`, a
   unprivileged user `app`:
   - nginx (`docker/app.conf.template`, port 8080 inside the container), which serves the built
     frontend and Django admin's static files and passes `/api`, `/ics`, `/caldav`,
-    `/.well-known/caldav` and the WebSocket `/ws/` on (`/admin` only with `ADMIN_ENABLED=true`);
+    `/.well-known/caldav` and the WebSocket `/ws/` on (`/django-admin` only with `ADMIN_ENABLED=true`);
   - uvicorn, with `WEB_WORKERS` processes;
   - the task queue's worker. It sends emails, delivers reminders, reads participants' answers
     from the iMIP mailbox (with `IMIP_ADDRESS` and the IMAP settings) and cleans up. Jobs wait in

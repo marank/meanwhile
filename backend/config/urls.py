@@ -24,6 +24,7 @@ urlpatterns = [
     re_path(r"^\.well-known/caldav/?$", well_known_caldav),
 ]
 
-# Defense in depth: nginx also answers /admin with 404 when ADMIN_ENABLED is false.
+# Not under /admin, which is the app's own administration page. Defense in depth: nginx also
+# answers /django-admin with 404 when ADMIN_ENABLED is false.
 if settings.ADMIN_ENABLED:
-    urlpatterns.insert(0, path("admin/", admin.site.urls))
+    urlpatterns.insert(0, path("django-admin/", admin.site.urls))

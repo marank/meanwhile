@@ -27,8 +27,8 @@ if [ -n "$REAL_IP_CONFIG" ]; then
 fi
 
 case "$(echo "${ADMIN_ENABLED:-${DEBUG:-false}}" | tr '[:upper:]' '[:lower:]')" in
-  1|true|yes|on) ADMIN_LOCATION='    location ~ ^/admin(/|$) { include /etc/nginx/django_proxy.conf; }' ;;
-  *)             ADMIN_LOCATION='    location ~ ^/admin(/|$) { return 404; }' ;;
+  1|true|yes|on) ADMIN_LOCATION='    location ~ ^/django-admin(/|$) { include /etc/nginx/django_proxy.conf; }' ;;
+  *)             ADMIN_LOCATION='    location ~ ^/django-admin(/|$) { return 404; }' ;;
 esac
 
 export TRUSTED_GEO REAL_IP_CONFIG ADMIN_LOCATION

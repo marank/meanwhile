@@ -301,7 +301,7 @@ jobs:
       # Start the image against a throwaway PostgreSQL, hardened like compose.yml
       # (read-only, no capabilities), so an image that cannot boot is never pushed.
       # Then check that it stays up, that nginx serves the SPA, static files and the API,
-      # that /admin is closed and nothing runs as root. A program that keeps failing
+      # that the Django admin is closed while /admin is the app's page, and nothing runs as root. A program that keeps failing
       # stops the container (docker/exit-on-fatal), which this catches too.
       # TRUSTED_PROXIES=127.0.0.1 lets the probes act like a TLS proxy in front, so the
       # https APP_URLS behave as in production. No Redis: one process's live updates stay in it.
@@ -345,7 +345,8 @@ jobs:
           probe / 200
           probe /some/client/route 200
           probe /django-static/admin/css/base.css 200
-          probe /admin/ 404
+          probe /django-admin/ 404
+          probe /admin 200
           probe /api/users/me 401
           probe /api/auth/v1/auth/session 401
           docker exec "$NAME" supervisorctl -c /etc/supervisord.conf status

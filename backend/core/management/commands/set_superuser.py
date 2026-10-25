@@ -1,6 +1,6 @@
 """
 Makes the user of an email address superuser, or with --revoke takes it away. Superusers may sign
-in to the Django admin (/admin/) and do everything there; the app itself doesn't hand this out.
+in to the Django admin (/django-admin/) and do everything there; the app itself doesn't hand this out.
 """
 
 from typing import Any
@@ -11,7 +11,7 @@ from core.models import User
 
 
 class Command(BaseCommand):
-    help = "Makes the user of an email address superuser (Django admin at /admin/), or with --revoke no longer."
+    help = "Makes the user of an email address superuser (Django admin at /django-admin/), or with --revoke no longer."
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("email", help="Email address of the user")
