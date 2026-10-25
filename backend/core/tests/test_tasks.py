@@ -2,6 +2,7 @@
 Jobs of the task queue (core.tasks): emails go out through it, and regular jobs clean up.
 """
 
+import logging
 from datetime import timedelta
 
 import pytest
@@ -9,8 +10,10 @@ from django.core import mail as outbox
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 from procrastinate import RetryStrategy
+from procrastinate.jobs import Job
 from pytest_django.fixtures import Settings
 
+from core.log_filters import HideJobArguments
 from core.models import DeletedEvent, new_uuid7
 from core.services import mail
 from core.tasks import clean_up, send_email
@@ -70,3 +73,26 @@ def test_clean_up_removes_old_records_only(task_queue: TaskQueue) -> None:
     recent = DeletedEvent.objects.create(calendar_id=new_uuid7(), href="recent.ics")
     clean_up(timestamp=0)
     assert list(DeletedEvent.objects.values_list("pk", flat=True)) == [recent.pk]
+
+
+def test_the_log_names_jobs_without_their_arguments() -> None:
+    # An email's addresses and RSVP links stay out of the log.
+    job = Job(
+        id=35,
+        queue="mail",
+        lock=None,
+        queueing_lock=None,
+        task_name="core.tasks.send_email",
+        task_kwargs={"message": {"to": ["guest@example.test"], "body": "/rsvp/secret-token"}},
+    )
+    record = logging.makeLogRecord(
+        {"name": "procrastinate.worker", "msg": f"Job {job.call_string} ended", "job": job.log_context()}
+    )
+    console = next(
+        handler
+        for handler in logging.getLogger().handlers
+        if any(isinstance(f, HideJobArguments) for f in handler.filters)
+    )
+    assert console.filter(record)
+    assert record.getMessage() == "Job core.tasks.send_email[35] ended"
+    assert "secret-token" not in str(record.__dict__)

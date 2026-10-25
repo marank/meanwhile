@@ -253,7 +253,10 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {"default": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"}},
-    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "default"}},
+    "filters": {"hide_job_arguments": {"()": "core.log_filters.HideJobArguments"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "default", "filters": ["hide_job_arguments"]}
+    },
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {
         "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
