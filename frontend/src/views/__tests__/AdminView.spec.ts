@@ -57,6 +57,7 @@ describe('administration page', () => {
     const { wrapper, router, tab } = await open()
     expect(wrapper.get('h1').text()).toBe('Administration')
     expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(['General', 'Users', 'Groups'])
+    expect(wrapper.findAll('[role="tab"]').every((t) => t.find('svg[aria-hidden="true"]').exists())).toBe(true)
     expect(wrapper.text()).toContain('App name')
 
     await tab('Users')

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { SlidersHorizontal, UserRound, Users } from '@lucide/vue'
+import { computed, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingsPage from '@/components/SettingsPage.vue'
 import AdminGeneralSettings from '@/components/admin/AdminGeneralSettings.vue'
@@ -13,7 +14,12 @@ const validTabs = ['general', 'users', 'groups'] as const
 const goBack = useGoBack()
 const { t } = useI18n()
 const { tab, selectTab } = useQueryTab(validTabs)
-const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`) })))
+const icons: Record<(typeof validTabs)[number], Component> = {
+  general: SlidersHorizontal,
+  users: UserRound,
+  groups: Users,
+}
+const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`), icon: icons[id] })))
 </script>
 
 <template>

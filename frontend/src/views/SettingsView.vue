@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { Boxes, Share2, ShieldCheck, SlidersHorizontal, Tag } from '@lucide/vue'
+import { computed, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as api from '@/api'
 import SettingsPage from '@/components/SettingsPage.vue'
@@ -27,7 +28,14 @@ const calendarStore = useCalendarStore()
 const { t } = useI18n()
 const { tab, selectTab } = useQueryTab(validTabs)
 
-const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`) })))
+const icons: Record<(typeof validTabs)[number], Component> = {
+  general: SlidersHorizontal,
+  access: ShieldCheck,
+  categories: Tag,
+  resources: Boxes,
+  share: Share2,
+}
+const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`), icon: icons[id] })))
 const calendar = ref<api.Calendar | null>(null)
 const canManage = computed(() => hasRole(calendar.value?.my_membership?.role, 'manage'))
 

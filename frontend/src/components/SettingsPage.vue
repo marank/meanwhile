@@ -1,12 +1,13 @@
 <script setup lang="ts" generic="T extends string">
 import { ChevronLeft } from '@lucide/vue'
 import IconButton from '@/components/IconButton.vue'
+import type { Component } from 'vue'
 import TabBar from '@/components/TabBar.vue'
 
 defineProps<{
   title: string
   /** Pages with a single section leave the tabs out. */
-  tabs?: Array<{ id: T; label: string }>
+  tabs?: Array<{ id: T; label: string; icon?: Component }>
   activeTab?: T
 }>()
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { KeyRound, LayoutGrid, Mail, SlidersHorizontal } from '@lucide/vue'
+import { computed, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingsPage from '@/components/SettingsPage.vue'
 import AccountGeneralSettings from '@/components/account/AccountGeneralSettings.vue'
@@ -14,7 +15,13 @@ const validTabs = ['general', 'overview', 'emailNotifications', 'appPasswords'] 
 const goBack = useGoBack()
 const { t } = useI18n()
 const { tab, selectTab } = useQueryTab(validTabs)
-const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`) })))
+const icons: Record<(typeof validTabs)[number], Component> = {
+  general: SlidersHorizontal,
+  overview: LayoutGrid,
+  emailNotifications: Mail,
+  appPasswords: KeyRound,
+}
+const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`), icon: icons[id] })))
 </script>
 
 <template>

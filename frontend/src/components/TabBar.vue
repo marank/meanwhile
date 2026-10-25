@@ -1,9 +1,9 @@
 <script setup lang="ts" generic="T extends string">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch, type Component } from 'vue'
 import { useScrollFade } from '@/composables/useScrollFade'
 
 const props = defineProps<{
-  tabs: Array<{ id: T; label: string; count?: number }>
+  tabs: Array<{ id: T; label: string; count?: number; icon?: Component }>
   active: T
   label?: string
 }>()
@@ -71,6 +71,7 @@ onMounted(revealActive)
           "
           @click="emit('select', tab.id)"
         >
+          <component :is="tab.icon" v-if="tab.icon" :size="16" class="shrink-0" aria-hidden="true" />
           {{ tab.label }}
           <span v-if="tab.count" class="rounded-full bg-blue-600 px-1.5 text-xs font-semibold leading-5 text-white">{{
             tab.count
