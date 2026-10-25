@@ -531,7 +531,8 @@ def test_invitations_look_like_the_events_page(world: World) -> None:
     assert BASE.strftime("%A, %B ") in text_ and "(Europe/Berlin) Weekly" in text_
     assert "Where Room 1 Organizer Owner <owner@example.test>" in text_
     assert "Your answer Accept Tentative Decline You can also answer in your mail program." in text_
-    assert f"Invited as {GUEST} View event" in text_
+    # The button over the address it was sent to: side by side, a long address would be too wide for phones.
+    assert f"View event Invited as {GUEST}" in text_
     assert f'href="http://app.test/event/{token}"' in html_of(to(GUEST)[-1])
 
 
@@ -713,3 +714,66 @@ def test_with_an_authserv_id_answers_need_a_verified_sender(world: World, settin
     assert process_email(elsewhere)[0].startswith("ignored")
     verified = b"Authentication-Results: mx.example.test; dkim=pass header.d=elsewhere.test; spf=pass\n" + forged
     assert process_email(verified) == [f"{event['uid']}: {GUEST}: declined"]
+
+
+def test_updates_say_what_changed_and_show_what_it_was(world: World) -> None:
+    event = create(world, location="Room 1")
+    invite(world, event)
+    world["api"]["owner"].patch(
+        f"/events/{event['id']}",
+        {"location": "Room 2", "start": iso(BASE + timedelta(hours=2)), "end": iso(BASE + timedelta(hours=3))},
+    )
+    _, update = to(GUEST)
+    html = html_of(update)
+    assert "mw-notice-warning" in html
+    assert "Owner changed &quot;Planning&quot;." in html
+    # The old place and time, struck through under the new ones; the unchanged title isn't.
+    before = re.findall(r'<div class="mw-before"[^>]*>([^<]*)</div>', html)
+    assert before == ["Mon, Jan 7, 2030, 10:00 AM – 11:00 AM (Europe/Berlin)", "Room 1"]
+
+
+def test_event_notifications_show_the_event_like_invitations_do(world: World) -> None:
+    room = world["resource"]("Beamer")
+    world["book"](world["api"]["booker"], room["id"], location="Hall")
+    [message] = to("owner@example.test")
+    html = html_of(message)
+    assert "Booking request" in html and "mw-notice-warning" in html
+    # What the approval is about.
+    assert ">Resource</td>" in html and "Beamer" in html and "Hall" in html
+    assert "Review request" in html
+
+    event = create(world)
+    invite(world, event)
+    process_email(reply(GUEST, event["uid"], "DECLINED"))
+    answer = to("owner@example.test")[-1]
+    assert answer.subject == "Declined: Planning"
+    assert "mw-notice-danger" in html_of(answer)
+
+
+def test_new_members_read_what_their_role_allows(world: World) -> None:
+    newcomer = world["users"]["outsider"]
+    world["api"]["owner"].post(
+        f"/calendars/{world['cal']['id']}/members", {"user_id": str(newcomer.id), "role": "full"}
+    )
+    [message] = to(newcomer.email)
+    assert 'Owner added you to the calendar "Team".' in message.body
+    assert "Your role: Can create and edit all events" in message.body
+
+
+def test_role_changes_come_by_email_only_when_chosen_and_for_more_rights(world: World) -> None:
+    other = world["users"]["other"]
+    url = f"/calendars/{world['cal']['id']}/members/{other.id}"
+    owner = world["api"]["owner"]
+    assert world["api"]["other"].get("/users/me").json()["email_notifications"]["role_changes"] is False
+    owner.patch(url, {"role": "full"})
+    assert to(other.email) == []
+
+    world["api"]["other"].patch("/users/me", {"email_notifications": {"role_changes": True}})
+    owner.patch(url, {"role": "read"})
+    assert to(other.email) == []
+    owner.patch(url, {"role": "manage"})
+    [message] = to(other.email)
+    assert 'Owner changed your rights in the calendar "Team".' in message.body
+    assert "Your role: Can create and edit all events, and change settings and access" in message.body
+    # In the app, every change is shown.
+    assert Notification.objects.filter(user=other, type="member_role_changed").count() == 3

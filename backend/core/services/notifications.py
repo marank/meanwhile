@@ -21,7 +21,8 @@ EMAIL_KINDS = {
     "approvals": True,  # booking requests to decide and cancelled bookings
     "decisions": True,  # decisions on the user's bookings
     "comments": True,
-    "memberships": True,
+    "memberships": True,  # added to a calendar
+    "role_changes": False,  # more rights in a calendar
     "reminders": False,  # reminders pop up in the app already
 }
 
@@ -34,7 +35,7 @@ EMAIL_KIND_OF = {
     "booking_rejected": "decisions",
     "comment_added": "comments",
     "member_added": "memberships",
-    "member_role_changed": "memberships",
+    "member_role_changed": "role_changes",
     "participant_replied": "responses",
     "event_reminder": "reminders",
 }
@@ -76,6 +77,9 @@ def notify(
         broadcast.notifications_changed(recipient_id)
 
     kind = EMAIL_KIND_OF.get(type)
+    # Fewer rights come in the app only: by email they would read like a reprimand.
+    if type == "member_role_changed" and not (data or {}).get("promoted"):
+        kind = None
     if kind is None or not seen:
         return
     recipients = [u for u in User.objects.filter(id__in=seen) if wants_email(u, kind)]
@@ -86,6 +90,22 @@ def notify(
     event = Event.objects.filter(id=event_id).first() if event_id else None
     app = mail.app_name()
     mail.send(_notification_email(user, type, actor, title, calendar, event, data or {}, app) for user in recipients)
+
+
+# Event emails: how the coloured line on top of the event card looks, by type (None: no line).
+_NOTICE_TONES: dict[str, mail.NoticeTone | None] = {
+    "approval_requested": "warning",
+    "booking_approved": "success",
+    "booking_rejected": "danger",
+    "booking_cancelled": "danger",
+    "comment_added": "neutral",
+    "participant_replied_accepted": "success",
+    "participant_replied_tentative": "warning",
+    "participant_replied_declined": "danger",
+    "participant_replied_needs_action": "neutral",
+    "event_reminder": None,
+}
+_BOOKINGS = {"approval_requested", "booking_approved", "booking_rejected", "booking_cancelled"}
 
 
 def _notification_email(
@@ -99,7 +119,6 @@ def _notification_email(
     app: str,
 ) -> EmailMultiAlternatives:
     language = mail.language_of(user)
-    reader = mail.Reader.of(user, language, event.timezone if event else "UTC")
     if actor is not None:
         actor_name = actor.display_name or actor.email
     else:
@@ -109,38 +128,73 @@ def _notification_email(
     if "role" in data:
         values["role"] = text(language, f"role_{data['role']}")
     key = type if type != "participant_replied" else f"participant_replied_{data.get('status', 'accepted')}"
-
-    details = []
-    if event is not None:
-        start, end = event.start, event.end
-        if type == "event_reminder" and data.get("start"):
-            # The occurrence reminded of, which in a series isn't the first.
-            start = datetime.fromisoformat(data["start"])
-            end = start + (event.end - event.start)
-        details.append((text(language, "when"), mail.format_when(start, end, event.all_day, reader)))
-        if event.location:
-            details.append((text(language, "location"), event.location))
-    if calendar is not None and type not in ("member_added", "member_role_changed"):
-        details.append((text(language, "calendar"), calendar.name))
-    if data.get("note"):
-        details.append((text(language, "note"), data["note"]))
-    if data.get("comment"):
-        details.append((text(language, "comment"), data["comment"]))
+    subject = text(language, f"{key}_subject", **values)
+    body = text(language, f"{key}_body", **values)
 
     if type in ("member_added", "member_role_changed") and calendar is not None:
         url = mail.app_link(f"/calendar/{calendar.id}")
     else:
         url = mail.app_link("/notifications")
-    links = [mail.Link(text(language, "open", app=app), url, primary=True)] if url else []
+    label = text(language, "review_request" if type == "approval_requested" else "open", app=app)
+    links = [mail.Link(label, url, primary=True)] if url else []
 
+    if event is None or key not in _NOTICE_TONES:
+        details = []
+        if calendar is not None and type not in ("member_added", "member_role_changed"):
+            details.append((text(language, "calendar"), calendar.name))
+        if "role" in data:
+            details.append((text(language, "your_role"), text(language, f"role_{data['role']}_description")))
+        return mail.build_message(
+            to=user.email,
+            subject=subject,
+            paragraphs=[body],
+            language=language,
+            details=details,
+            links=links,
+            from_name=actor.display_name if actor else None,
+            footer="footer_settings",
+            app=app,
+        )
+
+    reader = mail.Reader.of(user, language, event.timezone)
+    start, end = event.start, event.end
+    if type == "event_reminder" and data.get("start"):
+        # The occurrence reminded of, which in a series isn't the first.
+        start = datetime.fromisoformat(data["start"])
+        end = start + (event.end - event.start)
+    rows: list[tuple[str, str]] = []
+    if event.location:
+        rows.append((text(language, "location"), event.location))
+    if type in _BOOKINGS and event.resource is not None:
+        rows.append((text(language, "resource"), event.resource.name))
+    if type == "approval_requested" and actor is not None:
+        rows.append((text(language, "requested_by"), f"{actor_name} <{actor.email}>"))
+    if calendar is not None:
+        rows.append((text(language, "calendar"), calendar.name))
+    for field in ("note", "comment"):
+        if data.get(field):
+            rows.append((text(language, field), data[field]))
+    tone = _NOTICE_TONES[key]
+    card = mail.EventCard(
+        kicker=text(language, f"{type}_kicker"),
+        title=title,
+        when=mail.when_parts(start, end, event.all_day, reader, text(language, "all_day")),
+        rows=rows,
+        description=event.description if type == "event_reminder" else "",
+        notice=body if tone else "",
+        notice_tone=tone or "neutral",
+        struck=type == "booking_cancelled",
+        view=links[0] if links else None,
+    )
     return mail.build_message(
         to=user.email,
-        subject=text(language, f"{key}_subject", **values),
-        paragraphs=[text(language, f"{key}_body", **values)],
+        subject=subject,
+        paragraphs=[body],
         language=language,
-        details=details,
+        details=[(text(language, "when"), mail.format_when(start, end, event.all_day, reader)), *rows],
         links=links,
         from_name=actor.display_name if actor else None,
         footer="footer_settings",
         app=app,
+        card=card,
     )

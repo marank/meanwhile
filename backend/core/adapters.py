@@ -13,6 +13,7 @@ from django.http import HttpRequest
 from django.utils import translation
 
 from core.models import User
+from core.services import accounts
 from core.services.mail import app_name, language_of
 
 
@@ -30,6 +31,10 @@ class AccountAdapter(DefaultAccountAdapter):  # type: ignore[misc]  # allauth sh
         user = User.objects.filter(email__iexact=email).first()
         with translation.override(language_of(user)):
             super().send_mail(template_prefix, email, context)
+
+    def send_password_reset_mail(self, user: User, email: str, context: dict[str, Any]) -> None:
+        # Laid out like the app's other emails, not as allauth's plain text.
+        accounts.send_password_reset(user, context["password_reset_url"])
 
     def is_open_for_signup(self, request: HttpRequest) -> bool:
         return bool(getattr(django_settings, "ALLOW_REGISTRATION", True))

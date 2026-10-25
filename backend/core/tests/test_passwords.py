@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from django.core import mail
+from django.core.mail import EmailMultiAlternatives
 from django.test import Client
 from pytest_django.fixtures import Settings
 
@@ -68,6 +69,17 @@ def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings: 
     assert (
         post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "An0ther-one!"}).status_code == 400
     )
+
+
+def test_the_link_comes_like_the_apps_other_emails(settings: Settings) -> None:
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    make_user("someone")
+    key = request_link("someone@example.test")
+    [message] = mail.outbox
+    assert isinstance(message, EmailMultiAlternatives)
+    assert message.subject == "Reset your password for Meanwhile"
+    html = next(str(content) for content, mimetype in message.alternatives if mimetype == "text/html")
+    assert 'class="mw-heading"' in html and f"/reset-password/{key}" in html and "Choose new password" in html
 
 
 def test_made_up_keys_change_nothing(settings: Settings) -> None:

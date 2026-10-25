@@ -1,5 +1,6 @@
 """
-Accounts an admin creates: the email inviting their owner into the app.
+Emails about accounts: the invitation into the app of an account an admin created, and the link to
+set a forgotten password.
 """
 
 from allauth.account.adapter import get_adapter
@@ -46,6 +47,30 @@ def send_invitation(user: User, inviter: User) -> None:
                 details=[(text(language, "account_invite_email"), user.email)],
                 links=[mail.Link(label, url, primary=True)] if url else [],
                 from_name=inviter_name,
+                app=app,
+            )
+        ]
+    )
+
+
+def send_password_reset(user: User, url: str) -> None:
+    """The link to set a forgotten password (allauth's, see AccountAdapter), in the style of the app's
+    other emails rather than allauth's plain text."""
+    language = mail.language_of(user)
+    app = mail.app_name()
+    mail.send(
+        [
+            mail.build_message(
+                to=user.email,
+                subject=text(language, "password_reset_subject", app=app),
+                heading=text(language, "password_reset_heading"),
+                paragraphs=[
+                    text(language, "password_reset_body", app=app),
+                    text(language, "password_reset_validity"),
+                ],
+                language=language,
+                details=[(text(language, "account_invite_email"), user.email)],
+                links=[mail.Link(text(language, "password_reset_button"), url, primary=True)],
                 app=app,
             )
         ]

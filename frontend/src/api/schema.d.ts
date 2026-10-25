@@ -1130,6 +1130,8 @@ export interface components {
       comments: boolean
       /** Memberships */
       memberships: boolean
+      /** Role Changes */
+      role_changes: boolean
       /** Reminders */
       reminders: boolean
     }
@@ -1192,6 +1194,8 @@ export interface components {
       comments?: boolean | null
       /** Memberships */
       memberships?: boolean | null
+      /** Role Changes */
+      role_changes?: boolean | null
       /** Reminders */
       reminders?: boolean | null
     }

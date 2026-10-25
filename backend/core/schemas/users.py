@@ -36,6 +36,7 @@ class EmailNotifications(Schema):
     decisions: bool
     comments: bool
     memberships: bool
+    role_changes: bool
     reminders: bool
 
 
@@ -46,6 +47,7 @@ class EmailNotificationsUpdate(Schema):
     decisions: bool | None = None
     comments: bool | None = None
     memberships: bool | None = None
+    role_changes: bool | None = None
     reminders: bool | None = None
 
 

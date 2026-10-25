@@ -3646,6 +3646,10 @@
             "title": "Memberships",
             "type": "boolean"
           },
+          "role_changes": {
+            "title": "Role Changes",
+            "type": "boolean"
+          },
           "reminders": {
             "title": "Reminders",
             "type": "boolean"
@@ -3658,6 +3662,7 @@
           "decisions",
           "comments",
           "memberships",
+          "role_changes",
           "reminders"
         ],
         "title": "EmailNotifications",
@@ -3808,6 +3813,17 @@
               }
             ],
             "title": "Memberships"
+          },
+          "role_changes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Changes"
           },
           "reminders": {
             "anyOf": [

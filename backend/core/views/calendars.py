@@ -50,6 +50,7 @@ from core.services.permissions import (
     get_member_calendar,
     get_membership,
     memberships_of,
+    role_weight,
 )
 from core.views.common import AuthedRequest, approvers_of, replace_approvers
 
@@ -292,6 +293,7 @@ def update_member(
         if data["role"] == Role.OWNER:
             raise HttpError(400, "Cannot make a second owner")
         if target.role != data["role"]:
+            promoted = target.role is None or role_weight(data["role"]) > role_weight(target.role)
             target.role = data["role"]
             notify(
                 [user_id],
@@ -299,7 +301,7 @@ def update_member(
                 str(request.user.id),
                 calendar.name,
                 calendar_id=str(calendar.id),
-                data={"role": data["role"]},
+                data={"role": data["role"], "promoted": promoted},
             )
     if "folder_id" in data:
         target.folder_id = data["folder_id"] or None

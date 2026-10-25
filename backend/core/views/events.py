@@ -435,7 +435,7 @@ def _apply_update(user: User, event: Event, data: dict[str, Any]) -> None:
             event_id=str(event.id),
         )
     if status_reset or _SCHEDULED_FIELDS.intersection(changed):
-        send_request(event, update=True)
+        send_request(event, update=True, before={"id": event.id, **old_values})
 
 
 @router.delete("/events/{event_id}", response=OkOut)

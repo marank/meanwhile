@@ -18,6 +18,7 @@ const kinds: Array<keyof EmailNotifications> = [
   'decisions',
   'comments',
   'memberships',
+  'role_changes',
   'reminders',
 ]
 

@@ -16,7 +16,7 @@ import email
 import email.policy
 import imaplib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from email.message import Message
 from email.utils import getaddresses
@@ -140,9 +140,11 @@ def _message(
     ical_text: str,
     kind: str,
     shown: Event | None = None,
+    before: Mapping[str, Any] | None = None,
 ) -> EmailMultiAlternatives:
     """`kind`: "invite", "update", "cancel" or "removed". `shown`: the occurrence the mail is about,
-    if it is about one only."""
+    if it is about one only. `before`: an update's event as it was (its id and old values), to show
+    what changed."""
     organizer = series.creator
     shown = shown or series
     language = mail.language_of(participant.user, fallback=mail.language_of(organizer))
@@ -156,6 +158,21 @@ def _message(
     place_and_organizer = [(text(language, "location"), shown.location)] if shown.location else []
     place_and_organizer.append((text(language, "organizer"), f"{name} <{organizer.email}>"))
     description = shown.description if method == "REQUEST" else ""
+    previous: dict[str, str] = {}
+    if kind == "update" and before is not None and before.get("id") == shown.id:
+        location_label = text(language, "location")
+        if before["title"] != shown.title:
+            previous["title"] = before["title"] or text(language, "untitled")
+        if (before["start"], before["end"], before["all_day"]) != (shown.start, shown.end, shown.all_day):
+            previous["when"] = mail.format_when(before["start"], before["end"], before["all_day"], reader)
+        if (before["location"] or "") != shown.location:
+            previous[location_label] = before["location"] or ""
+            if not shown.location:
+                # Taken out: the row stays, empty, with what it said before.
+                place_and_organizer.insert(0, (location_label, "—"))
+        if (before["description"] or "") != shown.description:
+            previous["description"] = before["description"] or ""
+            description = description or "—"
     details = [(text(language, "when"), when), *place_and_organizer]
     if description:
         details.append((text(language, "description"), description))
@@ -187,8 +204,11 @@ def _message(
         repeats=_repeats(shown.rrule if shown is series else None, language),
         rows=place_and_organizer,
         description=description,
-        # Called off, or taken off it: said on top, as on the event's page.
-        notice=paragraphs[0] if method == "CANCEL" else "",
+        # Called off, taken off it or changed: said on top, as on the event's page.
+        notice=paragraphs[0] if method == "CANCEL" or kind == "update" else "",
+        notice_tone="warning" if kind == "update" else "danger",
+        struck=method == "CANCEL",
+        previous=previous,
         answers_heading=text(language, "your_answer"),
         answers_hint=text(language, "answer_hint") if answer_links else "",
         answers=answer_links,
@@ -221,10 +241,16 @@ def _repeats(rrule: str | None, language: str) -> str:
     return text(language, f"repeats_{parts['FREQ']}") if simple else text(language, "repeats")
 
 
-def send_request(event: Event, participants: list[EventParticipant] | None = None, update: bool = False) -> None:
+def send_request(
+    event: Event,
+    participants: list[EventParticipant] | None = None,
+    update: bool = False,
+    before: Mapping[str, Any] | None = None,
+) -> None:
     """Sends the event as it is now to its participants (or those given).
 
-    `update`: the event changed; counts the change and says so.
+    `update`: the event changed; counts the change and says so. `before`: the changed event's id and
+    values before the change (title, start, end, all_day, location, description), to show what changed.
     """
     series = series_of(event)
     if series.status in _GONE:
@@ -244,12 +270,12 @@ def send_request(event: Event, participants: list[EventParticipant] | None = Non
         address = participant.email.lower()
         if address in on_series:
             series_text = series_text or request_ical(series)
-            messages.append(_message(series, participant, "REQUEST", series_text, kind))
+            messages.append(_message(series, participant, "REQUEST", series_text, kind, before=before))
             continue
         theirs = [o for o in overrides if any(p.email.lower() == address for p in o.participants.all())]
         if theirs:
             text_ = request_ical(series, theirs)
-            messages.append(_message(series, participant, "REQUEST", text_, kind, shown=theirs[0]))
+            messages.append(_message(series, participant, "REQUEST", text_, kind, shown=theirs[0], before=before))
     mail.send(messages)
 
 

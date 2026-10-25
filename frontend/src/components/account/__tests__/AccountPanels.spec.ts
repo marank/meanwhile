@@ -116,8 +116,12 @@ describe('email notifications', () => {
     const wrapper = mount(EmailNotificationsPanel, { global: { plugins: [i18n] } })
     expect(wrapper.text()).toContain('ann@example.test')
     const switches = wrapper.findAll('[role="switch"]')
-    expect(switches).toHaveLength(7)
-    expect(switches.every((s) => s.attributes('aria-checked') === 'true')).toBe(true)
+    expect(switches).toHaveLength(8)
+    // More rights in a calendar come by email only when chosen.
+    const off = switches.filter((s) => s.attributes('aria-checked') === 'false')
+    expect(off.map((s) => s.text())).toEqual([
+      'More rights in a calendarWhen you get a role with more rights in a calendar.',
+    ])
   })
 
   it('saves the chosen kinds', async () => {

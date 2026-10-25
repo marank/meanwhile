@@ -60,6 +60,7 @@ export function user(overrides: Partial<api.User> = {}): api.User {
       decisions: true,
       comments: true,
       memberships: true,
+      role_changes: false,
       reminders: true,
     },
     created_at: '2026-01-01T00:00:00Z',

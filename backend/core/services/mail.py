@@ -12,8 +12,8 @@ import email.message
 import email.policy
 import logging
 import re
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from email.policy import Policy
 from email.utils import formataddr
@@ -262,11 +262,15 @@ _DARK_STYLE = (
     ".mw-heading, .mw-value { color:#f9fafb !important; }"
     ".mw-text { color:#d1d5db !important; }"
     ".mw-app, .mw-label { color:#9ca3af !important; }"
-    ".mw-box { background:#111827 !important; border-color:#374151 !important; }"
+    ".mw-box { background:#1f2937 !important; border-color:#374151 !important; }"
     ".mw-button { background:#1f2937 !important; border-color:#4b5563 !important; color:#f9fafb !important; }"
     ".mw-footer { color:#6b7280 !important; }"
     ".mw-tone { background:#1f2937 !important; }"
-    ".mw-notice { background:#450a0a !important; color:#fecaca !important; }"
+    ".mw-notice-danger { background:#450a0a !important; color:#fecaca !important; }"
+    ".mw-notice-warning { background:#422006 !important; color:#fde68a !important; }"
+    ".mw-notice-success { background:#052e16 !important; color:#bbf7d0 !important; }"
+    ".mw-notice-neutral { background:#111827 !important; color:#d1d5db !important; }"
+    ".mw-before { color:#6b7280 !important; }"
     ".mw-band { background:#111827 !important; border-color:#374151 !important; }"
     ".mw-rule, .mw-tile { border-color:#374151 !important; }"
     ".mw-tone-accept { color:#4ade80 !important; }"
@@ -278,10 +282,11 @@ _DARK_STYLE = (
 
 _LAYOUTS = {
     # In a row of buttons, which wraps on narrow screens.
-    "inline": "display:inline-block;margin:0 8px 8px 0",
-    # Filling a table cell, for buttons side by side in equal widths.
-    "block": "display:block;margin:0;text-align:center",
-    "alone": "display:inline-block;margin:0",
+    "inline": "display:inline-block;margin:0 8px 8px 0;padding:10px 18px",
+    # Filling a table cell, for buttons side by side in equal widths: little padding, so three of them
+    # still fit side by side on a phone.
+    "block": "display:block;margin:0;text-align:center;padding:10px 2px",
+    "alone": "display:inline-block;margin:0;padding:10px 18px",
 }
 
 
@@ -296,27 +301,43 @@ def _button(link: Link, layout: Literal["inline", "block", "alone"] = "inline") 
     else:
         colors, css_class = "background:#ffffff;border:1px solid #d1d5db;color:#111827", ' class="mw-button"'
     return (
-        f'<a href="{escape(link.url)}"{css_class} style="{_LAYOUTS[layout]};padding:10px 18px;'
+        f'<a href="{escape(link.url)}"{css_class} style="{_LAYOUTS[layout]};'
         f'border-radius:8px;{colors};font-size:14px;font-weight:600;line-height:20px;text-decoration:none">'
         f"{escape(link.label)}</a>"
     )
 
 
+# A line on top of an event card: its background and text, light.
+NoticeTone = Literal["danger", "warning", "success", "neutral"]
+_NOTICE_TONES: dict[str, tuple[str, str]] = {
+    "danger": ("#fef2f2", "#b91c1c"),
+    "warning": ("#fffbeb", "#b45309"),
+    "success": ("#f0fdf4", "#15803d"),
+    "neutral": ("#f3f4f6", "#374151"),
+}
+
+
 @dataclass
 class EventCard:
-    """An invitation laid out like the event's page in the app: who invites, the title, a leaf of a
-    tear-off calendar with the day and time beside it, place and organizer, the description, then the
-    answers in a band of their own."""
+    """An email about an event laid out like the event's page in the app: what it is about, the title, a
+    leaf of a tear-off calendar with the day and time beside it, place and organizer, the description,
+    then the answers in a band of their own."""
 
     kicker: str
     title: str
     when: When
     repeats: str = ""
-    # Labelled lines: place and organizer.
+    # Labelled lines: place, organizer, resource, ...
     rows: Sequence[tuple[str, str]] = ()
     description: str = ""
-    # Cancelled or taken off it: a red line on top, and the title struck through.
+    # What happened, in a coloured line on top: called off, changed, approved, an answer.
     notice: str = ""
+    notice_tone: NoticeTone = "danger"
+    # Called off: the title struck through.
+    struck: bool = False
+    # What a change replaced, shown struck through under the new value: by "title", "when",
+    # "description" or the label of a row.
+    previous: Mapping[str, str] = field(default_factory=dict)
     answers_heading: str = ""
     answers_hint: str = ""
     answers: Sequence[Link] = ()
@@ -325,16 +346,28 @@ class EventCard:
 
 
 _SMALL = "font-size:14px;line-height:20px"
+# Long words (addresses, links) break rather than widen the email beyond a phone's screen.
+_WRAP = "overflow-wrap:anywhere;word-break:break-word"
+
+
+def _before(value: str) -> str:
+    """What a change replaced, struck through."""
+    return (
+        f'<div class="mw-before" style="color:#9ca3af;text-decoration:line-through;white-space:pre-line;{_WRAP}">'
+        f"{escape(value or '—')}</div>"
+    )
 
 
 def _card_html(card: EventCard) -> str:
     out = []
     if card.notice:
+        background, color = _NOTICE_TONES[card.notice_tone]
         out.append(
-            '<div class="mw-notice" style="padding:12px 28px;background:#fef2f2;color:#b91c1c;font-size:14px;'
-            f'font-weight:600;border-radius:12px 12px 0 0">{escape(card.notice)}</div>'
+            f'<div class="mw-notice mw-notice-{card.notice_tone}" style="padding:12px 28px;background:{background};'
+            f'color:{color};font-size:14px;font-weight:600;border-radius:12px 12px 0 0;{_WRAP}">'
+            f"{escape(card.notice)}</div>"
         )
-    title_style = "text-decoration:line-through;opacity:0.6;" if card.notice else ""
+    title_style = "text-decoration:line-through;opacity:0.6;" if card.struck else ""
     tile = (
         '<table class="mw-tile" role="presentation" cellpadding="0" cellspacing="0" width="56" '
         'style="width:56px;border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate">'
@@ -343,23 +376,32 @@ def _card_html(card: EventCard) -> str:
         '<tr><td class="mw-heading" style="padding:4px 0;color:#111827;font-size:20px;font-weight:600;'
         f'line-height:28px;text-align:center">{card.when.day}</td></tr></table>'
     )
-    when_lines = [f'<div class="mw-value" style="color:#111827;font-weight:600">{escape(card.when.date)}</div>']
+    when_lines = [f'<div class="mw-value" style="color:#111827;font-weight:600;{_WRAP}">{escape(card.when.date)}</div>']
     when_lines += [
-        f'<div class="mw-text" style="color:#4b5563">{escape(line)}</div>'
+        f'<div class="mw-text" style="color:#4b5563;{_WRAP}">{escape(line)}</div>'
         for line in (card.when.time, card.repeats)
         if line
     ]
+    if "when" in card.previous:
+        when_lines.append(_before(card.previous["when"]))
     rows = "".join(
         '<tr><td class="mw-label" style="padding:3px 16px 3px 0;color:#6b7280;vertical-align:top;white-space:nowrap">'
         f"{escape(label)}</td>"
-        f'<td class="mw-value" style="padding:3px 0;color:#111827;vertical-align:top">{escape(value)}</td></tr>'
+        f'<td class="mw-value" style="padding:3px 0;color:#111827;vertical-align:top;{_WRAP}">{escape(value)}'
+        f"{_before(card.previous[label]) if label in card.previous else ''}</td></tr>"
         for label, value in card.rows
     )
+    old_title = card.previous.get("title")
+    heading = (
+        f'<h1 class="mw-heading" style="margin:4px 0 {0 if old_title is not None else 20}px;color:#111827;'
+        f'font-size:24px;font-weight:600;line-height:32px;{title_style}{_WRAP}">{escape(card.title)}</h1>'
+    )
+    if old_title is not None:
+        heading += f'<div style="margin:0 0 20px">{_before(old_title)}</div>'
     main = [
         '<p class="mw-label" style="margin:0;color:#6b7280;font-size:12px;font-weight:600;line-height:16px;'
-        f'letter-spacing:0.05em;text-transform:uppercase">{escape(card.kicker)}</p>',
-        '<h1 class="mw-heading" style="margin:4px 0 20px;color:#111827;font-size:24px;font-weight:600;'
-        f'line-height:32px;{title_style}">{escape(card.title)}</h1>',
+        f'letter-spacing:0.05em;text-transform:uppercase;{_WRAP}">{escape(card.kicker)}</p>',
+        heading,
         f'<table role="presentation" cellpadding="0" cellspacing="0" style="{_SMALL}"><tr>'
         f'<td style="vertical-align:top;padding-right:16px">{tile}</td>'
         f'<td style="vertical-align:top">{"".join(when_lines)}</td></tr></table>',
@@ -372,7 +414,8 @@ def _card_html(card: EventCard) -> str:
     if card.description:
         main.append(
             '<div class="mw-rule mw-text" style="margin-top:20px;padding-top:20px;border-top:1px solid #e5e7eb;'
-            f'color:#374151;white-space:pre-line;{_SMALL}">{escape(card.description)}</div>'
+            f'color:#374151;white-space:pre-line;{_SMALL};{_WRAP}">{escape(card.description)}'
+            f"{_before(card.previous['description']) if 'description' in card.previous else ''}</div>"
         )
     out.append(f'<div style="padding:28px">{"".join(main)}</div>')
 
@@ -397,14 +440,15 @@ def _card_html(card: EventCard) -> str:
             f"{hint}</div>"
         )
     if card.invited_as or card.view:
-        view = _button(card.view, "alone") if card.view else ""
-        out.append(
-            '<table class="mw-rule" role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            'style="border-top:1px solid #e5e7eb"><tr>'
-            '<td class="mw-label" style="padding:16px 28px;color:#6b7280;font-size:12px">'
-            f"{escape(card.invited_as)}</td>"
-            f'<td align="right" style="padding:12px 28px">{view}</td></tr></table>'
+        # One below the other: side by side, a long address would make the email wider than a phone.
+        view = f'<div style="margin:0 0 8px">{_button(card.view, "alone")}</div>' if card.view else ""
+        invited = (
+            f'<div class="mw-label" style="color:#6b7280;font-size:12px;line-height:16px;{_WRAP}">'
+            f"{escape(card.invited_as)}</div>"
+            if card.invited_as
+            else ""
         )
+        out.append(f'<div class="mw-rule" style="padding:16px 28px;border-top:1px solid #e5e7eb">{view}{invited}</div>')
     return "".join(out)
 
 
@@ -420,17 +464,18 @@ def _html(
     logo_src: str | None,
     card: EventCard | None = None,
 ) -> str:
-    """The HTML part: a card on a grey page, with tables and inline styles as mail programs need. An
-    invitation fills the card with the event (`card`) instead of heading, paragraphs and details."""
+    """The HTML part, with tables and inline styles as mail programs need: heading, paragraphs, details
+    and buttons, or for an email about an event its card (`card`) instead."""
     body = []
     if heading:
         body.append(
             '<h1 class="mw-heading" '
-            'style="margin:0 0 12px;font-size:20px;line-height:28px;font-weight:600;color:#111827">'
+            f'style="margin:0 0 12px;font-size:20px;line-height:28px;font-weight:600;color:#111827;{_WRAP}">'
             f"{escape(heading)}</h1>"
         )
     body += [
-        f'<p class="mw-text" style="margin:0 0 12px;font-size:15px;line-height:22px;color:#374151">{escape(p)}</p>'
+        f'<p class="mw-text" style="margin:0 0 12px;font-size:15px;line-height:22px;color:#374151;{_WRAP}">'
+        f"{escape(p)}</p>"
         for p in paragraphs
     ]
     if details:
@@ -438,7 +483,7 @@ def _html(
             '<tr><td class="mw-label" '
             'style="padding:4px 16px 4px 0;color:#6b7280;vertical-align:top;white-space:nowrap">'
             f"{escape(label)}</td>"
-            '<td class="mw-value" style="padding:4px 0;color:#111827;vertical-align:top;white-space:pre-line">'
+            f'<td class="mw-value" style="padding:4px 0;color:#111827;vertical-align:top;white-space:pre-line;{_WRAP}">'
             f"{escape(value)}</td></tr>"
             for label, value in details
         )
@@ -459,25 +504,30 @@ def _html(
         if group:
             body.append(f'<div style="margin:0">{"".join(_button(link) for link in group)}</div>')
 
+    # One layout at every width: the page itself, with the app on top and the footer below, each set off
+    # by a rule; an event comes as a card of its own (the frame is not a card, so a phone doesn't get the
+    # margins twice).
+    content = (
+        '<div class="mw-card" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;'
+        f'overflow:hidden">{_card_html(card)}</div>'
+        if card
+        else "".join(body)
+    )
     return (
         f'<!DOCTYPE html><html lang="{language}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
         f"<title>{escape(subject)}</title><style>:root {{ color-scheme: light dark; }} {_DARK_STYLE}</style></head>"
-        f'<body class="mw-page" style="margin:0;padding:0;background:#f3f4f6;font-family:{_FONT}">'
+        f'<body class="mw-page" style="margin:0;padding:0;background:#ffffff;font-family:{_FONT}">'
         '<table class="mw-page" role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="background:#f3f4f6">'
-        '<tr><td align="center" style="padding:24px 12px">'
+        'style="background:#ffffff">'
+        '<tr><td align="center" style="padding:24px 16px">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">'
-        '<tr><td class="mw-app" '
-        f'style="padding:0 4px 12px;font-family:{_FONT};font-size:14px;font-weight:600;color:#6b7280">'
-        f"{header}</td></tr>"
-        '<tr><td class="mw-card" '
-        f'style="padding:{0 if card else 28}px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;'
-        f'font-family:{_FONT}">{_card_html(card) if card else "".join(body)}</td></tr>'
-        '<tr><td class="mw-footer" '
-        f'style="padding:16px 4px 0;font-family:{_FONT};font-size:12px;line-height:18px;color:#9ca3af">'
-        f"{escape(footer)}</td></tr>"
+        '<tr><td class="mw-app mw-rule" style="padding:0 0 16px;border-bottom:1px solid #e5e7eb;'
+        f'font-family:{_FONT};font-size:15px;font-weight:600;color:#374151">{header}</td></tr>'
+        f'<tr><td style="padding:24px 0;font-family:{_FONT}">{content}</td></tr>'
+        '<tr><td class="mw-footer mw-rule" style="padding:16px 0 0;border-top:1px solid #e5e7eb;'
+        f'font-family:{_FONT};font-size:12px;line-height:18px;color:#9ca3af">{escape(footer)}</td></tr>'
         "</table></td></tr></table></body></html>"
     )
 
