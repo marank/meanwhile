@@ -18,7 +18,7 @@ from core.log_filters import HideJobArguments
 from core.models import DeletedEvent, new_uuid7
 from core.services import mail
 from core.tasks import clean_up, send_email
-from core.tests.helpers import BASE, TaskQueue, World, iso
+from core.tests.helpers import BASE, TaskQueue, World, iso, make_user
 
 pytestmark = pytest.mark.django_db
 
@@ -99,10 +99,21 @@ def test_the_log_names_jobs_without_their_arguments() -> None:
     assert "secret-token" not in str(record.__dict__)
 
 
+def test_queued_emails_keep_their_unsubscribe_headers(task_queue: TaskQueue, settings: Settings) -> None:
+    settings.EMAIL_SEND_IN_BACKGROUND = True
+    outbox.outbox.clear()
+    ann = make_user("ann")
+    mail.send([mail.build_message(ann.email, "Hello", ["Hi"], "en", "Because.", recipient=ann, kind="comments")])
+    task_queue.run_jobs()
+    [sent] = outbox.outbox
+    assert sent.extra_headers["List-Unsubscribe"].startswith("<http://app.test/api/unsubscribe/")
+    assert sent.message()["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
 def test_queued_emails_keep_the_logo_they_carry(task_queue: TaskQueue, settings: Settings) -> None:
     settings.EMAIL_SEND_IN_BACKGROUND = True
     outbox.outbox.clear()
-    mail.send([mail.build_message("ann@example.test", "Hello", ["Hi"], "en")])
+    mail.send([mail.build_message("ann@example.test", "Hello", ["Hi"], "en", "Because.")])
     [job] = task_queue.jobs("send_email")
     json.dumps(job["args"])  # saved as JSON
     task_queue.run_jobs()

@@ -466,7 +466,7 @@ def logo_test_message(uploaded: str) -> EmailMessage:
     app_settings = get_or_create_app_settings()
     app_settings.logo_url = uploaded
     app_settings.save()
-    return build_message("ann@example.test", "Hello", ["Hi"], "en")
+    return build_message("ann@example.test", "Hello", ["Hi"], "en", "Because.")
 
 
 def html_of(message: EmailMessage) -> str:

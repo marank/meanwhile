@@ -1080,6 +1080,25 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/unsubscribe/{token}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Subscription */
+    get: operations['core_views_unsubscribe_get_subscription']
+    put?: never
+    /** Unsubscribe By Link */
+    post: operations['core_views_unsubscribe_unsubscribe_by_link']
+    /** Resubscribe By Link */
+    delete: operations['core_views_unsubscribe_resubscribe_by_link']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -2788,6 +2807,32 @@ export interface components {
        * @enum {string}
        */
       status: 'accepted' | 'tentative' | 'declined'
+    }
+    /**
+     * UnsubscribeOut
+     * @description What an unsubscribe link in an email's footer is about: whose emails of which kind, or about
+     *     which event (`event_title`, and no kind).
+     */
+    UnsubscribeOut: {
+      /** Email */
+      email: string
+      /** Kind */
+      kind:
+        | (
+            | 'invitations'
+            | 'responses'
+            | 'approvals'
+            | 'decisions'
+            | 'comments'
+            | 'memberships'
+            | 'role_changes'
+            | 'reminders'
+          )
+        | null
+      /** Event Title */
+      event_title: string | null
+      /** Subscribed */
+      subscribed: boolean
     }
   }
   responses: never
@@ -4959,6 +5004,72 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  core_views_unsubscribe_get_subscription: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UnsubscribeOut']
+        }
+      }
+    }
+  }
+  core_views_unsubscribe_unsubscribe_by_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UnsubscribeOut']
+        }
+      }
+    }
+  }
+  core_views_unsubscribe_resubscribe_by_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UnsubscribeOut']
+        }
       }
     }
   }

@@ -13,6 +13,7 @@ from core.models.events import Notification
 from core.realtime import broadcast
 from core.services import mail
 from core.services.mail_texts import text
+from core.services.unsubscribe import muted_user_ids
 
 # Kinds of email users can switch on and off, and whether they get them unless they chose.
 EMAIL_KINDS = {
@@ -82,12 +83,14 @@ def notify(
         kind = None
     if kind is None or not seen:
         return
-    recipients = [u for u in User.objects.filter(id__in=seen) if wants_email(u, kind)]
+    event = Event.objects.filter(id=event_id).first() if event_id else None
+    # Who asked for no more emails about this event (its series) gets it in the app only.
+    muted = muted_user_ids(event) if event else set()
+    recipients = [u for u in User.objects.filter(id__in=seen) if wants_email(u, kind) and str(u.id) not in muted]
     if not recipients:
         return
     actor = User.objects.filter(id=actor_id).first() if actor_id else None
     calendar = Calendar.objects.filter(id=calendar_id).first() if calendar_id else None
-    event = Event.objects.filter(id=event_id).first() if event_id else None
     app = mail.app_name()
     mail.send(_notification_email(user, type, actor, title, calendar, event, data or {}, app) for user in recipients)
 
@@ -130,6 +133,14 @@ def _notification_email(
     key = type if type != "participant_replied" else f"participant_replied_{data.get('status', 'accepted')}"
     subject = text(language, f"{key}_subject", **values)
     body = text(language, f"{key}_body", **values)
+    kind = EMAIL_KIND_OF[type]
+    footer: dict[str, Any] = {
+        "reason": text(language, f"reason_{kind}", calendar=calendar.name if calendar else ""),
+        "recipient": user,
+        "kind": kind,
+        # The series, as no more emails are wanted about it as a whole.
+        "event": (event.parent or event) if event else None,
+    }
 
     if type in ("member_added", "member_role_changed") and calendar is not None:
         url = mail.app_link(f"/calendar/{calendar.id}")
@@ -152,8 +163,8 @@ def _notification_email(
             details=details,
             links=links,
             from_name=actor.display_name if actor else None,
-            footer="footer_settings",
             app=app,
+            **footer,
         )
 
     reader = mail.Reader.of(user, language, event.timezone)
@@ -194,7 +205,7 @@ def _notification_email(
         details=[(text(language, "when"), mail.format_when(start, end, event.all_day, reader)), *rows],
         links=links,
         from_name=actor.display_name if actor else None,
-        footer="footer_settings",
         app=app,
         card=card,
+        **footer,
     )

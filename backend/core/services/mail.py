@@ -25,9 +25,11 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.db import transaction
 
+from core.models.events import Event
 from core.models.users import User, get_or_create_app_settings
 from core.services.mail_texts import text
 from core.services.recurrence import as_utc, zone
+from core.services.unsubscribe import make_token
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +267,7 @@ _DARK_STYLE = (
     ".mw-box { background:#1f2937 !important; border-color:#374151 !important; }"
     ".mw-button { background:#1f2937 !important; border-color:#4b5563 !important; color:#f9fafb !important; }"
     ".mw-footer { color:#6b7280 !important; }"
+    ".mw-footer a { color:#9ca3af !important; }"
     ".mw-tone { background:#1f2937 !important; }"
     ".mw-notice-danger { background:#450a0a !important; color:#fecaca !important; }"
     ".mw-notice-warning { background:#422006 !important; color:#fde68a !important; }"
@@ -281,8 +284,8 @@ _DARK_STYLE = (
 
 
 _LAYOUTS = {
-    # In a row of buttons, which wraps on narrow screens.
-    "inline": "display:inline-block;margin:0 8px 8px 0;padding:10px 18px",
+    # In a row of buttons, centred, which wraps on narrow screens.
+    "inline": "display:inline-block;margin:0 4px 8px;padding:10px 18px",
     # Filling a table cell, for buttons side by side in equal widths: little padding, so three of them
     # still fit side by side on a phone.
     "block": "display:block;margin:0;text-align:center;padding:10px 2px",
@@ -448,7 +451,10 @@ def _card_html(card: EventCard) -> str:
             if card.invited_as
             else ""
         )
-        out.append(f'<div class="mw-rule" style="padding:16px 28px;border-top:1px solid #e5e7eb">{view}{invited}</div>')
+        out.append(
+            '<div class="mw-rule" style="padding:16px 28px;border-top:1px solid #e5e7eb;text-align:center">'
+            f"{view}{invited}</div>"
+        )
     return "".join(out)
 
 
@@ -458,7 +464,7 @@ def _html(
     paragraphs: list[str],
     details: Sequence[tuple[str, str]],
     links: Sequence[Link],
-    footer: str,
+    footer: Footer,
     app: str,
     language: str,
     logo_src: str | None,
@@ -502,7 +508,9 @@ def _html(
         )
     for group in ([link for link in links if link.primary], [link for link in links if not link.primary]):
         if group:
-            body.append(f'<div style="margin:0">{"".join(_button(link) for link in group)}</div>')
+            body.append(
+                f'<div style="margin:8px 0 0;text-align:center">{"".join(_button(link) for link in group)}</div>'
+            )
 
     # One layout at every width: the page itself, with the app on top and the footer below, each set off
     # by a rule; an event comes as a card of its own (the frame is not a card, so a phone doesn't get the
@@ -527,9 +535,54 @@ def _html(
         f'font-family:{_FONT};font-size:15px;font-weight:600;color:#374151">{header}</td></tr>'
         f'<tr><td style="padding:24px 0;font-family:{_FONT}">{content}</td></tr>'
         '<tr><td class="mw-footer mw-rule" style="padding:16px 0 0;border-top:1px solid #e5e7eb;'
-        f'font-family:{_FONT};font-size:12px;line-height:18px;color:#9ca3af">{escape(footer)}</td></tr>'
+        f'font-family:{_FONT};font-size:12px;line-height:18px;color:#9ca3af">{_footer_html(footer)}</td></tr>'
         "</table></td></tr></table></body></html>"
     )
+
+
+@dataclass
+class Footer:
+    """What every email ends with: who it went to and why, then links (email settings, unsubscribing
+    from this kind, the app)."""
+
+    sent_to: str
+    reason: str
+    links: Sequence[Link] = ()
+
+
+def _footer_html(footer: Footer) -> str:
+    links = " &nbsp;·&nbsp; ".join(
+        f'<a href="{escape(link.url)}" style="color:#6b7280;text-decoration:underline">{escape(link.label)}</a>'
+        for link in footer.links
+    )
+    return f'<p style="margin:0;{_WRAP}">{escape(footer.sent_to)} {escape(footer.reason)}</p>' + (
+        f'<p style="margin:8px 0 0">{links}</p>' if links else ""
+    )
+
+
+def _footer(
+    to: str, reason: str, language: str, app: str, recipient: User | None, kind: str | None, event: Event | None
+) -> tuple[Footer, dict[str, str]]:
+    """The footer, and the headers that let mail programs offer to unsubscribe (RFC 2369, 8058).
+
+    Settings and unsubscribing are for a kind users can switch off (`kind`); people without an account
+    (guests invited to an event) get neither, nor the way into the app.
+    """
+    links: list[Link] = []
+    headers: dict[str, str] = {}
+    if recipient is not None and kind is not None and settings.APP_URL:
+        token = make_token(recipient, kind)
+        links.append(Link(text(language, "footer_settings_link"), f"{settings.APP_URL}/account?tab=emailNotifications"))
+        if event is not None:
+            event_token = make_token(recipient, event=event)
+            links.append(Link(text(language, "footer_mute_event"), f"{settings.APP_URL}/unsubscribe/{event_token}"))
+        label = text(language, "footer_unsubscribe_kind" if event is not None else "footer_unsubscribe")
+        links.append(Link(label, f"{settings.APP_URL}/unsubscribe/{token}"))
+        headers["List-Unsubscribe"] = f"<{settings.APP_URL}/api/unsubscribe/{token}>"
+        headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    if recipient is not None and settings.APP_URL:
+        links.append(Link(text(language, "footer_home", app=app), f"{settings.APP_URL}/"))
+    return Footer(text(language, "sent_to", email=to), reason, links), headers
 
 
 def build_message(
@@ -537,28 +590,35 @@ def build_message(
     subject: str,
     paragraphs: list[str],
     language: str,
+    reason: str,
     details: Sequence[tuple[str, str]] = (),
     links: Sequence[Link] = (),
     from_name: str | None = None,
     reply_to: str | None = None,
-    footer: str = "footer",
     app: str | None = None,
     heading: str | None = None,
     card: EventCard | None = None,
+    recipient: User | None = None,
+    kind: str | None = None,
+    event: Event | None = None,
 ) -> EmailMultiAlternatives:
-    """A plain-text and HTML email: a heading, paragraphs, then labelled details, then links as buttons.
+    """A plain-text and HTML email: a heading, paragraphs, then labelled details, then links as buttons,
+    and the footer: who it went to, why (`reason`), and for an account (`recipient`) the way into the
+    app, and for a kind of email they can switch off (`kind`) their settings and unsubscribing; for an
+    email about an event (`event`, a series as a whole), also from the emails about it.
 
     `app`: the app's name, when the caller has it already (it's looked up otherwise).
     """
     app = app or app_name()
-    footer = text(language, footer, app=app)
+    footer, headers = _footer(to, reason, language, app, recipient, kind, event)
     subject = one_line(subject)
     plain = ["\n\n".join(paragraphs)]
     if details:
         plain.append("\n".join(f"{label}: {value}" for label, value in details))
     if links:
         plain.append("\n".join(f"{link.label}: {link.url}" for link in links))
-    plain.append(f"-- \n{footer}")
+    footer_links = [f"{link.label}: {link.url}" for link in footer.links]
+    plain.append("\n".join([f"-- \n{footer.sent_to} {footer.reason}", *footer_links]))
 
     message = Message(
         subject=subject,
@@ -566,6 +626,7 @@ def build_message(
         from_email=sender(from_name, app),
         to=[to],
         reply_to=[reply_to] if reply_to else None,
+        headers=headers or None,
     )
     shown = logo()
     if isinstance(shown, InlineImage):
@@ -577,11 +638,17 @@ def build_message(
 
 
 class Message(EmailMultiAlternatives):
-    """An email whose HTML part may come with the logo it shows (cid:), in a multipart/related."""
+    """An email whose HTML part may come with the logo it shows (cid:), in a multipart/related, and
+    whose unsubscribe header stays readable."""
 
     logo: InlineImage | None = None
 
     def message(self, *, policy: Policy | None = email.policy.default) -> email.message.EmailMessage:
+        if "List-Unsubscribe" in self.extra_headers:
+            # Its URL is longer than the 78 characters a line should have, and has no space to fold
+            # at: the default would encode it (=?utf-8?q?...), which mail programs don't read as an
+            # address, so they wouldn't offer to unsubscribe. Lines may have up to 998 (RFC 5322).
+            policy = (policy or email.policy.default).clone(max_line_length=998)
         msg = super().message(policy=policy)
         if self.logo is not None:
             html = next(part for part in msg.walk() if part.get_content_type() == "text/html")
@@ -641,6 +708,7 @@ def message_data(message: EmailMultiAlternatives) -> dict[str, Any]:
         "from_email": message.from_email,
         "to": message.to,
         "reply_to": message.reply_to,
+        "headers": message.extra_headers,
         "alternatives": [[content, mimetype] for content, mimetype in message.alternatives],
         "attachments": [[name, content, mimetype] for name, content, mimetype in message.attachments],
         "logo": _logo_data(message),
@@ -659,6 +727,8 @@ def message_from_data(data: dict[str, Any]) -> EmailMultiAlternatives:
         from_email=data["from_email"],
         to=data["to"],
         reply_to=data["reply_to"],
+        # Jobs saved before emails carried headers (unsubscribing) have none.
+        headers=data.get("headers") or None,
     )
     for content, mimetype in data["alternatives"]:
         message.attach_alternative(content, mimetype)

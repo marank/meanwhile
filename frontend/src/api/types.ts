@@ -100,6 +100,9 @@ export type EventParticipantUpdate = Schemas['EventParticipantUpdate']
 export type Invitation = Schemas['RsvpOut']
 export type InvitationAnswer = Schemas['RsvpAnswer']['status']
 
+/** A kind of email someone gets, as the unsubscribe link in its footer names it. */
+export type Subscription = Schemas['UnsubscribeOut']
+
 export type SearchEntity = paths['/api/search']['get']['parameters']['query']['entity']
 export type NotificationGroup = NonNullable<
   NonNullable<paths['/api/notifications']['get']['parameters']['query']>['group']

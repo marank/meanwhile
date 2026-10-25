@@ -69,6 +69,7 @@ from core.views import (  # noqa: E402
     resources,
     rsvp,
     search,
+    unsubscribe,
     users,
 )
 
@@ -87,3 +88,4 @@ api.add_router("", notifications.router)
 api.add_router("", approvals.router)
 api.add_router("", availability.router)
 api.add_router("", rsvp.router)
+api.add_router("", unsubscribe.router)

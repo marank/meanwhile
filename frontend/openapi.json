@@ -3561,6 +3561,89 @@
         },
         "description": "The event as a file for calendar apps, without organizer and participants: anyone with the link may\nload it, and answers are given on the page."
       }
+    },
+    "/api/unsubscribe/{token}": {
+      "get": {
+        "operationId": "core_views_unsubscribe_get_subscription",
+        "summary": "Get Subscription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "core_views_unsubscribe_unsubscribe_by_link",
+        "summary": "Unsubscribe By Link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "core_views_unsubscribe_resubscribe_by_link",
+        "summary": "Resubscribe By Link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeOut"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8352,6 +8435,59 @@
           "status"
         ],
         "title": "RsvpAnswer",
+        "type": "object"
+      },
+      "UnsubscribeOut": {
+        "description": "What an unsubscribe link in an email's footer is about: whose emails of which kind, or about\nwhich event (`event_title`, and no kind).",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "invitations",
+                  "responses",
+                  "approvals",
+                  "decisions",
+                  "comments",
+                  "memberships",
+                  "role_changes",
+                  "reminders"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "event_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Title"
+          },
+          "subscribed": {
+            "title": "Subscribed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "kind",
+          "event_title",
+          "subscribed"
+        ],
+        "title": "UnsubscribeOut",
         "type": "object"
       }
     },

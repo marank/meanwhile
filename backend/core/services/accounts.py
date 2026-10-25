@@ -48,6 +48,8 @@ def send_invitation(user: User, inviter: User) -> None:
                 links=[mail.Link(label, url, primary=True)] if url else [],
                 from_name=inviter_name,
                 app=app,
+                reason=text(language, "reason_account_invite", actor=inviter_name, app=app),
+                recipient=user,
             )
         ]
     )
@@ -72,6 +74,8 @@ def send_password_reset(user: User, url: str) -> None:
                 details=[(text(language, "account_invite_email"), user.email)],
                 links=[mail.Link(text(language, "password_reset_button"), url, primary=True)],
                 app=app,
+                reason=text(language, "reason_password_reset", app=app),
+                recipient=user,
             )
         ]
     )

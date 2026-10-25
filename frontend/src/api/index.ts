@@ -50,6 +50,7 @@ import type {
   OverviewSettingsUpdate,
   ProfileUpdate,
   Resource,
+  Subscription,
   PublicCalendar,
   ResourceInput,
   ResourceUpdate,
@@ -152,6 +153,15 @@ export const getInvitation = (token: string) => api<Invitation>(`/api/rsvp/${enc
 export const invitationIcsUrl = (token: string) => `/api/rsvp/${encodeURIComponent(token)}/ics`
 export const answerInvitation = (token: string, status: InvitationAnswer) =>
   api<Invitation>(`/api/rsvp/${encodeURIComponent(token)}`, { method: 'POST', body: { status } })
+
+/** Whose emails of which kind the unsubscribe link in an email's footer is about. */
+export const getSubscription = (token: string) => api<Subscription>(`/api/unsubscribe/${encodeURIComponent(token)}`)
+/** Stops that kind of email; no account or session needed, the token is the key. */
+export const unsubscribe = (token: string) =>
+  api<Subscription>(`/api/unsubscribe/${encodeURIComponent(token)}`, { method: 'POST' })
+/** Takes unsubscribing back. */
+export const resubscribe = (token: string) =>
+  api<Subscription>(`/api/unsubscribe/${encodeURIComponent(token)}`, { method: 'DELETE' })
 
 export const getOverviewSettings = () => api<OverviewSettings>('/api/users/me/settings')
 

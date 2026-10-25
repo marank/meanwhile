@@ -90,14 +90,17 @@ from core.schemas.users import (
     AppPasswordCreate,
     AppPasswordCreated,
     AppPasswordOut,
+    EmailKind,
     EmailNotifications,
     EmailNotificationsUpdate,
     ProfileOut,
+    UnsubscribeOut,
     UserOut,
     UserUpdate,
 )
 
 __all__ = [
+    "UnsubscribeOut",
     "ActivityOut",
     "AdminPasswordResetOut",
     "AdminUserCreate",
@@ -138,6 +141,7 @@ __all__ = [
     "CommentOut",
     "DateFormat",
     "EmailAddress",
+    "EmailKind",
     "EmailNotifications",
     "EmailNotificationsUpdate",
     "EventCreate",

@@ -20,6 +20,7 @@ from core.models.events import (
     Event,
     EventActivity,
     EventComment,
+    EventEmailMute,
     EventParticipant,
     EventReminder,
     Notification,
@@ -58,6 +59,7 @@ __all__ = [
     "EventReminder",
     "ReminderDelivery",
     "EventComment",
+    "EventEmailMute",
     "EventActivity",
     "Notification",
 ]

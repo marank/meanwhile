@@ -44,6 +44,7 @@ from core.services.mail_texts import text
 from core.services.notifications import notify, wants_email
 from core.services.recurrence import as_utc, is_series
 from core.services.series import is_occurrence, override_for
+from core.services.unsubscribe import muted_user_ids
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def _recipients(series: Event, only: list[EventParticipant] | None = None) -> li
         for override in series.overrides.all():
             candidates += list(override.participants.select_related("user"))
     organizer = series.creator.email.lower()
+    muted = muted_user_ids(series)
     found: list[EventParticipant] = []
     seen: set[str] = set()
     for participant in candidates:
@@ -75,7 +77,9 @@ def _recipients(series: Event, only: list[EventParticipant] | None = None) -> li
         if address in seen or address == organizer:
             continue
         seen.add(address)
-        if participant.user is not None and not wants_email(participant.user, "invitations"):
+        if participant.user is not None and (
+            not wants_email(participant.user, "invitations") or str(participant.user.id) in muted
+        ):
             continue
         found.append(participant)
     return found
@@ -225,6 +229,11 @@ def _message(
         from_name=name,
         reply_to=organizer.email,
         card=card,
+        reason=text(language, "reason_invitations", organizer=name),
+        # Guests without an account get no settings or unsubscribing: there are none for them.
+        recipient=participant.user,
+        kind="invitations",
+        event=series,
     )
     # Inline for mail programs that show invitations, and as file for those that don't.
     message.attach_alternative(ical_text, f"text/calendar; method={method}")

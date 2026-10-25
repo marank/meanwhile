@@ -51,6 +51,23 @@ class EmailNotificationsUpdate(Schema):
     reminders: bool | None = None
 
 
+# The kinds of email users can switch off (core.services.notifications.EMAIL_KINDS).
+EmailKind = Literal[
+    "invitations", "responses", "approvals", "decisions", "comments", "memberships", "role_changes", "reminders"
+]
+
+
+class UnsubscribeOut(Schema):
+    """What an unsubscribe link in an email's footer is about: whose emails of which kind, or about
+    which event (`event_title`, and no kind)."""
+
+    email: str
+    kind: EmailKind | None
+    event_title: str | None
+    # Whether these emails still come.
+    subscribed: bool
+
+
 class ProfileOut(UserOut):
     """The signed-in user, as /users/me and the login and signup answers (core.headless_adapter) show them."""
 

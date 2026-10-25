@@ -180,6 +180,19 @@ class EventParticipant(UUIDModel, TimestampedModel):
         ]
 
 
+class EventEmailMute(UUIDModel):
+    """A user who wants no more emails about an event (a series as a whole), from the link in an email's
+    footer. The app still shows its notifications."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "event_email_mutes"
+        constraints = [models.UniqueConstraint(fields=["user", "event"], name="uq_event_email_mute")]
+
+
 class EventComment(UUIDModel):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")

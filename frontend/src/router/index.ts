@@ -52,6 +52,14 @@ const router = createRouter({
       meta: { anyone: true },
     },
     {
+      // The unsubscribe link in an email's footer; the token names the person and the kind of email.
+      path: '/unsubscribe/:token',
+      name: 'unsubscribe',
+      component: () => import('@/views/UnsubscribeView.vue'),
+      props: true,
+      meta: { anyone: true },
+    },
+    {
       // Where emails sent before linked to.
       path: '/rsvp/:token',
       redirect: (to) => ({ name: 'invitation', params: to.params, query: to.query }),

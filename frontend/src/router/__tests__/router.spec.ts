@@ -101,6 +101,7 @@ describe('router', () => {
     // Links in emails sent before the page moved.
     expect(await visit('/rsvp/token-3?answer=declined')).toBe('/event/token-3?answer=declined')
     expect(await visit('/reset-password/key-1')).toBe('/reset-password/key-1')
+    expect(await visit('/unsubscribe/tok-1')).toBe('/unsubscribe/tok-1')
   })
 
   it('tells the password page whether its link came with the invitation to a new account', () => {
