@@ -29,7 +29,7 @@ permissions:
 env:
   # Images started with `docker run` below; renovate.json updates them via a regex manager.
   TRIVY_IMAGE: aquasec/trivy:0.76.1
-  POSTGRES_IMAGE: postgres:17-alpine
+  POSTGRES_IMAGE: postgres:18-alpine
 
 jobs:
   # --- Backend: ruff, mypy, deptry, licenses, migrations, checks, OpenAPI, pytest ----
@@ -39,7 +39,7 @@ jobs:
       image: ghcr.io/astral-sh/uv:python3.14-trixie-slim
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_DB: ci
           POSTGRES_USER: ci

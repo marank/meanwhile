@@ -34,7 +34,7 @@ x-backend: &backend
 services:
   # The development database (the backend's default in DEBUG); the task queue needs PostgreSQL.
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: meanwhile
       POSTGRES_PASSWORD: meanwhile
@@ -42,7 +42,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meanwhile -d meanwhile"]
       interval: 2s
@@ -122,5 +122,5 @@ services:
       - backend
 
 volumes:
-  postgres_data:
+  pgdata:
   node_modules:

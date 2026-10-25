@@ -15,15 +15,16 @@ x-hardened: &hardened
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-meanwhile}
       POSTGRES_USER: ${DB_USER:-meanwhile}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
     volumes:
-      # Postgres 17 keeps its data here; from 18 on the volume goes on /var/lib/postgresql.
-      - postgres_data:/var/lib/postgresql/data
+      # From 18 on, the data lives in a subdirectory per major version (18/docker), so a later
+      # pg_upgrade finds old and new side by side in this one volume.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -68,7 +69,7 @@ services:
   # Copy dumps off the host: docker compose cp backup:/var/lib/postgresql/backups ./backups
   backup:
     <<: *hardened
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     entrypoint: ["sh", "/backup.sh"]
     user: postgres
@@ -90,6 +91,6 @@ services:
         condition: service_healthy
 
 volumes:
-  postgres_data:
+  pgdata:
   app_data:
   backups:
