@@ -13,6 +13,7 @@ import type {
   AppPasswordCreated,
   AppSettings,
   AppSettingsUpdate,
+  PublicSettings,
   Approver,
   Calendar,
   CalendarGroupLink,
@@ -372,9 +373,10 @@ export const rotateFeedToken = (calendarId: string) =>
   api<FeedUrl>(`/api/calendars/${calendarId}/feed-token/rotate`, { method: 'POST' })
 
 // App settings (public: app name, logo, favicon, calendar defaults)
-export const getAppSettings = () => api<AppSettings>('/api/settings')
+export const getAppSettings = () => api<PublicSettings>('/api/settings')
 
 // Admin
+export const getAdminSettings = () => api<AppSettings>('/api/admin/settings')
 export const updateAppSettings = (data: AppSettingsUpdate) =>
   api<AppSettings>('/api/admin/settings', { method: 'PATCH', body: data })
 

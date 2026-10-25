@@ -82,7 +82,7 @@ describe('admin general settings', () => {
     i18n.global.locale.value = 'en'
     clearToasts()
     backend = fakeBackend({
-      'GET /api/settings': settings,
+      'GET /api/admin/settings': settings,
       'PATCH /api/admin/settings': (req) => ({ ...settings, ...(req.body as object) }),
     })
   })
@@ -124,7 +124,7 @@ describe('admin general settings', () => {
 
   it('cannot save when the settings did not load', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    backend.on('GET /api/settings', reply(500))
+    backend.on('GET /api/admin/settings', reply(500))
     const wrapper = await render()
     expect(wrapper.find('input').exists()).toBe(false)
     expect(buttonNamed(wrapper, 'Save').attributes('disabled')).toBeDefined()

@@ -97,3 +97,17 @@ def test_unique_clashes_answer_conflict_not_server_error(world: World) -> None:
 
     response = conflict(HttpRequest(), IntegrityError("duplicate key"))
     assert response.status_code == 409
+
+
+def test_the_public_settings_hold_only_what_anyone_may_see(client: Client) -> None:
+    # A new app setting is for the admins until it's added to PublicSettingsOut on purpose.
+    assert set(client.get("/api/settings").json()) == {
+        "app_name",
+        "logo_url",
+        "favicon_url",
+        "default_first_weekday",
+        "default_show_weekends",
+        "default_weekend_days",
+        "default_show_week_numbers",
+        "allow_registration",
+    }

@@ -39,6 +39,7 @@ export type AdminPasswordReset = Schemas['AdminPasswordResetOut']
 
 export type AppSettings = Schemas['AppSettingsOut']
 export type AppSettingsUpdate = Schemas['AppSettingsUpdate']
+export type PublicSettings = Schemas['PublicSettingsOut']
 
 export type CalendarMember = Schemas['CalendarMemberOut']
 export type Calendar = Schemas['CalendarOut']

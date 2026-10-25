@@ -4,6 +4,7 @@ Administration: users and app settings.
 
 from datetime import datetime
 
+from django.conf import settings
 from ninja import Field
 
 from core.schemas.common import Id, Schema, Text
@@ -52,6 +53,25 @@ class AppSettingsOut(Schema):
     default_show_weekends: bool
     default_weekend_days: list[int]
     default_show_week_numbers: bool
+
+
+class PublicSettingsOut(Schema):
+    """What anyone may read, signed in or not. Listed field by field rather than taken from
+    AppSettingsOut, so a new setting stays with the admins until it is added here on purpose."""
+
+    app_name: str
+    logo_url: str = ""
+    favicon_url: str = ""
+    default_first_weekday: int
+    default_show_weekends: bool
+    default_weekend_days: list[int]
+    default_show_week_numbers: bool
+    # Whether the login page offers to sign up (ALLOW_REGISTRATION).
+    allow_registration: bool
+
+    @staticmethod
+    def resolve_allow_registration(obj: object) -> bool:
+        return settings.ALLOW_REGISTRATION
 
 
 class AppSettingsUpdate(Schema):

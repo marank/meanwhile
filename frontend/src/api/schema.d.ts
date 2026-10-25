@@ -1043,10 +1043,12 @@ export interface paths {
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
-    /** AppSettingsOut */
-    AppSettingsOut: {
-      /** Id */
-      id: number
+    /**
+     * PublicSettingsOut
+     * @description What anyone may read, signed in or not. Listed field by field rather than taken from
+     *     AppSettingsOut, so a new setting stays with the admins until it is added here on purpose.
+     */
+    PublicSettingsOut: {
       /** App Name */
       app_name: string
       /**
@@ -1067,6 +1069,8 @@ export interface components {
       default_weekend_days: number[]
       /** Default Show Week Numbers */
       default_show_week_numbers: boolean
+      /** Allow Registration */
+      allow_registration: boolean
     }
     /**
      * EmailNotifications
@@ -1279,6 +1283,31 @@ export interface components {
     OkOut: {
       /** Ok */
       ok: boolean
+    }
+    /** AppSettingsOut */
+    AppSettingsOut: {
+      /** Id */
+      id: number
+      /** App Name */
+      app_name: string
+      /**
+       * Logo Url
+       * @default
+       */
+      logo_url: string
+      /**
+       * Favicon Url
+       * @default
+       */
+      favicon_url: string
+      /** Default First Weekday */
+      default_first_weekday: number
+      /** Default Show Weekends */
+      default_show_weekends: boolean
+      /** Default Weekend Days */
+      default_weekend_days: number[]
+      /** Default Show Week Numbers */
+      default_show_week_numbers: boolean
     }
     /** AppSettingsUpdate */
     AppSettingsUpdate: {
@@ -2745,7 +2774,7 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['AppSettingsOut']
+          'application/json': components['schemas']['PublicSettingsOut']
         }
       }
     }

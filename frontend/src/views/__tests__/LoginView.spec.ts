@@ -3,14 +3,27 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
+import type { PublicSettings } from '@/api'
 import { i18n } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 import LoginView from '../LoginView.vue'
 import { makeUser, stubBrowser } from './session'
 
 let wrapper: VueWrapper
 let router: Router
 let backend: FakeBackend
+
+const publicSettings = (allowRegistration = true): PublicSettings => ({
+  app_name: 'Team Calendar',
+  logo_url: '',
+  favicon_url: '',
+  default_first_weekday: 1,
+  default_show_weekends: true,
+  default_weekend_days: [0, 6],
+  default_show_week_numbers: false,
+  allow_registration: allowRegistration,
+})
 
 async function render(mode?: 'login' | 'register') {
   const page = { template: '<div />' }
@@ -19,6 +32,8 @@ async function render(mode?: 'login' | 'register') {
     routes: ['/login', '/register', '/forgot-password', '/calendar'].map((path) => ({ path, component: page })),
   })
   await router.push(mode === 'register' ? '/register' : '/login')
+  // As App does on start.
+  await useSettingsStore().load()
   wrapper = mount(LoginView, { props: { mode }, global: { plugins: [i18n, router] } })
 }
 
@@ -30,7 +45,7 @@ beforeEach(() => {
   i18n.global.locale.value = 'en'
   setActivePinia(createPinia())
   stubBrowser()
-  backend = fakeBackend({ 'GET /api/settings': { app_name: 'Team Calendar', logo_url: null, favicon_url: null } })
+  backend = fakeBackend({ 'GET /api/settings': publicSettings() })
 })
 
 afterEach(() => {
@@ -106,6 +121,15 @@ describe('LoginView', () => {
       password: 'correct horse',
     })
     expect(router.currentRoute.value.path).toBe('/calendar')
+  })
+
+  it('offers no registering where nobody may sign up', async () => {
+    backend.on('GET /api/settings', publicSettings(false))
+    await render()
+    expect(wrapper.findAll('a').map((a) => a.attributes('href'))).toEqual(['/forgot-password'])
+    await render('register')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/login')
   })
 
   it('links back to signing in when registering', async () => {

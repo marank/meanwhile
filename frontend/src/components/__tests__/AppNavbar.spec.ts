@@ -19,7 +19,7 @@ let browser: ReturnType<typeof stubBrowser>
 async function render(user: User = makeUser(), counts = { unread: 0, approvals: 0, invitations: 0 }) {
   backend = fakeBackend({
     ...sessionRoutes(user),
-    'GET /api/settings': { app_name: 'Team Calendar', logo_url: null, favicon_url: null },
+    'GET /api/settings': { app_name: 'Team Calendar', logo_url: '', favicon_url: '' },
     'GET /api/notifications/counts': counts,
     'GET /api/notifications': [],
   })

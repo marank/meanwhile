@@ -29,7 +29,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppSettingsOut"
+                  "$ref": "#/components/schemas/PublicSettingsOut"
                 }
               }
             }
@@ -3507,12 +3507,9 @@
   },
   "components": {
     "schemas": {
-      "AppSettingsOut": {
+      "PublicSettingsOut": {
+        "description": "What anyone may read, signed in or not. Listed field by field rather than taken from\nAppSettingsOut, so a new setting stays with the admins until it is added here on purpose.",
         "properties": {
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
           "app_name": {
             "title": "App Name",
             "type": "string"
@@ -3545,19 +3542,23 @@
           "default_show_week_numbers": {
             "title": "Default Show Week Numbers",
             "type": "boolean"
+          },
+          "allow_registration": {
+            "title": "Allow Registration",
+            "type": "boolean"
           }
         },
         "required": [
-          "id",
           "app_name",
           "logo_url",
           "favicon_url",
           "default_first_weekday",
           "default_show_weekends",
           "default_weekend_days",
-          "default_show_week_numbers"
+          "default_show_week_numbers",
+          "allow_registration"
         ],
-        "title": "AppSettingsOut",
+        "title": "PublicSettingsOut",
         "type": "object"
       },
       "EmailNotifications": {
@@ -4252,6 +4253,59 @@
           "ok"
         ],
         "title": "OkOut",
+        "type": "object"
+      },
+      "AppSettingsOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "app_name": {
+            "title": "App Name",
+            "type": "string"
+          },
+          "logo_url": {
+            "default": "",
+            "title": "Logo Url",
+            "type": "string"
+          },
+          "favicon_url": {
+            "default": "",
+            "title": "Favicon Url",
+            "type": "string"
+          },
+          "default_first_weekday": {
+            "title": "Default First Weekday",
+            "type": "integer"
+          },
+          "default_show_weekends": {
+            "title": "Default Show Weekends",
+            "type": "boolean"
+          },
+          "default_weekend_days": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Default Weekend Days",
+            "type": "array"
+          },
+          "default_show_week_numbers": {
+            "title": "Default Show Week Numbers",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "app_name",
+          "logo_url",
+          "favicon_url",
+          "default_first_weekday",
+          "default_show_weekends",
+          "default_weekend_days",
+          "default_show_week_numbers"
+        ],
+        "title": "AppSettingsOut",
         "type": "object"
       },
       "AppSettingsUpdate": {

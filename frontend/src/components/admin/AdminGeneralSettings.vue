@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import * as api from '@/api'
 import type { AppSettings } from '@/api'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import WeekLayoutFields from '@/components/WeekLayoutFields.vue'
@@ -16,9 +17,7 @@ const { busy, run } = useAction()
 const form = ref<Omit<AppSettings, 'id'> | null>(null)
 
 const { loading } = useLoader(async () => {
-  await settingsStore.load()
-  const settings = settingsStore.settings
-  if (!settings) return
+  const settings = await api.getAdminSettings()
   form.value = {
     app_name: settings.app_name,
     logo_url: settings.logo_url,

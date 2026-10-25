@@ -13,7 +13,7 @@ import { makeUser, sessionRoutes, stubBrowser } from '@/views/__tests__/session'
 
 let wrapper: VueWrapper
 
-const settings = { app_name: 'Team Calendar', logo_url: null, favicon_url: null }
+const settings = { app_name: 'Team Calendar', logo_url: '', favicon_url: '' }
 
 async function render(user: User | null, appSettings: object = settings) {
   fakeBackend({

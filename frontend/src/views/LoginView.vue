@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppLogo from '@/components/AppLogo.vue'
@@ -15,6 +15,15 @@ const router = useRouter()
 const { t } = useI18n()
 
 const isRegister = computed(() => props.mode === 'register')
+
+// Where nobody may sign up (ALLOW_REGISTRATION), the login page doesn't offer it and /register leads there.
+watch(
+  () => [isRegister.value, settings.settings, settings.allowRegistration] as const,
+  ([register, loaded, allowed]) => {
+    if (register && loaded && !allowed) router.replace('/login')
+  },
+  { immediate: true },
+)
 
 const email = ref('')
 const displayName = ref('')
@@ -92,7 +101,7 @@ async function submit() {
           $t('auth.forgotPassword')
         }}</RouterLink>
       </p>
-      <p class="mt-4 text-center text-sm text-gray-600">
+      <p v-if="isRegister || settings.allowRegistration" class="mt-4 text-center text-sm text-gray-600">
         <RouterLink :to="isRegister ? '/login' : '/register'" class="text-blue-600 hover:underline">
           {{ isRegister ? $t('auth.hasAccount') : $t('auth.noAccount') }}
         </RouterLink>

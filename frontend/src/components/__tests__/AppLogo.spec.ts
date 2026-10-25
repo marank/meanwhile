@@ -2,11 +2,23 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { fakeBackend } from '@/__tests__/fakeBackend'
+import type { PublicSettings } from '@/api'
 import { useSettingsStore } from '@/stores/settings'
 import AppLogo from '../AppLogo.vue'
 
-async function loadSettings(settings: Record<string, unknown>) {
-  fakeBackend({ 'GET /api/settings': { app_name: '', logo_url: null, favicon_url: null, ...settings } })
+async function loadSettings(settings: Partial<PublicSettings>) {
+  // Without an uploaded logo, the backend sends an empty string.
+  const loaded: PublicSettings = {
+    app_name: 'Meanwhile',
+    logo_url: '',
+    favicon_url: '',
+    default_first_weekday: 1,
+    default_show_weekends: true,
+    default_weekend_days: [0, 6],
+    default_show_week_numbers: false,
+    allow_registration: false,
+  }
+  fakeBackend({ 'GET /api/settings': { ...loaded, ...settings } })
   await useSettingsStore().load()
   await flushPromises()
 }

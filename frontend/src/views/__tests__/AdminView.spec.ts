@@ -38,11 +38,11 @@ describe('administration page', () => {
     i18n.global.locale.value = 'en'
     clearToasts()
     backend = fakeBackend({
-      'GET /api/settings': {
+      'GET /api/admin/settings': {
         id: 1,
         app_name: 'Meanwhile',
-        logo_url: null,
-        favicon_url: null,
+        logo_url: '',
+        favicon_url: '',
         default_first_weekday: 1,
         default_show_weekends: true,
         default_weekend_days: [0, 6],
@@ -67,14 +67,14 @@ describe('administration page', () => {
     await tab('Users')
     await tab('General')
     expect(backend.calls('GET /api/admin/users')).toHaveLength(1)
-    expect(backend.calls('GET /api/settings')).toHaveLength(1)
+    expect(backend.calls('GET /api/admin/settings')).toHaveLength(1)
     wrapper.unmount()
   })
 
   it('opens the tab named in the URL', async () => {
     const { wrapper } = await open('/admin?tab=groups')
     expect(wrapper.text()).toContain('No groups yet.')
-    expect(backend.calls('GET /api/settings')).toHaveLength(0)
+    expect(backend.calls('GET /api/admin/settings')).toHaveLength(0)
     wrapper.unmount()
   })
 

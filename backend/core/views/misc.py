@@ -6,7 +6,7 @@ from django.http import HttpRequest
 from ninja import Router
 
 from core.models import AppSettings, get_or_create_app_settings
-from core.schemas import AppSettingsOut
+from core.schemas import PublicSettingsOut
 
 router = Router()
 
@@ -16,6 +16,6 @@ def health(request: HttpRequest) -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/settings", response=AppSettingsOut, auth=None)
+@router.get("/settings", response=PublicSettingsOut, auth=None)
 def public_settings(request: HttpRequest) -> AppSettings:
     return get_or_create_app_settings()

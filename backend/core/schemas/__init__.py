@@ -9,6 +9,7 @@ from core.schemas.admin import (
     AdminUserUpdate,
     AppSettingsOut,
     AppSettingsUpdate,
+    PublicSettingsOut,
 )
 from core.schemas.availability import AvailabilityEntry, AvailabilityIn, AvailabilityOut, BusyPeriod
 from core.schemas.calendars import (
@@ -175,6 +176,7 @@ __all__ = [
     "ProfileOut",
     "PublicCalendarOut",
     "PublicRole",
+    "PublicSettingsOut",
     "RRule",
     "ResourceCreate",
     "ResourceIconName",

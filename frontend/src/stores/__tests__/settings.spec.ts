@@ -10,10 +10,10 @@ describe('app settings store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     backend = fakeBackend({
-      'GET /api/settings': { app_name: 'Team Cal', logo_url: '/logo.png', favicon_url: null },
+      'GET /api/settings': { app_name: 'Team Cal', logo_url: '/logo.png', favicon_url: '' },
       'PATCH /api/admin/settings': (r) => ({
         app_name: '',
-        logo_url: null,
+        logo_url: '',
         favicon_url: '/f.ico',
         ...(r.body as object),
       }),
