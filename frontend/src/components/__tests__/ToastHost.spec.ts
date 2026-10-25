@@ -25,11 +25,8 @@ describe('ToastHost', () => {
     await wrapper.vm.$nextTick()
     const items = wrapper.findAll('[role="status"]')
     expect(items.map((item) => item.text())).toEqual(['Saved', 'Failed', 'Starts soon'])
-    expect(items[0]!.classes()).toContain('text-green-800')
     expect(items[0]!.find('svg').classes().join(' ')).toContain('circle-check')
-    expect(items[1]!.classes()).toContain('text-red-800')
     expect(items[1]!.find('svg').classes().join(' ')).toContain('circle-x')
-    expect(items[2]!.classes()).toContain('text-blue-800')
     expect(items[2]!.find('svg').classes().join(' ')).toContain('bell')
   })
 

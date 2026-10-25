@@ -79,8 +79,9 @@ describe('NotificationsView', () => {
     ])
     expect(wrapper.findAll('li')).toHaveLength(2)
     expect(item(0).text()).toContain('Bob approved "Room booking"')
-    expect(item(0).classes()).not.toContain('opacity-70')
-    expect(item(1).classes()).toContain('opacity-70')
+    // Only an unread one can be marked read.
+    expect(item(0).text()).toContain('Mark as read')
+    expect(item(1).text()).not.toContain('Mark as read')
   })
 
   it('shows the open counts on the tabs and loads a tab when it is selected', async () => {
@@ -223,7 +224,6 @@ describe('NotificationsView', () => {
     await button('Mark as read')!.trigger('click')
     await flushPromises()
     expect(backend.calls('POST /api/notifications/n1/read')).toHaveLength(1)
-    expect(item().classes()).toContain('opacity-70')
     expect(button('Mark as read')).toBeUndefined()
   })
 
@@ -233,7 +233,7 @@ describe('NotificationsView', () => {
     await button('Mark all as read')!.trigger('click')
     await flushPromises()
     expect(backend.calls('POST /api/notifications/read-all')).toHaveLength(1)
-    expect(wrapper.findAll('li').every((li) => li.classes().includes('opacity-70'))).toBe(true)
+    expect(button('Mark as read')).toBeUndefined()
   })
 
   it('deletes a notification that may be deleted', async () => {

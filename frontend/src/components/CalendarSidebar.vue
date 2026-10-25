@@ -212,11 +212,13 @@ function startResize(event: MouseEvent) {
   <div
     v-if="sidebarDrawerOpen"
     class="absolute inset-0 z-40 bg-black/40 lg:hidden"
+    data-drawer-backdrop
     aria-hidden="true"
     @click="sidebarDrawerOpen = false"
   ></div>
   <aside
     id="calendar-sidebar"
+    :data-state="sidebarDrawerOpen ? 'open' : 'closed'"
     class="absolute inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col border-r border-line bg-surface shadow-xl lg:relative lg:z-auto lg:w-[var(--sidebar-width)] lg:max-w-none lg:translate-none lg:shadow-none lg:transition-none"
     :class="[
       sidebarDrawerOpen ? 'translate-none' : 'max-lg:invisible -translate-x-full',

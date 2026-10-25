@@ -126,6 +126,7 @@ void load()
               type="button"
               :disabled="busy"
               :aria-pressed="invitation.status === option.value"
+              :data-suggested="(invitation.status === 'needs_action' && suggested === option.value) || undefined"
               class="rounded-lg px-4 py-2 text-sm disabled:opacity-50"
               :class="
                 invitation.status === option.value ||

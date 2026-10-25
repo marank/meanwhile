@@ -306,13 +306,13 @@ describe('CalendarSidebar', () => {
   it('is a drawer on small screens that closes from its backdrop, with Escape, or once something is opened', async () => {
     const wrapper = await render()
     const aside = () => wrapper.get('aside')
-    expect(aside().classes()).toContain('-translate-x-full')
-    expect(wrapper.find('.bg-black\\/40').exists()).toBe(false)
+    expect(aside().attributes('data-state')).toBe('closed')
+    expect(wrapper.find('[data-drawer-backdrop]').exists()).toBe(false)
 
     sidebarDrawerOpen.value = true
     await flushPromises()
-    expect(aside().classes()).toContain('translate-none')
-    await wrapper.get('.bg-black\\/40').trigger('click')
+    expect(aside().attributes('data-state')).toBe('open')
+    await wrapper.get('[data-drawer-backdrop]').trigger('click')
     expect(sidebarDrawerOpen.value).toBe(false)
 
     sidebarDrawerOpen.value = true

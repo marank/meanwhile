@@ -96,15 +96,17 @@ describe('RsvpView', () => {
   it('highlights the answer the link suggests without giving it', async () => {
     backend.on('GET /api/rsvp/*', invitation())
     await render('tentative')
-    expect(answerButton('Tentative').classes()).toContain('bg-blue-600')
-    expect(answerButton('Accept').classes()).not.toContain('bg-blue-600')
+    expect(answerButton('Tentative').attributes('data-suggested')).toBe('true')
+    expect(answerButton('Accept').attributes('data-suggested')).toBeUndefined()
+    // Suggested, not given.
+    expect(answerButtons().some((b) => b.attributes('aria-pressed') === 'true')).toBe(false)
     expect(backend.calls('POST /api/rsvp/*')).toHaveLength(0)
   })
 
   it('ignores a suggested answer it does not know', async () => {
     backend.on('GET /api/rsvp/*', invitation())
     await render('maybe')
-    expect(answerButtons().some((b) => b.classes().includes('bg-blue-600'))).toBe(false)
+    expect(answerButtons().some((b) => b.attributes('data-suggested'))).toBe(false)
   })
 
   it('sends the answer clicked and thanks for it', async () => {
@@ -122,8 +124,8 @@ describe('RsvpView', () => {
     backend.on('GET /api/rsvp/*', invitation({ status: 'declined' }))
     await render('accepted')
     expect(wrapper.text()).toContain('Current answer: Declined')
-    expect(answerButton('Decline').classes()).toContain('bg-blue-600')
-    expect(answerButton('Accept').classes()).not.toContain('bg-blue-600')
+    expect(answerButton('Decline').attributes('aria-pressed')).toBe('true')
+    expect(answerButton('Accept').attributes('aria-pressed')).toBe('false')
   })
 
   it('shows why an answer could not be sent', async () => {

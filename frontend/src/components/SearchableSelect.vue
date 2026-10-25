@@ -333,6 +333,7 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
       :aria-expanded="isOpen"
       aria-autocomplete="list"
       :aria-controls="listboxId"
+      :aria-activedescendant="isOpen && activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined"
       class="w-full rounded-lg border py-2 pr-8 text-sm disabled:bg-surface-muted"
       :class="selectedMark ? 'pl-9' : 'px-3'"
       @focus="onFocus"
@@ -373,6 +374,7 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
         <template v-else>
           <li
             v-for="(option, index) in options"
+            :id="`${listboxId}-${index}`"
             :key="option.id"
             role="option"
             :aria-selected="option.id === modelValue"
@@ -396,6 +398,7 @@ const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
           </li>
           <li
             v-if="freeTextValue !== null"
+            :id="`${listboxId}-${options.length}`"
             role="option"
             :aria-selected="freeTextValue === modelValue"
             class="px-3 py-2 cursor-pointer text-sm"

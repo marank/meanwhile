@@ -178,7 +178,7 @@ describe('SearchableSelect', () => {
     await input.trigger('keydown', { key: 'ArrowDown' })
     await input.trigger('keydown', { key: 'ArrowDown' })
     await input.trigger('keydown', { key: 'ArrowUp' })
-    expect(optionNamed('Room 2').className).toContain('bg-surface-muted')
+    expect(input.attributes('aria-activedescendant')).toBe(optionNamed('Room 2').id)
     await input.trigger('keydown', { key: 'Enter' })
     expect(lastEmitted('update:modelValue')).toEqual(['r2'])
     expect(listbox()).toBeNull()
@@ -235,9 +235,10 @@ describe('SearchableSelect', () => {
 
   it('shows the mark of an option whose name a free-text field holds', async () => {
     fakeBackend({ 'GET /api/search': [option('l1', 'Hall', { meta: { icon: 'door-open' } })] })
-    const input = render({ allowFreeText: true, modelValue: 'hall' })
+    render({ allowFreeText: true, modelValue: 'hall' })
     await flushPromises()
-    expect(input.classes()).toContain('pl-9')
+    // The mark sits in the field, before the text.
+    expect(wrapper.get('input + span svg').classes().join(' ')).toContain('door-open')
   })
 
   it('forgets text that matches no option when closed without free text', async () => {

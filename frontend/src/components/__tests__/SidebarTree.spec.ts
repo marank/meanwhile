@@ -126,7 +126,7 @@ describe('FolderTreeItem', () => {
     dropTargetFolderId.value = 'f1'
     const wrapper = render()
     expect(header(wrapper).attributes('aria-current')).toBe('true')
-    expect(header(wrapper).classes()).toContain('ring-2')
+    expect(header(wrapper).attributes('data-drop-target')).toBe('true')
     store.select('c1')
     await wrapper.vm.$nextTick()
     expect(wrapper.get('[data-id="c1"]').attributes('aria-current')).toBe('true')

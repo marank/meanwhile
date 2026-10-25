@@ -44,6 +44,7 @@ function openContextMenu(event: MouseEvent) {
       role="button"
       tabindex="0"
       :aria-current="store.selectedId === folder.id || undefined"
+      :data-drop-target="dropTargetFolderId === folder.id || undefined"
       @click="emit('select', folder.id)"
       @keydown.enter.space.self.prevent="emit('select', folder.id)"
       @keydown.right.self.prevent="expanded = true"
