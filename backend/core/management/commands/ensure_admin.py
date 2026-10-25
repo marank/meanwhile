@@ -12,6 +12,8 @@ Outside DEBUG, ADMIN_PASSWORD must pass the password validators and must not be 
 such as the "change-me" of .env.example.
 """
 
+from typing import Any
+
 from allauth.account.models import EmailAddress
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
@@ -27,7 +29,7 @@ class Command(BaseCommand):
     help = "Creates or updates the admin user from ADMIN_EMAIL, ADMIN_PASSWORD and ADMIN_NAME."
 
     @transaction.atomic
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         email = settings.ADMIN_EMAIL.strip().lower()
         password = settings.ADMIN_PASSWORD
         name = settings.ADMIN_NAME.strip()

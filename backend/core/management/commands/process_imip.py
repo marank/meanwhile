@@ -5,8 +5,9 @@ from a mail program; `-` reads one email from standard input (for a mail server'
 
 import sys
 from pathlib import Path
+from typing import Any
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 from core.services.itip import process_email, process_itip
 
@@ -14,7 +15,7 @@ from core.services.itip import process_email, process_itip
 class Command(BaseCommand):
     help = "Applies iTIP messages (e.g. REPLY) from .eml or .ics files, or an email on stdin."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("files", nargs="+", help="Files to read; - for standard input.")
         parser.add_argument(
             "--trust-sender",
@@ -22,7 +23,7 @@ class Command(BaseCommand):
             help="Apply answers even if the email wasn't sent by the participant they are for.",
         )
 
-    def handle(self, *args, files, trust_sender, **options):
+    def handle(self, *args: Any, files: list[str], trust_sender: bool, **options: Any) -> None:
         for name in files:
             raw = sys.stdin.buffer.read() if name == "-" else Path(name).read_bytes()
             if name.lower().endswith(".ics"):

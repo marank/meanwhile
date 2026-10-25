@@ -4,9 +4,11 @@ email to the event's organizer address. Sent through the configured mail server 
 from where `fetch_imip` picks it up; or applied right away with `--process`.
 """
 
+from typing import Any
+
 import icalendar
 from django.core.mail import EmailMessage
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.utils import timezone
 
 from core.models import EventParticipant
@@ -46,13 +48,13 @@ def reply_email(participant: EventParticipant, status: str) -> EmailMessage:
 class Command(BaseCommand):
     help = "Development: sends an iTIP REPLY for a participant of an event, as their mail program would."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("event_id")
         parser.add_argument("email", help="The participant's address.")
         parser.add_argument("status", choices=["accepted", "tentative", "declined"])
         parser.add_argument("--process", action="store_true", help="Apply it right away instead of sending it.")
 
-    def handle(self, *args, event_id, email, status, process, **options):
+    def handle(self, *args: Any, event_id: str, email: str, status: str, process: bool, **options: Any) -> None:
         participant = (
             EventParticipant.objects.select_related("event").filter(event_id=event_id, email__iexact=email).first()
         )
