@@ -94,6 +94,9 @@ function optionId(value: T) {
   return `${listboxId}-${String(value).replace(/\W/g, '_')}`
 }
 
+/** The option the keyboard is on, for screen readers (aria-activedescendant). */
+const activeId = computed(() => (open.value && active.value !== null ? optionId(active.value) : undefined))
+
 // Opening and closing
 
 function onOutsidePointer(event: PointerEvent) {
@@ -324,7 +327,7 @@ onBeforeUnmount(close)
       :aria-label="label"
       :aria-expanded="open"
       :aria-controls="listboxId"
-      :aria-activedescendant="open && active !== null ? optionId(active) : undefined"
+      :aria-activedescendant="activeId"
       class="app-select-trigger"
       @click="toggle"
       @keydown="onKeydown"

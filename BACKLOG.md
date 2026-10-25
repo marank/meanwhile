@@ -47,6 +47,7 @@ Features and improvements proposed for future releases.
 ### Code quality
 
 26. **oxlint warnings fail CI** — `pnpm lint` passes with warnings, so they pile up unnoticed in the CI log. Run oxlint with `--deny-warnings` in `frontend/package.json` (the `lint` script, which CI and the VS Code check task run). Two warnings are there today: `unicorn(no-useless-spread)` in `saveParticipants` (`frontend/src/components/event/EventModal.vue`). The copies are deliberate (the loops go over a snapshot while the lists shrink), so silence the rule there with a comment rather than removing them.
+27. **Move from `lucide-vue-next` to `@lucide/vue`** — the old package is deprecated; its successor starts at 1.0, where lucide renamed some icons. 26 files import icons, and `src/services/resourceIcons.ts` stores icon names in resources, so renamed icons need a mapping (or a data migration) for existing resources. Renovate holds the major update until then.
 
 ## Known v1 limitations
 

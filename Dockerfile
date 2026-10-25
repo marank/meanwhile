@@ -6,7 +6,7 @@
 # --- Frontend ---------------------------------------------------------------------------------
 FROM node:24-alpine AS frontend
 
-RUN npm install -g pnpm@10.28.0
+RUN npm install -g pnpm@10.34.5
 
 WORKDIR /frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml ./

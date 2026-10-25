@@ -142,7 +142,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install -g pnpm@10.28.0
+          npm install -g pnpm@10.34.5
           pnpm install --frozen-lockfile
 
       # format:check, lint (oxlint, eslint, knip for unused code; no --fix), type-check and
