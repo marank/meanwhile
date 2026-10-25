@@ -4,6 +4,7 @@ key, so no account or session is needed.
 """
 
 from django.db import transaction
+from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -50,12 +51,12 @@ def _serialize(participant: EventParticipant) -> RsvpOut:
 
 
 @router.get("/rsvp/{token}", response=RsvpOut, auth=None)
-def get_invitation(request, token: str):
+def get_invitation(request: HttpRequest, token: str) -> RsvpOut:
     return _serialize(_participant(token))
 
 
 @router.post("/rsvp/{token}", response=RsvpOut, auth=None)
-def answer_invitation(request, token: str, payload: RsvpAnswer):
+def answer_invitation(request: HttpRequest, token: str, payload: RsvpAnswer) -> RsvpOut:
     participant = _participant(token)
     if participant.event.status in _GONE:
         raise HttpError(409, "This event has been cancelled")

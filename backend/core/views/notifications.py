@@ -2,7 +2,8 @@
 Notification endpoints.
 """
 
-from typing import Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 from uuid import UUID
 
 from django.db.models import Q
@@ -10,10 +11,11 @@ from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
 
-from core.models import EventParticipant, Notification
+from core.models import EventParticipant, Notification, User
 from core.models.base import EventStatus, ParticipantStatus
 from core.realtime import broadcast
 from core.schemas import NotificationCountsOut, NotificationOut, OkOut
+from core.views.common import AuthedRequest
 
 router = Router()
 
@@ -24,7 +26,7 @@ UNDELETABLE_TYPES = {"approval_requested", "participant_added"}
 TYPE_GROUPS = {"approvals": APPROVAL_TYPES, "invitations": INVITATION_TYPES}
 
 
-def _my_responses(user, notifications) -> dict[UUID, str]:
+def _my_responses(user: User, notifications: Iterable[Notification]) -> dict[UUID, str]:
     event_ids = {n.event_id for n in notifications if n.type in INVITATION_TYPES and n.event_id}
     if not event_ids:
         return {}
@@ -35,7 +37,7 @@ def _my_responses(user, notifications) -> dict[UUID, str]:
     )
 
 
-def _serialize(notification: Notification, responses: dict[UUID, str] | None = None) -> dict:
+def _serialize(notification: Notification, responses: dict[UUID, str] | None = None) -> dict[str, Any]:
     event = notification.event
     return {
         "id": notification.id,
@@ -58,7 +60,9 @@ MAX_NOTIFICATIONS = 200
 
 
 @router.get("/notifications", response=list[NotificationOut])
-def list_notifications(request, limit: int = 50, group: Literal["approvals", "invitations"] | None = None):
+def list_notifications(
+    request: AuthedRequest, limit: int = 50, group: Literal["approvals", "invitations"] | None = None
+) -> list[dict[str, Any]]:
     limit = max(1, min(limit, MAX_NOTIFICATIONS))
     query = Notification.objects.filter(user=request.user)
     if group is not None:
@@ -69,7 +73,7 @@ def list_notifications(request, limit: int = 50, group: Literal["approvals", "in
 
 
 @router.get("/notifications/counts", response=NotificationCountsOut)
-def counts(request):
+def counts(request: AuthedRequest) -> dict[str, int]:
     """The numbers the app shows as badges: unread notifications, and requests still waiting for this user
     (pending approvals and unanswered invitations)."""
     unread = Notification.objects.filter(user=request.user, read_at__isnull=True).count()
@@ -89,7 +93,7 @@ def counts(request):
 
 
 @router.post("/notifications/read-all", response=OkOut)
-def mark_all_read(request):
+def mark_all_read(request: AuthedRequest) -> dict[str, bool]:
     now = timezone.now()
     Notification.objects.filter(user=request.user, read_at__isnull=True).update(read_at=now)
     # The bulk update sends no signal; the user's other tabs update their count.
@@ -98,7 +102,7 @@ def mark_all_read(request):
 
 
 @router.post("/notifications/{notification_id}/read", response=NotificationOut)
-def mark_read(request, notification_id: str):
+def mark_read(request: AuthedRequest, notification_id: str) -> dict[str, Any]:
     notification = Notification.objects.get(id=notification_id, user=request.user)
     notification.read_at = timezone.now()
     notification.save()
@@ -106,7 +110,7 @@ def mark_read(request, notification_id: str):
 
 
 @router.delete("/notifications/{notification_id}", response=OkOut)
-def delete_notification(request, notification_id: str):
+def delete_notification(request: AuthedRequest, notification_id: str) -> dict[str, bool]:
     notification = Notification.objects.get(id=notification_id, user=request.user)
     if notification.type in UNDELETABLE_TYPES:
         raise HttpError(400, "This notification cannot be deleted")

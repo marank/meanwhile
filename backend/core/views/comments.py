@@ -2,6 +2,8 @@
 Event comments and activity endpoints.
 """
 
+from typing import Any
+
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -10,11 +12,12 @@ from core.models.base import Role
 from core.schemas import ActivityOut, CommentCreate, CommentOut, OkOut
 from core.services.notifications import notify
 from core.services.permissions import can_see_event, get_membership, get_visible_event, has_at_least_role
+from core.views.common import AuthedRequest
 
 router = Router()
 
 
-def _serialize_comment(comment: EventComment) -> dict:
+def _serialize_comment(comment: EventComment) -> dict[str, Any]:
     return {
         "id": comment.id,
         "event_id": str(comment.event_id),
@@ -26,14 +29,14 @@ def _serialize_comment(comment: EventComment) -> dict:
 
 
 @router.get("/events/{event_id}/comments", response=list[CommentOut])
-def list_comments(request, event_id: str):
+def list_comments(request: AuthedRequest, event_id: str) -> list[dict[str, Any]]:
     event, _ = get_visible_event(event_id, request.user)
     comments = EventComment.objects.filter(event=event).order_by("created_at")
     return [_serialize_comment(c) for c in comments]
 
 
 @router.post("/events/{event_id}/comments", response=CommentOut)
-def create_comment(request, event_id: str, payload: CommentCreate):
+def create_comment(request: AuthedRequest, event_id: str, payload: CommentCreate) -> dict[str, Any]:
     event, membership = get_visible_event(event_id, request.user)
     if not has_at_least_role(membership, Role.OWN):
         raise HttpError(403, "You do not have permission to comment")
@@ -65,7 +68,7 @@ def create_comment(request, event_id: str, payload: CommentCreate):
 
 
 @router.delete("/events/{event_id}/comments/{comment_id}", response=OkOut)
-def delete_comment(request, event_id: str, comment_id: str):
+def delete_comment(request: AuthedRequest, event_id: str, comment_id: str) -> dict[str, bool]:
     comment = EventComment.objects.get(id=comment_id, event_id=event_id)
     membership = get_membership(comment.event.calendar, request.user)
     may_moderate = membership is not None and has_at_least_role(membership, Role.FULL)
@@ -76,7 +79,7 @@ def delete_comment(request, event_id: str, comment_id: str):
 
 
 @router.get("/events/{event_id}/activity", response=list[ActivityOut])
-def list_activity(request, event_id: str):
+def list_activity(request: AuthedRequest, event_id: str) -> list[ActivityOut]:
     event, _ = get_visible_event(event_id, request.user)
     entries = EventActivity.objects.filter(event=event).order_by("created_at")
     return [

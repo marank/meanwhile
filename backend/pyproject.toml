@@ -97,7 +97,6 @@ module = [
     "core.models.*",
     "core.realtime.*",
     "core.tests.*",
-    "core.views.*",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false

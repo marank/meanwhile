@@ -2,30 +2,45 @@
 Common view helpers.
 """
 
+from typing import Any
 from uuid import UUID
 
+from django.http import HttpRequest
 from ninja.errors import HttpError
 
-from core.models import Event, User, as_uuid
+from core.models import Calendar, CalendarApprover, Event, Resource, ResourceApprover, User, as_uuid
+from core.models.base import AnyId
 from core.schemas import ApproverOut
 from core.services.bookings import awaiting_resources
 from core.services.permissions import get_direct_membership
 from core.services.recurrence import as_utc
 
 
-def require_admin(request):
+class AuthedRequest(HttpRequest):
+    """The request of a signed-in user, as every endpoint gets that doesn't say `auth=None` (core.api)."""
+
+    user: User
+
+
+def require_admin(request: AuthedRequest) -> None:
     # Signed in, as every endpoint requires (core.api).
     if not request.user.is_admin:
         raise HttpError(403, "Admin access required")
 
 
-def approvers_of(approver_model, **owner) -> list[ApproverOut]:
+def approvers_of(approver_model: type[CalendarApprover] | type[ResourceApprover], **owner: object) -> list[ApproverOut]:
     """The approvers of a calendar or resource (`approver_model` filtered by `owner`), by name."""
     rows = approver_model.objects.filter(**owner).select_related("user").order_by("user__display_name", "user__email")
-    return [ApproverOut(user_id=a.user_id, email=a.user.email, display_name=a.user.display_name) for a in rows]
+    return [ApproverOut(user_id=str(a.user_id), email=a.user.email, display_name=a.user.display_name) for a in rows]
 
 
-def replace_approvers(approver_model, owner_field: str, owner, calendar_id, user_ids: list[str]) -> None:
+def replace_approvers[A: (CalendarApprover, ResourceApprover)](
+    approver_model: type[A],
+    owner_field: str,
+    owner: Calendar | Resource,
+    calendar_id: AnyId,
+    user_ids: list[str],
+) -> None:
     """Makes `user_ids` the approvers of the owner (a calendar or resource); each must be a direct member."""
     wanted: list[UUID] = []
     for user_id in dict.fromkeys(as_uuid(user_id) for user_id in user_ids):
@@ -40,7 +55,7 @@ def replace_approvers(approver_model, owner_field: str, owner, calendar_id, user
     )
 
 
-def serialize_event(event: Event) -> dict:
+def serialize_event(event: Event) -> dict[str, Any]:
     """An event as EventOut (and ApprovalOut, which adds to it) shows it."""
     return {
         "id": event.id,

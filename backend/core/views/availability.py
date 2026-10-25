@@ -3,6 +3,7 @@ Availability endpoint: when people and resources are taken, for planning an even
 """
 
 from datetime import timedelta
+from typing import Any
 
 from ninja import Router
 from ninja.errors import HttpError
@@ -12,6 +13,7 @@ from core.schemas import AvailabilityIn, AvailabilityOut
 from core.services.availability import resource_periods, user_periods
 from core.services.permissions import get_membership
 from core.services.recurrence import as_utc
+from core.views.common import AuthedRequest
 
 router = Router()
 
@@ -19,7 +21,7 @@ MAX_RANGE = timedelta(days=62)
 
 
 @router.post("/availability", response=AvailabilityOut)
-def availability(request, data: AvailabilityIn):
+def availability(request: AuthedRequest, data: AvailabilityIn) -> dict[str, Any]:
     """Busy periods only, no titles or details. Users can be looked up by anyone signed in, as in
     the user search; resources only by members of their calendar. A POST, though it changes nothing:
     see AvailabilityIn."""

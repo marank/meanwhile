@@ -2,6 +2,8 @@
 Approval workflow endpoints.
 """
 
+from typing import Any
+
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
@@ -23,18 +25,18 @@ from core.services.bookings import (
 from core.services.itip import send_cancel, send_request
 from core.services.notifications import notify
 from core.services.permissions import can_modify_event, get_membership
-from core.views.common import serialize_event
+from core.views.common import AuthedRequest, serialize_event
 
 router = Router()
 
 
-def _approval_recipients(event: Event):
+def _approval_recipients(event: Event) -> list[str]:
     recipients = [str(a.id) for a in approvers_of(booked_resources(event))]
     recipients.append(str(event.calendar.owner_id))
     return recipients
 
 
-def _serialize_approval(event: Event) -> dict:
+def _serialize_approval(event: Event) -> dict[str, Any]:
     data = serialize_event(event)
     data["approver_pool"] = [
         ApproverOut(
@@ -48,7 +50,7 @@ def _serialize_approval(event: Event) -> dict:
 
 
 @router.get("/approvals", response=list[ApprovalOut])
-def list_pending_approvals(request):
+def list_pending_approvals(request: AuthedRequest) -> list[ApprovalOut]:
     user = request.user
     pending = (
         Event.objects.filter(status=EventStatus.PENDING)
@@ -71,7 +73,7 @@ def list_pending_approvals(request):
         )
         .distinct()
     )
-    result = []
+    result: list[ApprovalOut] = []
     for event in pending:
         if is_in_approver_pool(event, user.id):
             result.append(ApprovalOut.model_validate(_serialize_approval(event)))
@@ -80,7 +82,7 @@ def list_pending_approvals(request):
 
 @router.post("/events/{event_id}/approve", response=ApprovalOut)
 @transaction.atomic
-def approve_event(request, event_id: str, payload: ApprovalAction):
+def approve_event(request: AuthedRequest, event_id: str, payload: ApprovalAction) -> ApprovalOut:
     # Locked, so approvers deciding at once each see the others' decisions (awaiting_approval).
     event = Event.objects.select_for_update().get(id=event_id)
     if event.status != EventStatus.PENDING:
@@ -159,7 +161,7 @@ def _decide_changed_occurrences(series: Event, previous_status: str, decided_ids
 
 @router.post("/events/{event_id}/reject", response=ApprovalOut)
 @transaction.atomic
-def reject_event(request, event_id: str, payload: ApprovalAction):
+def reject_event(request: AuthedRequest, event_id: str, payload: ApprovalAction) -> ApprovalOut:
     event = Event.objects.select_for_update().get(id=event_id)
     if event.status != EventStatus.PENDING:
         raise HttpError(400, "Event is not pending")
@@ -197,7 +199,7 @@ def reject_event(request, event_id: str, payload: ApprovalAction):
 
 @router.post("/events/{event_id}/cancel", response=ApprovalOut)
 @transaction.atomic
-def cancel_event(request, event_id: str):
+def cancel_event(request: AuthedRequest, event_id: str) -> ApprovalOut:
     event = Event.objects.select_for_update().get(id=event_id)
     membership = get_membership(event.calendar, request.user)
     if membership is None:

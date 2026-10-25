@@ -79,7 +79,7 @@ class User(UUIDModel, TimestampedModel, AbstractUser):
     def __str__(self) -> str:
         return self.display_name or self.email
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         # One switch for the Django admin: superusers may sign in there (is_staff) and do everything.
         # Staff without being superuser could only sign in, as no permissions are given out.
         self.is_staff = self.is_superuser

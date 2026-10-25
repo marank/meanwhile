@@ -5,7 +5,7 @@ Public iCal feed view.
 import hashlib
 
 from django.db.models import Count, Max, Prefetch
-from django.http import HttpResponse
+from django.http import HttpRequest, HttpResponse
 from django.utils.cache import get_conditional_response
 from django.utils.http import http_date
 
@@ -34,7 +34,7 @@ def _feed_version(calendar: Calendar) -> tuple[str, int]:
     return etag, int(max(t for t in changes if t is not None).timestamp())
 
 
-def calendar_feed(request, feed_token: str) -> HttpResponse:
+def calendar_feed(request: HttpRequest, feed_token: str) -> HttpResponse:
     feed = FeedToken.objects.select_related("calendar", "user").filter(token=feed_token).first()
     if feed is None:
         return HttpResponse("Calendar not found", status=404, content_type="text/plain")

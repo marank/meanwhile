@@ -3,6 +3,7 @@ Calendar resource endpoints.
 """
 
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
@@ -18,13 +19,13 @@ from core.schemas import (
     ResourceUpdate,
 )
 from core.services.permissions import can_manage, get_member_calendar
-from core.views.common import approvers_of, replace_approvers
+from core.views.common import AuthedRequest, approvers_of, replace_approvers
 
 router = Router()
 
 
 @router.get("/calendars/{calendar_id}/resources", response=list[ResourceOut])
-def list_resources(request, calendar_id: str):
+def list_resources(request: AuthedRequest, calendar_id: str) -> QuerySet[Resource]:
     calendar, _ = get_member_calendar(calendar_id, request.user)
     return (
         Resource.objects.filter(calendar=calendar, archived_at__isnull=True)
@@ -35,7 +36,7 @@ def list_resources(request, calendar_id: str):
 
 @router.post("/calendars/{calendar_id}/resources", response=ResourceOut)
 @transaction.atomic
-def create_resource(request, calendar_id: str, payload: ResourceCreate):
+def create_resource(request: AuthedRequest, calendar_id: str, payload: ResourceCreate) -> Resource:
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.create(
         calendar=calendar,
@@ -52,7 +53,7 @@ def create_resource(request, calendar_id: str, payload: ResourceCreate):
 
 @router.patch("/calendars/{calendar_id}/resources/{resource_id}", response=ResourceOut)
 @transaction.atomic
-def update_resource(request, calendar_id: str, resource_id: str, payload: ResourceUpdate):
+def update_resource(request: AuthedRequest, calendar_id: str, resource_id: str, payload: ResourceUpdate) -> Resource:
     calendar, membership = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     data = payload.dict(exclude_unset=True)
@@ -67,7 +68,7 @@ def update_resource(request, calendar_id: str, resource_id: str, payload: Resour
 
 
 @router.delete("/calendars/{calendar_id}/resources/{resource_id}", response=OkOut)
-def delete_resource(request, calendar_id: str, resource_id: str):
+def delete_resource(request: AuthedRequest, calendar_id: str, resource_id: str) -> dict[str, bool]:
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     # Archive instead of deleting so existing bookings keep their resource.
     Resource.objects.filter(id=resource_id, calendar=calendar).update(archived_at=timezone.now())
@@ -78,7 +79,7 @@ def delete_resource(request, calendar_id: str, resource_id: str):
     "/calendars/{calendar_id}/resources/{resource_id}/approvers",
     response=list[ApproverOut],
 )
-def list_resource_approvers(request, calendar_id: str, resource_id: str):
+def list_resource_approvers(request: AuthedRequest, calendar_id: str, resource_id: str) -> list[ApproverOut]:
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     return approvers_of(ResourceApprover, resource=resource)
@@ -89,7 +90,9 @@ def list_resource_approvers(request, calendar_id: str, resource_id: str):
     response=list[ApproverOut],
 )
 @transaction.atomic
-def set_resource_approvers(request, calendar_id: str, resource_id: str, payload: ApproversIn):
+def set_resource_approvers(
+    request: AuthedRequest, calendar_id: str, resource_id: str, payload: ApproversIn
+) -> list[ApproverOut]:
     """Sets the resource's own approvers; without any, the calendar's default approvers decide."""
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage approvers"

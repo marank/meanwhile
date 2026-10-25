@@ -2,7 +2,7 @@
 Global search endpoint.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from ninja import Router
 from ninja.errors import HttpError
@@ -17,6 +17,7 @@ from core.services.search import (
     search_resources,
     search_users,
 )
+from core.views.common import AuthedRequest
 
 router = Router()
 
@@ -25,12 +26,12 @@ SearchEntity = Literal["users", "members", "groups", "resources", "locations", "
 
 @router.get("/search", response=list[SearchResult])
 def search(
-    request,
+    request: AuthedRequest,
     entity: SearchEntity,
     q: str = "",
     limit: int = 20,
     calendar_id: str | None = None,
-):
+) -> list[dict[str, Any]]:
     # No more than a dropdown shows: listing every user with their email is not what search is for.
     limit = max(1, min(limit, MAX_LIMIT))
     if entity == "users":

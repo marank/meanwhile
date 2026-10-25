@@ -9,7 +9,7 @@ from uuid import UUID
 from django.db.models import Q, QuerySet
 from ninja.errors import HttpError
 
-from core.models.base import EventStatus, MembershipSource, Role
+from core.models.base import AnyId, EventStatus, MembershipSource, Role
 from core.models.calendars import Calendar, CalendarGroup, CalendarMember
 from core.models.events import Event, EventParticipant
 from core.models.users import User
@@ -115,7 +115,7 @@ def _from_row(membership: CalendarMember, role: str, calendar: Calendar, user: U
     )
 
 
-def can_modify_event(event: Event, user_id: str, role: str) -> bool:
+def can_modify_event(event: Event, user_id: AnyId, role: str) -> bool:
     """With "full" access every event, with "own" only those the user created; with less (e.g.
     after being demoted to "read") none, their own included."""
     if role_weight(role) >= role_weight(Role.FULL):

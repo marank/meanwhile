@@ -3,6 +3,7 @@ Event and participant endpoints.
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from django.core.cache import cache
@@ -17,6 +18,7 @@ from core.schemas import (
     EventCreate,
     EventOut,
     EventParticipantCreate,
+    EventParticipantInvite,
     EventParticipantOut,
     EventParticipantUpdate,
     EventRemindersIn,
@@ -66,7 +68,7 @@ from core.services.series import (
     snapshot,
     split,
 )
-from core.views.common import serialize_event
+from core.views.common import AuthedRequest, serialize_event
 
 # Called off: participants were told already.
 _GONE = {EventStatus.REJECTED, EventStatus.CANCELLED}
@@ -93,12 +95,12 @@ _TRACKED_FIELDS = {
 }
 
 
-def _tracked_values(event: Event) -> dict:
+def _tracked_values(event: Event) -> dict[str, Any]:
     return {field: getattr(event, attr) for field, attr in _TRACKED_FIELDS.items()}
 
 
 def _occurrences(
-    user, memberships: dict[UUID, MembershipInfo], range_start: datetime, range_end: datetime
+    user: User, memberships: dict[UUID, MembershipInfo], range_start: datetime, range_end: datetime
 ) -> list[OccurrenceOut]:
     """Occurrences in the range of the calendars of `memberships` (the user's, by calendar id), by start,
     as visible to the user."""
@@ -111,8 +113,8 @@ def _occurrences(
     hidden = {EventStatus.REJECTED, EventStatus.CANCELLED}
     user_id = str(user.id)
     invited_to = participant_event_ids(user)
-    can_decide: dict[tuple, bool] = {}
-    out = []
+    can_decide: dict[tuple[object, ...], bool] = {}
+    out: list[OccurrenceOut] = []
     for event, occ_start, occ_end in expand_events(events, range_start, range_end):
         if event.status in hidden and str(event.creator_id) != str(user_id):
             continue
@@ -173,11 +175,11 @@ def _parse_range(start: datetime, end: datetime) -> tuple[datetime, datetime]:
 
 @router.get("/events", response=list[OccurrenceOut])
 def list_events_of_calendars(
-    request,
+    request: AuthedRequest,
     start: datetime,
     end: datetime,
-    calendar_ids: list[str] = Query(...),
-):
+    calendar_ids: Query[list[str]],
+) -> list[OccurrenceOut]:
     """Occurrences of several calendars at once; calendars the user can't read are skipped."""
     range_start, range_end = _parse_range(start, end)
     memberships = memberships_of(request.user, Calendar.objects.filter(id__in=calendar_ids))
@@ -185,14 +187,14 @@ def list_events_of_calendars(
 
 
 @router.get("/calendars/{calendar_id}/events", response=list[OccurrenceOut])
-def list_events(request, calendar_id: str, start: datetime, end: datetime):
+def list_events(request: AuthedRequest, calendar_id: str, start: datetime, end: datetime) -> list[OccurrenceOut]:
     calendar, membership = get_member_calendar(calendar_id, request.user)
     range_start, range_end = _parse_range(start, end)
     return _occurrences(request.user, {calendar.id: membership}, range_start, range_end)
 
 
 @router.post("/calendars/{calendar_id}/events", response=EventOut)
-def create_event(request, calendar_id: str, payload: EventCreate):
+def create_event(request: AuthedRequest, calendar_id: str, payload: EventCreate) -> EventOut:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.OWN, "You do not have permission to create events"
     )
@@ -257,7 +259,7 @@ def create_event(request, calendar_id: str, payload: EventCreate):
 
 
 @router.get("/events/{event_id}", response=EventOut)
-def get_event(request, event_id: str):
+def get_event(request: AuthedRequest, event_id: str) -> EventOut:
     event, _ = get_visible_event(event_id, request.user)
     data = serialize_event(event)
     data["can_decide"] = event.status == EventStatus.PENDING and bool(decidable_resources(event, str(request.user.id)))
@@ -289,7 +291,7 @@ def _check_booking_conflicts(event: Event) -> None:
         )
 
 
-def _modifiable_event(event_id: str, user: User) -> tuple[Event, object]:
+def _modifiable_event(event_id: str, user: User) -> tuple[Event, MembershipInfo]:
     event = Event.objects.select_related("calendar").get(id=event_id)
     membership = get_membership(event.calendar, user)
     if membership is None:
@@ -300,7 +302,7 @@ def _modifiable_event(event_id: str, user: User) -> tuple[Event, object]:
 
 
 @router.patch("/events/{event_id}", response=EventOut)
-def update_event(request, event_id: str, payload: EventUpdate):
+def update_event(request: AuthedRequest, event_id: str, payload: EventUpdate) -> EventOut:
     event, _ = _modifiable_event(event_id, request.user)
     data = payload.dict(exclude_unset=True)
     if event.parent_id and data.get("rrule"):
@@ -310,7 +312,7 @@ def update_event(request, event_id: str, payload: EventUpdate):
     return EventOut.model_validate(serialize_event(event))
 
 
-def _apply_update(user: User, event: Event, data: dict) -> None:
+def _apply_update(user: User, event: Event, data: dict[str, Any]) -> None:
     """Applies the fields in `data` to the event, with the checks and side effects of an edit."""
     calendar = event.calendar
     if calendar.force_all_day and data.get("all_day") is False:
@@ -437,7 +439,7 @@ def _apply_update(user: User, event: Event, data: dict) -> None:
 
 
 @router.delete("/events/{event_id}", response=OkOut)
-def delete_event(request, event_id: str):
+def delete_event(request: AuthedRequest, event_id: str) -> dict[str, bool]:
     event, _ = _modifiable_event(event_id, request.user)
     with transaction.atomic():
         if event.parent_id:
@@ -457,7 +459,7 @@ def delete_event(request, event_id: str):
     return {"ok": True}
 
 
-def _occurrence_details(start: datetime) -> dict:
+def _occurrence_details(start: datetime) -> dict[str, str]:
     return {"occurrence": as_utc(start).isoformat()}
 
 
@@ -472,8 +474,12 @@ def _series_occurrence(event_id: str, user: User, recurrence_id: datetime) -> Ev
 
 @router.patch("/events/{event_id}/occurrences/{recurrence_id}", response=EventOut)
 def update_occurrence(
-    request, event_id: str, recurrence_id: datetime, payload: EventUpdate, scope: OccurrenceScope = "this"
-):
+    request: AuthedRequest,
+    event_id: str,
+    recurrence_id: datetime,
+    payload: EventUpdate,
+    scope: OccurrenceScope = "this",
+) -> EventOut:
     """Changes one occurrence of a series ("this"), it and the later ones ("following"), or all.
 
     `recurrence_id` is the original start of the occurrence; start and end in the payload are
@@ -513,7 +519,9 @@ def update_occurrence(
 
 
 @router.delete("/events/{event_id}/occurrences/{recurrence_id}", response=OkOut)
-def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: OccurrenceScope = "this"):
+def delete_occurrence(
+    request: AuthedRequest, event_id: str, recurrence_id: datetime, scope: OccurrenceScope = "this"
+) -> dict[str, bool]:
     """Removes one occurrence of a series ("this"), it and the later ones ("following"), or all."""
     rid = as_utc(recurrence_id)
     series = _series_occurrence(event_id, request.user, rid)
@@ -534,14 +542,14 @@ def delete_occurrence(request, event_id: str, recurrence_id: datetime, scope: Oc
 
 
 @router.get("/events/{event_id}/reminders", response=EventRemindersOut)
-def get_reminders(request, event_id: str):
+def get_reminders(request: AuthedRequest, event_id: str) -> dict[str, list[int]]:
     """The current user's own reminders for the event (of a series: for all its occurrences)."""
     event, _ = get_visible_event(event_id, request.user)
     return {"minutes": reminder_minutes(event, request.user)}
 
 
 @router.put("/events/{event_id}/reminders", response=EventRemindersOut)
-def put_reminders(request, event_id: str, payload: EventRemindersIn):
+def put_reminders(request: AuthedRequest, event_id: str, payload: EventRemindersIn) -> dict[str, list[int]]:
     # Everyone who sees an event may be reminded of it, read-only members included; it concerns only them.
     event, _ = get_visible_event(event_id, request.user)
     return {"minutes": set_reminders(event, request.user, payload.minutes)}
@@ -552,7 +560,7 @@ def put_reminders(request, event_id: str, payload: EventRemindersIn):
 # ---------------------------------------------------------------------------
 
 
-def _serialize_participant(participant: EventParticipant) -> dict:
+def _serialize_participant(participant: EventParticipant) -> dict[str, Any]:
     return {
         "id": participant.id,
         "event_id": str(participant.event_id),
@@ -565,7 +573,7 @@ def _serialize_participant(participant: EventParticipant) -> dict:
     }
 
 
-def _participant_event(event_id: str, user: User):
+def _participant_event(event_id: str, user: User) -> tuple[Event, MembershipInfo]:
     # Like the event itself: a booking the user may not see (e.g. pending) doesn't show its participants.
     return get_visible_event(event_id, user)
 
@@ -588,7 +596,9 @@ def _count_invitation(user: User) -> None:
         raise HttpError(429, "Too many invitations; try again in an hour")
 
 
-def _create_participant(event: Event, current_user: User, data):
+def _create_participant(
+    event: Event, current_user: User, data: EventParticipantCreate | EventParticipantInvite
+) -> EventParticipant:
     participant_status = data.status or ParticipantStatus.NEEDS_ACTION
     if data.user_id is not None:
         user = User.objects.filter(id=data.user_id).first()
@@ -626,14 +636,14 @@ def _create_participant(event: Event, current_user: User, data):
 
 
 @router.get("/events/{event_id}/participants", response=list[EventParticipantOut])
-def list_event_participants(request, event_id: str):
+def list_event_participants(request: AuthedRequest, event_id: str) -> list[dict[str, Any]]:
     event, _ = _participant_event(event_id, request.user)
     participants = EventParticipant.objects.filter(event=event).select_related("user").order_by("created_at")
     return [_serialize_participant(p) for p in participants]
 
 
 @router.post("/events/{event_id}/participants", response=EventParticipantOut)
-def add_event_participant(request, event_id: str, payload: EventParticipantCreate):
+def add_event_participant(request: AuthedRequest, event_id: str, payload: EventParticipantCreate) -> dict[str, Any]:
     event, membership = _participant_event(event_id, request.user)
     if not can_modify_event(event, str(request.user.id), membership.role):
         raise HttpError(403, "You cannot modify this event")
@@ -644,7 +654,7 @@ def add_event_participant(request, event_id: str, payload: EventParticipantCreat
 
 
 @router.patch("/events/{event_id}/participants/me", response=EventParticipantOut)
-def update_my_participation(request, event_id: str, payload: EventParticipantUpdate):
+def update_my_participation(request: AuthedRequest, event_id: str, payload: EventParticipantUpdate) -> dict[str, Any]:
     """Answers an invitation: sets the status of the current user's own participation."""
     try:
         participant = EventParticipant.objects.select_related("user").get(event_id=event_id, user=request.user)
@@ -656,7 +666,9 @@ def update_my_participation(request, event_id: str, payload: EventParticipantUpd
 
 
 @router.patch("/events/{event_id}/participants/{participant_id}", response=EventParticipantOut)
-def update_event_participant(request, event_id: str, participant_id: str, payload: EventParticipantUpdate):
+def update_event_participant(
+    request: AuthedRequest, event_id: str, participant_id: str, payload: EventParticipantUpdate
+) -> dict[str, Any]:
     event = Event.objects.get(id=event_id)
     participant = EventParticipant.objects.get(id=participant_id, event=event)
     membership = get_membership(event.calendar, request.user)
@@ -673,7 +685,7 @@ def update_event_participant(request, event_id: str, participant_id: str, payloa
 
 
 @router.delete("/events/{event_id}/participants/{participant_id}", response=OkOut)
-def delete_event_participant(request, event_id: str, participant_id: str):
+def delete_event_participant(request: AuthedRequest, event_id: str, participant_id: str) -> dict[str, bool]:
     event = Event.objects.get(id=event_id)
     participant = EventParticipant.objects.get(id=participant_id, event=event)
     membership = get_membership(event.calendar, request.user)

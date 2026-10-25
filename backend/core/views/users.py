@@ -3,8 +3,10 @@ User profile and app-password endpoints.
 """
 
 import secrets
+from typing import Any
 
 from django.contrib.auth.hashers import make_password
+from django.db.models import QuerySet
 from ninja import Router
 
 from core.models import AppPassword, OverviewSettings, User
@@ -21,17 +23,18 @@ from core.schemas import (
 )
 from core.services.notifications import email_preferences
 from core.services.reminders import reminders_changed
+from core.views.common import AuthedRequest
 
 router = Router()
 
 
 @router.get("/users/me", response=ProfileOut)
-def me(request):
+def me(request: AuthedRequest) -> User:
     return request.user
 
 
 @router.patch("/users/me", response=ProfileOut)
-def update_me(request, payload: UserUpdate):
+def update_me(request: AuthedRequest, payload: UserUpdate) -> User:
     user: User = request.user
     data = payload.dict(exclude_unset=True)
     choices = data.pop("email_notifications", None)
@@ -59,12 +62,12 @@ def _overview_settings(user: User) -> OverviewSettings:
 
 
 @router.get("/users/me/settings", response=OverviewSettingsOut)
-def get_overview_settings(request):
+def get_overview_settings(request: AuthedRequest) -> OverviewSettings:
     return _overview_settings(request.user)
 
 
 @router.patch("/users/me/settings", response=OverviewSettingsOut)
-def update_overview_settings(request, payload: OverviewSettingsUpdate):
+def update_overview_settings(request: AuthedRequest, payload: OverviewSettingsUpdate) -> OverviewSettings:
     settings = _overview_settings(request.user)
     data = payload.dict(exclude_unset=True)
     if data.get("weekend_days") is not None:
@@ -78,12 +81,12 @@ def update_overview_settings(request, payload: OverviewSettingsUpdate):
 
 
 @router.get("/users/me/app-passwords", response=list[AppPasswordOut])
-def list_app_passwords(request):
+def list_app_passwords(request: AuthedRequest) -> QuerySet[AppPassword]:
     return request.user.app_passwords.all().order_by("-created_at")
 
 
 @router.post("/users/me/app-passwords", response=AppPasswordCreated)
-def create_app_password(request, payload: AppPasswordCreate):
+def create_app_password(request: AuthedRequest, payload: AppPasswordCreate) -> dict[str, Any]:
     user: User = request.user
     plaintext = secrets.token_urlsafe(32)
     entry = AppPassword.objects.create(
@@ -99,6 +102,6 @@ def create_app_password(request, payload: AppPasswordCreate):
 
 
 @router.delete("/users/me/app-passwords/{password_id}", response=OkOut)
-def delete_app_password(request, password_id: str):
+def delete_app_password(request: AuthedRequest, password_id: str) -> dict[str, bool]:
     request.user.app_passwords.filter(id=password_id).delete()
     return {"ok": True}

@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 
-from core.models.base import EventStatus
+from core.models.base import AnyId, EventStatus
 from core.models.calendars import Calendar, CalendarApprover
 from core.models.events import Event
 from core.models.resources import Resource
@@ -30,7 +30,7 @@ def get_resource_approvers(resource: Resource) -> list[User]:
     return [a.user for a in CalendarApprover.objects.filter(calendar=calendar).select_related("user")]
 
 
-def can_decide_booking(calendar: Calendar, resource: Resource | None, user_id: str) -> bool:
+def can_decide_booking(calendar: Calendar, resource: Resource | None, user_id: AnyId) -> bool:
     """The calendar owner and the resource's approver pool may approve or reject bookings."""
     if str(calendar.owner_id) == str(user_id):
         return True
@@ -54,13 +54,13 @@ def awaiting_resources(event: Event) -> list[Resource]:
     return [r for r in booked_resources(event) if str(r.pk) in awaiting]
 
 
-def is_in_approver_pool(event: Event, user_id: str) -> bool:
+def is_in_approver_pool(event: Event, user_id: AnyId) -> bool:
     """Whether the user may decide on the event's bookings: those it waits for, if it is pending."""
     resources = awaiting_resources(event) if event.status == EventStatus.PENDING else booked_resources(event)
     return any(can_decide_booking(event.calendar, r, user_id) for r in resources)
 
 
-def decidable_resources(event: Event, user_id: str) -> list[Resource]:
+def decidable_resources(event: Event, user_id: AnyId) -> list[Resource]:
     """The bookings the event waits for that this user may approve or reject."""
     return [r for r in awaiting_resources(event) if can_decide_booking(event.calendar, r, user_id)]
 

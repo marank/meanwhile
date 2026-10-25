@@ -3,6 +3,7 @@ Calendar, membership, feed and group-link endpoints.
 """
 
 import secrets
+from typing import Any
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -50,12 +51,12 @@ from core.services.permissions import (
     get_membership,
     memberships_of,
 )
-from core.views.common import approvers_of, replace_approvers
+from core.views.common import AuthedRequest, approvers_of, replace_approvers
 
 router = Router()
 
 
-def _make_feed_url(request, token: str) -> str:
+def _make_feed_url(request: AuthedRequest, token: str) -> str:
     # The app's public address: behind a proxy (Vite in development, too) the request's host is the
     # backend's own, which subscribers can't reach.
     base = settings.APP_URL
@@ -64,7 +65,7 @@ def _make_feed_url(request, token: str) -> str:
     return f"{base}/ics/{token}.ics"
 
 
-def _serialize_membership(member: CalendarMember | MembershipInfo) -> dict:
+def _serialize_membership(member: CalendarMember | MembershipInfo) -> dict[str, Any]:
     return {
         "id": member.id,
         "calendar_id": member.calendar_id,
@@ -84,14 +85,14 @@ ACCESS_OF_SOURCE: dict[str, str] = {
 }
 
 
-def sidebar_calendars_of(user) -> list[dict]:
+def sidebar_calendars_of(user: User) -> list[dict[str, Any]]:
     """The calendars of the user's sidebar: one membership each, granted directly, from a group, or added."""
     memberships = list(
         CalendarMember.objects.filter(user=user).select_related("calendar").order_by("position", "calendar__name")
     )
     # The role of a membership from a group or a public calendar is worked out afresh (see memberships_of).
     accesses = memberships_of(user, [m.calendar for m in memberships])
-    results = []
+    results: list[dict[str, Any]] = []
     for membership in memberships:
         access = accesses.get(membership.calendar_id)
         if access is None:
@@ -107,7 +108,7 @@ def sidebar_calendars_of(user) -> list[dict]:
 
 
 @router.get("/calendars", response=list[CalendarListOut])
-def list_calendars(request):
+def list_calendars(request: AuthedRequest) -> list[dict[str, Any]]:
     return sidebar_calendars_of(request.user)
 
 
@@ -117,7 +118,7 @@ def list_calendars(request):
 
 
 @router.get("/calendars/public", response=list[PublicCalendarOut])
-def public_calendars(request):
+def public_calendars(request: AuthedRequest) -> list[dict[str, Any]]:
     """Public calendars the user doesn't have through a direct membership or a group anyway."""
     user = request.user
     sources = dict(CalendarMember.objects.filter(user=user).values_list("calendar_id", "source"))
@@ -143,7 +144,7 @@ def _public_calendar(calendar_id: str) -> Calendar:
 
 
 @router.put("/calendars/{calendar_id}/subscription", response=OkOut)
-def add_public_calendar(request, calendar_id: str):
+def add_public_calendar(request: AuthedRequest, calendar_id: str) -> dict[str, bool]:
     """Adds a public calendar to the sidebar, at its end; its public role applies (see get_membership)."""
     calendar = _public_calendar(calendar_id)
     if not CalendarMember.objects.filter(calendar=calendar, user=request.user).exists():
@@ -158,7 +159,7 @@ def add_public_calendar(request, calendar_id: str):
 
 
 @router.delete("/calendars/{calendar_id}/subscription", response=OkOut)
-def remove_public_calendar(request, calendar_id: str):
+def remove_public_calendar(request: AuthedRequest, calendar_id: str) -> dict[str, bool]:
     """Takes a public calendar the user added out of the sidebar again."""
     # Deleting a queryset still sends post_delete, which updates the user's other tabs.
     CalendarMember.objects.filter(calendar_id=calendar_id, user=request.user, source=MembershipSource.PUBLIC).delete()
@@ -166,7 +167,7 @@ def remove_public_calendar(request, calendar_id: str):
 
 
 @router.post("/calendars", response=CalendarOut)
-def create_calendar(request, payload: CalendarCreate):
+def create_calendar(request: AuthedRequest, payload: CalendarCreate) -> Calendar:
     return create_calendar_for(
         request.user,
         name=payload.name,
@@ -181,7 +182,7 @@ def create_calendar(request, payload: CalendarCreate):
 
 
 @router.get("/calendars/{calendar_id}", response=CalendarOut)
-def get_calendar(request, calendar_id: str):
+def get_calendar(request: AuthedRequest, calendar_id: str) -> CalendarOut:
     calendar, membership = get_member_calendar(calendar_id, request.user)
     out = CalendarOut.model_validate(calendar)
     out.my_membership = CalendarMemberOut.model_validate(_serialize_membership(membership))
@@ -189,7 +190,7 @@ def get_calendar(request, calendar_id: str):
 
 
 @router.patch("/calendars/{calendar_id}", response=CalendarOut)
-def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
+def update_calendar(request: AuthedRequest, calendar_id: str, payload: CalendarUpdate) -> CalendarOut:
     calendar, membership = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can update its details"
     )
@@ -220,7 +221,7 @@ def update_calendar(request, calendar_id: str, payload: CalendarUpdate):
 
 
 @router.delete("/calendars/{calendar_id}", response=OkOut)
-def delete_calendar(request, calendar_id: str):
+def delete_calendar(request: AuthedRequest, calendar_id: str) -> dict[str, bool]:
     calendar, _ = get_member_calendar(calendar_id, request.user, Role.OWNER, "Only the owner can delete this calendar")
     calendar.delete()
     return {"ok": True}
@@ -232,7 +233,7 @@ def delete_calendar(request, calendar_id: str):
 
 
 @router.get("/calendars/{calendar_id}/members", response=list[CalendarMemberOut])
-def list_members(request, calendar_id: str):
+def list_members(request: AuthedRequest, calendar_id: str) -> list[dict[str, Any]]:
     calendar, _ = get_member_calendar(calendar_id, request.user)
     # Granted ones: memberships from a group show under the group, added public calendars nowhere.
     members = CalendarMember.objects.filter(calendar=calendar, source=MembershipSource.DIRECT).select_related("user")
@@ -240,7 +241,7 @@ def list_members(request, calendar_id: str):
 
 
 @router.post("/calendars/{calendar_id}/members", response=CalendarMemberOut)
-def add_member(request, calendar_id: str, payload: CalendarMemberCreate):
+def add_member(request: AuthedRequest, calendar_id: str, payload: CalendarMemberCreate) -> dict[str, Any]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can add members"
     )
@@ -274,7 +275,9 @@ def add_member(request, calendar_id: str, payload: CalendarMemberCreate):
 
 
 @router.patch("/calendars/{calendar_id}/members/{user_id}", response=CalendarMemberOut)
-def update_member(request, calendar_id: str, user_id: str, payload: CalendarMemberUpdate):
+def update_member(
+    request: AuthedRequest, calendar_id: str, user_id: str, payload: CalendarMemberUpdate
+) -> dict[str, Any]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can change member roles"
     )
@@ -307,7 +310,7 @@ def update_member(request, calendar_id: str, user_id: str, payload: CalendarMemb
 
 
 @router.delete("/calendars/{calendar_id}/members/{user_id}", response=OkOut)
-def remove_member(request, calendar_id: str, user_id: str):
+def remove_member(request: AuthedRequest, calendar_id: str, user_id: str) -> dict[str, bool]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can remove members"
     )
@@ -340,7 +343,7 @@ def remove_member(request, calendar_id: str, user_id: str):
 
 
 @router.get("/calendars/{calendar_id}/feed-url", response=FeedUrlOut)
-def get_feed_url(request, calendar_id: str):
+def get_feed_url(request: AuthedRequest, calendar_id: str) -> dict[str, str]:
     calendar, _ = get_member_calendar(calendar_id, request.user)
     feed, _ = FeedToken.objects.get_or_create(
         calendar=calendar, user=request.user, defaults={"token": secrets.token_urlsafe(32)}
@@ -349,7 +352,7 @@ def get_feed_url(request, calendar_id: str):
 
 
 @router.post("/calendars/{calendar_id}/feed-token/rotate", response=FeedTokenRotateOut)
-def rotate_feed_token(request, calendar_id: str):
+def rotate_feed_token(request: AuthedRequest, calendar_id: str) -> dict[str, str]:
     """A new feed URL for the user, e.g. after they shared theirs by mistake."""
     calendar, _ = get_member_calendar(calendar_id, request.user)
     feed, _ = FeedToken.objects.update_or_create(
@@ -363,7 +366,7 @@ def rotate_feed_token(request, calendar_id: str):
 # ---------------------------------------------------------------------------
 
 
-def _calendar_to_manage_approvers(user, calendar_id: str) -> Calendar:
+def _calendar_to_manage_approvers(user: User, calendar_id: str) -> Calendar:
     calendar, _ = get_member_calendar(
         calendar_id, user, Role.MANAGE, "Only who manages the calendar can manage approvers"
     )
@@ -371,14 +374,14 @@ def _calendar_to_manage_approvers(user, calendar_id: str) -> Calendar:
 
 
 @router.get("/calendars/{calendar_id}/approvers", response=list[ApproverOut])
-def list_calendar_approvers(request, calendar_id: str):
+def list_calendar_approvers(request: AuthedRequest, calendar_id: str) -> list[ApproverOut]:
     calendar = _calendar_to_manage_approvers(request.user, calendar_id)
     return approvers_of(CalendarApprover, calendar=calendar)
 
 
 @router.put("/calendars/{calendar_id}/approvers", response=list[ApproverOut])
 @transaction.atomic
-def set_calendar_approvers(request, calendar_id: str, payload: ApproversIn):
+def set_calendar_approvers(request: AuthedRequest, calendar_id: str, payload: ApproversIn) -> list[ApproverOut]:
     """Sets the default approvers, who decide on resources that have none of their own."""
     calendar = _calendar_to_manage_approvers(request.user, calendar_id)
     replace_approvers(CalendarApprover, "calendar", calendar, calendar.id, payload.user_ids)
@@ -390,7 +393,7 @@ def set_calendar_approvers(request, calendar_id: str, payload: ApproversIn):
 # ---------------------------------------------------------------------------
 
 
-def _serialize_group_link(link: CalendarGroup) -> dict:
+def _serialize_group_link(link: CalendarGroup) -> dict[str, Any]:
     return {
         "id": link.id,
         "group": {"id": link.group.id, "name": link.group.name},
@@ -404,7 +407,7 @@ def _serialize_group_link(link: CalendarGroup) -> dict:
 
 
 @router.get("/calendars/{calendar_id}/groups", response=list[CalendarGroupLinkOut])
-def list_calendar_groups(request, calendar_id: str):
+def list_calendar_groups(request: AuthedRequest, calendar_id: str) -> list[dict[str, Any]]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage group links"
     )
@@ -413,7 +416,7 @@ def list_calendar_groups(request, calendar_id: str):
 
 
 @router.post("/calendars/{calendar_id}/groups", response=CalendarGroupLinkOut)
-def add_calendar_group(request, calendar_id: str, payload: CalendarGroupLinkCreate):
+def add_calendar_group(request: AuthedRequest, calendar_id: str, payload: CalendarGroupLinkCreate) -> dict[str, Any]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage group links"
     )
@@ -425,7 +428,9 @@ def add_calendar_group(request, calendar_id: str, payload: CalendarGroupLinkCrea
 
 
 @router.patch("/calendars/{calendar_id}/groups/{link_id}", response=CalendarGroupLinkOut)
-def update_calendar_group(request, calendar_id: str, link_id: str, payload: CalendarGroupLinkUpdate):
+def update_calendar_group(
+    request: AuthedRequest, calendar_id: str, link_id: str, payload: CalendarGroupLinkUpdate
+) -> dict[str, Any]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage group links"
     )
@@ -437,7 +442,7 @@ def update_calendar_group(request, calendar_id: str, link_id: str, payload: Cale
 
 
 @router.delete("/calendars/{calendar_id}/groups/{link_id}", response=OkOut)
-def delete_calendar_group(request, calendar_id: str, link_id: str):
+def delete_calendar_group(request: AuthedRequest, calendar_id: str, link_id: str) -> dict[str, bool]:
     calendar, _ = get_member_calendar(
         calendar_id, request.user, Role.MANAGE, "Only who manages the calendar can manage group links"
     )

@@ -8,11 +8,13 @@ The user's layout: their folders, and where their calendars sit among them (the 
     PATCH  /layout/items            place several folders and calendars at once (drag and drop)
 """
 
+from typing import Any
+
 from django.db import transaction
 from ninja import Router
 from ninja.errors import HttpError
 
-from core.models import CalendarMember, Folder, as_uuid
+from core.models import CalendarMember, Folder, User, as_uuid
 from core.realtime import broadcast
 from core.schemas import (
     FolderCreate,
@@ -23,11 +25,12 @@ from core.schemas import (
     OkOut,
 )
 from core.views.calendars import sidebar_calendars_of
+from core.views.common import AuthedRequest
 
 router = Router()
 
 
-def _folder_parents(user) -> dict[str, str | None]:
+def _folder_parents(user: User) -> dict[str, str | None]:
     """Each of the user's folders' parent, by id; ids as strings, as requests name them."""
     rows = Folder.objects.filter(user=user).values_list("id", "parent_id")
     return {str(id): str(parent) if parent else None for id, parent in rows}
@@ -51,13 +54,13 @@ def _has_cycle(parents: dict[str, str | None]) -> bool:
 
 
 @router.get("/layout", response=LayoutOut)
-def get_layout(request):
+def get_layout(request: AuthedRequest) -> dict[str, Any]:
     folders = Folder.objects.filter(user=request.user).order_by("position", "name")
     return {"folders": list(folders), "calendars": sidebar_calendars_of(request.user)}
 
 
 @router.post("/layout/folders", response=FolderOut)
-def create_folder(request, payload: FolderCreate):
+def create_folder(request: AuthedRequest, payload: FolderCreate) -> Folder:
     _require_own_folder(_folder_parents(request.user), payload.parent_id)
     return Folder.objects.create(
         user=request.user, name=payload.name, parent_id=payload.parent_id, position=payload.position
@@ -65,7 +68,7 @@ def create_folder(request, payload: FolderCreate):
 
 
 @router.patch("/layout/folders/{folder_id}", response=FolderOut)
-def update_folder(request, folder_id: str, payload: FolderUpdate):
+def update_folder(request: AuthedRequest, folder_id: str, payload: FolderUpdate) -> Folder:
     folder = Folder.objects.get(id=folder_id, user=request.user)
     data = payload.dict(exclude_unset=True)
     if "parent_id" in data:
@@ -81,14 +84,14 @@ def update_folder(request, folder_id: str, payload: FolderUpdate):
 
 
 @router.delete("/layout/folders/{folder_id}", response=OkOut)
-def delete_folder(request, folder_id: str):
+def delete_folder(request: AuthedRequest, folder_id: str) -> dict[str, bool]:
     Folder.objects.filter(id=folder_id, user=request.user).delete()
     return {"ok": True}
 
 
 @router.patch("/layout/items", response=OkOut)
 @transaction.atomic
-def update_layout_items(request, payload: LayoutItemsUpdate):
+def update_layout_items(request: AuthedRequest, payload: LayoutItemsUpdate) -> dict[str, bool]:
     """Sets parent folder and position of folders and calendars; ones that are gone meanwhile are skipped."""
     user = request.user
     parents = _folder_parents(user)

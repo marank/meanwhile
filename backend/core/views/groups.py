@@ -2,39 +2,42 @@
 User group endpoints.
 """
 
-from django.db.models import Count
+from typing import Any
+
+from django.db.models import Count, QuerySet
 from ninja import Router
 
 from core.models import User, UserGroup
+from core.models.base import AnyId
 from core.schemas import GroupCreate, GroupDetailOut, GroupMemberOut, GroupOut, GroupUpdate, OkOut
-from core.views.common import require_admin
+from core.views.common import AuthedRequest, require_admin
 
 router = Router()
 
 
 @router.get("/groups", response=list[GroupOut])
-def list_groups(request):
+def list_groups(request: AuthedRequest) -> QuerySet[UserGroup]:
     groups = UserGroup.objects.annotate(member_count=Count("user_set")).order_by("name")
     return groups
 
 
-def _set_members(group: UserGroup, member_ids: list[str]):
+def _set_members(group: UserGroup, member_ids: list[str]) -> None:
     group.user_set.set(User.objects.filter(id__in=member_ids))
 
 
-def _with_member_count(group_id) -> UserGroup:
+def _with_member_count(group_id: AnyId) -> UserGroup:
     return UserGroup.objects.annotate(member_count=Count("user_set")).get(id=group_id)
 
 
 @router.post("/groups", response=GroupOut)
-def create_group(request, payload: GroupCreate):
+def create_group(request: AuthedRequest, payload: GroupCreate) -> UserGroup:
     require_admin(request)
     group = UserGroup.objects.create(name=payload.name, description=payload.description)
     _set_members(group, payload.member_ids)
     return _with_member_count(group.id)
 
 
-def _group_detail(group_id) -> dict:
+def _group_detail(group_id: AnyId) -> dict[str, Any]:
     group = _with_member_count(group_id)
     return {
         "id": group.id,
@@ -46,12 +49,12 @@ def _group_detail(group_id) -> dict:
 
 
 @router.get("/groups/{group_id}", response=GroupDetailOut)
-def get_group(request, group_id: str):
+def get_group(request: AuthedRequest, group_id: str) -> dict[str, Any]:
     return _group_detail(group_id)
 
 
 @router.patch("/groups/{group_id}", response=GroupOut)
-def update_group(request, group_id: str, payload: GroupUpdate):
+def update_group(request: AuthedRequest, group_id: str, payload: GroupUpdate) -> UserGroup:
     require_admin(request)
     group = UserGroup.objects.get(id=group_id)
     data = payload.dict(exclude_unset=True)
@@ -65,14 +68,14 @@ def update_group(request, group_id: str, payload: GroupUpdate):
 
 
 @router.delete("/groups/{group_id}", response=OkOut)
-def delete_group(request, group_id: str):
+def delete_group(request: AuthedRequest, group_id: str) -> dict[str, bool]:
     require_admin(request)
     UserGroup.objects.filter(id=group_id).delete()
     return {"ok": True}
 
 
 @router.post("/groups/{group_id}/members/{user_id}", response=GroupDetailOut)
-def add_member(request, group_id: str, user_id: str):
+def add_member(request: AuthedRequest, group_id: str, user_id: str) -> dict[str, Any]:
     require_admin(request)
     group = UserGroup.objects.get(id=group_id)
     user = User.objects.get(id=user_id)
@@ -81,7 +84,7 @@ def add_member(request, group_id: str, user_id: str):
 
 
 @router.delete("/groups/{group_id}/members/{user_id}", response=GroupDetailOut)
-def remove_member(request, group_id: str, user_id: str):
+def remove_member(request: AuthedRequest, group_id: str, user_id: str) -> dict[str, Any]:
     require_admin(request)
     group = UserGroup.objects.get(id=group_id)
     user = User.objects.get(id=user_id)
