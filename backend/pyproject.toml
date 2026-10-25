@@ -96,7 +96,6 @@ module = [
     "core.management.*",
     "core.models.*",
     "core.realtime.*",
-    "core.schemas.*",
     "core.tests.*",
     "core.views.*",
 ]

@@ -3,7 +3,7 @@ Notifications.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from core.models.base import EventStatus, ParticipantStatus
 from core.schemas.common import Id, Schema
@@ -30,7 +30,7 @@ class NotificationOut(Schema):
     calendar_id: Id | None
     event_id: Id | None
     title: str
-    data: dict | None
+    data: dict[str, Any] | None
     read_at: datetime | None
     created_at: datetime
     # Current status of the linked event and, for invitations, the user's own answer.

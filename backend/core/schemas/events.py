@@ -3,7 +3,7 @@ Events, their participants, occurrences, comments, activity and approvals.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from ninja import Field
 from pydantic import model_validator
@@ -193,7 +193,7 @@ class ActivityOut(Schema):
     actor_id: Id | None
     actor_name: str | None
     action: str
-    details: dict | None
+    details: dict[str, Any] | None
     created_at: datetime
 
 
@@ -217,4 +217,4 @@ class ApprovalOut(EventOut):
 
 class BookingConflict(Schema):
     message: str = "Resource booking conflict"
-    conflicts: list[dict]
+    conflicts: list[dict[str, Any]]

@@ -2,6 +2,8 @@
 Week layouts, which fall back to the app's defaults, and the overview's settings.
 """
 
+from typing import Any, cast
+
 from ninja import Field
 
 from core.models.users import get_or_create_app_settings
@@ -17,23 +19,23 @@ class WeekLayoutOut(Schema):
     show_week_numbers: bool
 
     @staticmethod
-    def resolve_first_weekday(obj, context):
-        return _layout_value(obj, "first_weekday", context)
+    def resolve_first_weekday(obj: object, context: dict[str, Any] | None) -> int:
+        return cast(int, _layout_value(obj, "first_weekday", context))
 
     @staticmethod
-    def resolve_show_weekends(obj, context):
-        return _layout_value(obj, "show_weekends", context)
+    def resolve_show_weekends(obj: object, context: dict[str, Any] | None) -> bool:
+        return cast(bool, _layout_value(obj, "show_weekends", context))
 
     @staticmethod
-    def resolve_weekend_days(obj, context):
-        return _layout_value(obj, "weekend_days", context)
+    def resolve_weekend_days(obj: object, context: dict[str, Any] | None) -> list[int]:
+        return cast(list[int], _layout_value(obj, "weekend_days", context))
 
     @staticmethod
-    def resolve_show_week_numbers(obj, context):
-        return _layout_value(obj, "show_week_numbers", context)
+    def resolve_show_week_numbers(obj: object, context: dict[str, Any] | None) -> bool:
+        return cast(bool, _layout_value(obj, "show_week_numbers", context))
 
 
-def _layout_value(obj, field: str, context):
+def _layout_value(obj: object, field: str, context: dict[str, Any] | None) -> Any:
     value = obj[field] if isinstance(obj, dict) else getattr(obj, field)
     if value is not None:
         return value

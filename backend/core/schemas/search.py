@@ -2,6 +2,8 @@
 Search results.
 """
 
+from typing import Any
+
 from core.schemas.common import Id, Schema
 
 
@@ -10,4 +12,4 @@ class SearchResult(Schema):
     type: str
     label: str
     subtitle: str | None = None
-    meta: dict | None = None
+    meta: dict[str, Any] | None = None

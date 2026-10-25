@@ -8,6 +8,7 @@ from typing import Annotated
 from ninja import Field
 from pydantic import model_validator
 
+from core.models.resources import Resource
 from core.schemas.common import Color, Id, Schema, Text
 
 
@@ -70,10 +71,10 @@ class ResourceOut(Schema):
     updated_at: datetime
 
     @staticmethod
-    def resolve_approvers(obj):
+    def resolve_approvers(obj: Resource) -> list[ApproverOut]:
         # The related ResourceApprover rows only carry the user, not its email or name.
         return [
-            ApproverOut(user_id=a.user_id, email=a.user.email, display_name=a.user.display_name)
+            ApproverOut(user_id=str(a.user_id), email=a.user.email, display_name=a.user.display_name)
             for a in obj.approvers.all()
         ]
 

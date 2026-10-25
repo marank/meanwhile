@@ -7,6 +7,7 @@ from typing import Literal
 
 from ninja import Field
 
+from core.models.users import User
 from core.schemas.common import DateFormat, Id, Schema, TimeFormat, TimeZoneName
 from core.services.notifications import email_preferences
 
@@ -54,7 +55,7 @@ class ProfileOut(UserOut):
     email_notifications: EmailNotifications
 
     @staticmethod
-    def resolve_email_notifications(obj):
+    def resolve_email_notifications(obj: User) -> dict[str, bool]:
         # What the user chose, completed with the defaults of the kinds they never chose.
         return email_preferences(obj)
 
