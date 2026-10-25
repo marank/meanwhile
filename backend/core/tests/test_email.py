@@ -777,3 +777,17 @@ def test_role_changes_come_by_email_only_when_chosen_and_for_more_rights(world: 
     assert "Your role: Can create and edit all events, and change settings and access" in message.body
     # In the app, every change is shown.
     assert Notification.objects.filter(user=other, type="member_role_changed").count() == 3
+
+
+def test_invitations_show_their_html_while_carrying_the_invitation(world: World) -> None:
+    event = create(world)
+    invite(world, event)
+    [message] = to(GUEST)
+    raw = message.message()
+    [alternative] = [part for part in raw.walk() if part.get_content_type() == "multipart/alternative"]
+    # Mail programs show the last alternative they can: the email itself, not the calendar data
+    # (which Apple Mail and Thunderbird can show too); the invitation is still among them.
+    parts = [part.get_content_type() for part in alternative.iter_parts()]
+    assert parts == ["text/plain", "text/calendar", "multipart/related"]
+    attached = [part for part in raw.iter_attachments() if part.get_filename() == "invite.ics"]
+    assert len(attached) == 1

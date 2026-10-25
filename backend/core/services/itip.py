@@ -237,6 +237,9 @@ def _message(
     )
     # Inline for mail programs that show invitations, and as file for those that don't.
     message.attach_alternative(ical_text, f"text/calendar; method={method}")
+    # Before the HTML, though: mail programs show the last alternative they can, and those that read
+    # invitations (Apple Mail, Thunderbird) would show the calendar data instead of the email.
+    message.alternatives.insert(0, message.alternatives.pop())
     message.attach("invite.ics", ical_text, f"text/calendar; method={method}")
     return message
 
