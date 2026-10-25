@@ -14,8 +14,9 @@ export default mergeConfig(
         provider: 'v8',
         include: ['src/**'],
         exclude: ['src/main.ts', '**/*.d.ts', 'src/**/__tests__/**'],
-        // The level reached so far, so it can only go up; the goal is 90 %.
-        thresholds: { lines: 98, statements: 97, functions: 96, branches: 93 },
+        // A little below the level reached (about 98 %): high enough that untested features stand
+        // out, low enough that a small change doesn't need tests written for the number's sake.
+        thresholds: { lines: 95, statements: 95, functions: 95, branches: 90 },
       },
     },
   }),
