@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ChevronDown, ChevronRight, Folder as FolderIcon } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Folder as FolderIcon } from '@lucide/vue'
 import type { CalendarListItem, Folder } from '@/api'
 import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import { useCalendarStore } from '@/stores/calendars'

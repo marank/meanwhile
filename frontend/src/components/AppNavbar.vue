@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, EllipsisVertical, Menu, Moon, Sun } from 'lucide-vue-next'
+import { Bell, EllipsisVertical, Menu, Moon, Sun } from '@lucide/vue'
 import AppLogo from '@/components/AppLogo.vue'
 import IconButton from '@/components/IconButton.vue'
 import type { AppNotification } from '@/api'

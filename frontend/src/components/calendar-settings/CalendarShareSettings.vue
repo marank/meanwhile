@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Check, Copy, RotateCw, X } from 'lucide-vue-next'
+import { Check, Copy, RotateCw, X } from '@lucide/vue'
 import * as api from '@/api'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import { useAction } from '@/composables/useAction'

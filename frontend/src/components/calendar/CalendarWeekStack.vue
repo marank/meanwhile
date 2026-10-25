@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MapPin } from 'lucide-vue-next'
+import { MapPin } from '@lucide/vue'
 import type { Occurrence } from '@/api'
 import { dayKey, groupByDay, isPast, type AgendaEntry } from '@/services/agenda'
 import { formatTime } from '@/services/datetime'

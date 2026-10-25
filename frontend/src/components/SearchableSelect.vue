@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, X } from 'lucide-vue-next'
+import { ChevronDown, X } from '@lucide/vue'
 import * as api from '@/api'
 import OptionMark from '@/components/OptionMark.vue'
 import { optionMark } from '@/services/optionMark'

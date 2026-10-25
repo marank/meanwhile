@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CalendarX, Clock, MapPin, Plus, Repeat, Search, X } from 'lucide-vue-next'
+import { CalendarX, Clock, MapPin, Plus, Repeat, Search, X } from '@lucide/vue'
 import type { Occurrence } from '@/api'
 import { dayKey, groupByDay, isPast, matchesSearch, type AgendaDay, type AgendaEntry } from '@/services/agenda'
 import { formatTime, monthName } from '@/services/datetime'

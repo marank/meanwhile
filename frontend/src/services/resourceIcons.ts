@@ -74,7 +74,7 @@ import {
   Flag,
   Globe,
   Rocket,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 
 /** The icons a resource can have, by the name stored with it (the lucide name in kebab case). */
 const RESOURCE_ICONS: Record<string, Component> = {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Search } from 'lucide-vue-next'
+import { Search } from '@lucide/vue'
 import * as api from '@/api'
 import AppModal from '@/components/AppModal.vue'
 import { useAction } from '@/composables/useAction'

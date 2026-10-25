@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T extends string | number | boolean | null">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId } from 'vue'
-import { Check, ChevronDown } from 'lucide-vue-next'
+import { Check, ChevronDown } from '@lucide/vue'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
 
 export interface SelectOption<V> {

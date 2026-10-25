@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, CircleCheck, CircleX, X } from 'lucide-vue-next'
+import { Bell, CircleCheck, CircleX, X } from '@lucide/vue'
 import { dismissToast, toasts, type ToastTone } from '@/services/toast'
 
 const toneClasses: Record<ToastTone, string> = {

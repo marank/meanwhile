@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Eye, EyeOff, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
+import { Eye, EyeOff, KeyRound, Pencil, Plus, Trash2, X } from '@lucide/vue'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import AppModal from '@/components/AppModal.vue'

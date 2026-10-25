@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pencil, Plus, Trash2, X } from 'lucide-vue-next'
+import { Pencil, Plus, Trash2, X } from '@lucide/vue'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'

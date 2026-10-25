@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ChevronRight, Trash2, Users } from 'lucide-vue-next'
+import { ChevronRight, Trash2, Users } from '@lucide/vue'
 import * as api from '@/api'
 import AccessGrantSearch, { type AccessGrantTarget } from '@/components/AccessGrantSearch.vue'
 import IconButton from '@/components/IconButton.vue'

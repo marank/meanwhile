@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bell, Calendar, Check, Mail, X } from 'lucide-vue-next'
+import { Bell, Calendar, Check, Mail, X } from '@lucide/vue'
 import EventModal from '@/components/event/EventModal.vue'
 import IconButton from '@/components/IconButton.vue'
 import TabBar from '@/components/TabBar.vue'

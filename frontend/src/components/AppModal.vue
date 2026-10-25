@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X } from 'lucide-vue-next'
+import { X } from '@lucide/vue'
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
 import { useScrollFade } from '@/composables/useScrollFade'

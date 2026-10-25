@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Ban } from 'lucide-vue-next'
+import { Ban } from '@lucide/vue'
 import ResourceIcon from '@/components/ResourceIcon.vue'
 import { RESOURCE_ICON_NAMES } from '@/services/resourceIcons'
 

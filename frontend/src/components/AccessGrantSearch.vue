@@ -10,7 +10,7 @@ export interface AccessGrantTarget {
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Search, User, Users } from 'lucide-vue-next'
+import { Search, User, Users } from '@lucide/vue'
 import * as api from '@/api'
 
 const props = defineProps<{

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { CalendarDays, EllipsisVertical } from 'lucide-vue-next'
+import { CalendarDays, EllipsisVertical } from '@lucide/vue'
 import FolderTreeItem from './FolderTreeItem.vue'
 import SidebarCalendarItem from './SidebarCalendarItem.vue'
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'

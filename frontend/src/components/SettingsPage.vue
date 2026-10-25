@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends string">
-import { ChevronLeft } from 'lucide-vue-next'
+import { ChevronLeft } from '@lucide/vue'
 import IconButton from '@/components/IconButton.vue'
 import TabBar from '@/components/TabBar.vue'
 
