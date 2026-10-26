@@ -196,7 +196,7 @@ onMounted(async () => {
     size="2xl"
     fullscreen-on-phone
     :dismissible="false"
-    :title="eventId ? $t('app.edit') : $t('app.add')"
+    :title="eventId ? $t('event.edit') : $t('event.add')"
     @close="emit('cancel')"
   >
     <template v-if="bookingStatus" #header>

@@ -348,6 +348,8 @@ const de: MessageSchema = {
     passwordChangeFailed: 'Das Passwort konnte nicht geändert werden.',
   },
   event: {
+    add: 'Termin hinzufügen',
+    edit: 'Termin bearbeiten',
     location: 'Veranstaltungsort',
     locationPlaceholder: 'Raum wählen oder Ort eingeben',
     endBeforeStart: 'Das Ende darf nicht vor dem Beginn liegen.',

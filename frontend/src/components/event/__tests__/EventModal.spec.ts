@@ -127,7 +127,7 @@ describe('EventModal', () => {
     it('starts at the time picked in the calendar and lasts an hour', async () => {
       serve()
       await openNew()
-      expect(page().get('h3').text()).toBe('Add')
+      expect(page().get('h3').text()).toBe('Add event')
       expect(tabs()).toEqual(['Details', 'Recurrence', 'Reminders', 'Participants', 'Availability'])
       expect((field('Start').element as HTMLInputElement).value).toBe('2026-03-10')
       expect((timeField('Start').element as HTMLInputElement).value).toBe('09:00')
@@ -445,7 +445,7 @@ describe('EventModal', () => {
       )
       await openExisting()
       const start = new Date('2026-03-10T09:00:00.000Z')
-      expect(page().get('h3').text()).toBe('Edit')
+      expect(page().get('h3').text()).toBe('Edit event')
       expect(tabs()).toContain('Activity')
       expect((field('Title').element as HTMLInputElement).value).toBe('Planning')
       expect((field('Description').element as HTMLTextAreaElement).value).toBe('Agenda')

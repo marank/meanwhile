@@ -340,6 +340,8 @@ const en = {
     passwordChangeFailed: 'Could not change the password.',
   },
   event: {
+    add: 'Add event',
+    edit: 'Edit event',
     location: 'Location',
     locationPlaceholder: 'Pick a room or enter a place',
     endBeforeStart: 'The end must not be before the start.',
