@@ -29,10 +29,14 @@ const rects = new Map<string, DOMRect>([
 ])
 
 const Host = defineComponent({
-  props: { onDrop: { type: Function, required: true } },
+  props: { onDrop: { type: Function, required: true }, onHold: { type: Function, required: true } },
   setup(props) {
     const container = ref<HTMLElement | null>(null)
-    useSidebarDrag(container, (drop) => props.onDrop(drop))
+    useSidebarDrag(
+      container,
+      (drop) => props.onDrop(drop),
+      (item, x, y) => props.onHold(item, x, y),
+    )
     const calendarRow = (id: string) =>
       h('div', { class: 'sidebar-item', 'data-type': 'calendar', 'data-id': id, 'data-rect': id }, [
         h('span', { class: 'label' }, id),
@@ -53,10 +57,12 @@ const Host = defineComponent({
 })
 
 let onDrop: ReturnType<typeof vi.fn<(drop: SidebarDrop) => void>>
+let onHold: ReturnType<typeof vi.fn>
 
 function render() {
   onDrop = vi.fn<(drop: SidebarDrop) => void>()
-  return mount(Host, { props: { onDrop }, attachTo: document.body })
+  onHold = vi.fn()
+  return mount(Host, { props: { onDrop, onHold }, attachTo: document.body })
 }
 
 function pointer(type: string, x: number, y: number, init: PointerEventInit = {}) {
@@ -281,6 +287,43 @@ describe('dragging in the sidebar tree', () => {
     move(10, 60, { pointerType: 'touch' })
     release(10, 60, { pointerType: 'touch' })
     expect(onDrop).toHaveBeenCalledWith({ type: 'calendar', id: 'a', parentId: null, anchor: { after: 'b' } })
+  })
+
+  it('hands over a row held and let go without moving, for its menu, and swallows the click after it', () => {
+    const wrapper = render()
+    const row = el(wrapper, 'a')
+    press(row, 10, 10, { pointerType: 'touch' })
+    vi.advanceTimersByTime(350)
+    // Lifted, as for a drag; a finger wobbles a little.
+    expect(draggingId.value).toBe('a')
+    move(13, 12, { pointerType: 'touch' })
+    release(13, 12, { pointerType: 'touch' })
+    expect(onHold).toHaveBeenCalledWith({ type: 'calendar', id: 'a' }, 13, 12)
+    expect(onDrop).not.toHaveBeenCalled()
+    expect(draggingId.value).toBeNull()
+
+    const click = vi.fn()
+    row.addEventListener('click', click)
+    row.click()
+    expect(click).not.toHaveBeenCalled()
+  })
+
+  it('drags a held row once it moves, without handing it over', () => {
+    const wrapper = render()
+    press(el(wrapper, 'a'), 10, 10, { pointerType: 'touch' })
+    vi.advanceTimersByTime(350)
+    move(10, 60, { pointerType: 'touch' })
+    move(10, 12, { pointerType: 'touch' })
+    release(10, 12, { pointerType: 'touch' })
+    expect(onHold).not.toHaveBeenCalled()
+  })
+
+  it('hands over nothing for a mouse, which has a right click', () => {
+    const wrapper = render()
+    press(el(wrapper, 'a'), 10, 10)
+    vi.advanceTimersByTime(1000)
+    release(10, 10)
+    expect(onHold).not.toHaveBeenCalled()
   })
 
   it('lets a touch that moves before the long press scroll the list', () => {

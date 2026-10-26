@@ -37,7 +37,7 @@ const isResizing = ref(false)
 const scroller = ref<HTMLElement | null>(null)
 
 useLoader(store.load)
-useSidebarDrag(scroller, handleDrop)
+useSidebarDrag(scroller, handleDrop, openHeldMenu)
 useEscapeToClose(
   () => sidebarDrawerOpen.value,
   () => (sidebarDrawerOpen.value = false),
@@ -109,6 +109,14 @@ function rootMenuItems(): MenuItem[] {
     { label: t('app.createFolder'), action: () => createFolder(null) },
     { label: t('app.publicCalendars'), action: () => (showPublicCalendars.value = true) },
   ]
+}
+
+/** On touch screens a row's menu opens by holding the row (useSidebarDrag), at the finger. */
+function openHeldMenu(held: { type: 'folder' | 'calendar'; id: string }, x: number, y: number) {
+  const folder = held.type === 'folder' ? store.folders.find((f) => f.id === held.id) : undefined
+  const item = held.type === 'calendar' ? store.items.find((i) => i.calendar.id === held.id) : undefined
+  const items = folder ? folderMenuItems(folder) : item ? calendarMenuItems(item) : []
+  if (items.length) contextMenu.value = { x, y, items }
 }
 
 /** The menu of the button next to "New calendar", opening upwards from it. */

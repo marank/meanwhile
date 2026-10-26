@@ -180,6 +180,33 @@ describe('CalendarSidebar', () => {
     expect(router.currentRoute.value.fullPath).toBe('/calendar/mine/settings')
   })
 
+  it('opens the menu of a row held on a touch screen, without opening the row', async () => {
+    const wrapper = await render()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const before = router.currentRoute.value.fullPath
+    const touch = (type: string, target: EventTarget) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          isPrimary: true,
+          pointerId: 1,
+          pointerType: 'touch',
+          clientX: 40,
+          clientY: 50,
+        }),
+      )
+    touch('pointerdown', row(wrapper, 'mine').element)
+    vi.advanceTimersByTime(400)
+    touch('pointerup', document)
+    await row(wrapper, 'mine').trigger('click')
+    vi.useRealTimers()
+    await flushPromises()
+
+    expect(menuEntries(wrapper)).toEqual(['Rename', 'Delete', 'Settings'])
+    expect(wrapper.get<HTMLElement>('[role="menu"]').element.style.left).toBe('40px')
+    expect(router.currentRoute.value.fullPath).toBe(before)
+  })
+
   it('lets managers change a calendar but not delete it, and gives others no menu', async () => {
     const wrapper = await render()
     await row(wrapper, 'managed').trigger('contextmenu', { clientX: 1, clientY: 1 })

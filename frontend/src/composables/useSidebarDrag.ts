@@ -170,9 +170,15 @@ export function findHit(container: HTMLElement, point: { x: number; y: number },
 
 /**
  * Makes the rows of the sidebar tree in `container` draggable (the scrolling element that holds
- * the tree); `onDrop` gets the move when an item is released on a valid target.
+ * the tree); `onDrop` gets the move when an item is released on a valid target. On touch screens a
+ * long press lifts the row; let go there without moving, `onHold` gets it (to open its menu, as iOS
+ * has no right click and no context menu event), moved on, it is dragged.
  */
-export function useSidebarDrag(container: Ref<HTMLElement | null>, onDrop: (drop: SidebarDrop) => void) {
+export function useSidebarDrag(
+  container: Ref<HTMLElement | null>,
+  onDrop: (drop: SidebarDrop) => void,
+  onHold?: (item: { type: NodeType; id: string }, x: number, y: number) => void,
+) {
   interface Press {
     dragged: Dragged
     pointerId: number
@@ -183,6 +189,8 @@ export function useSidebarDrag(container: Ref<HTMLElement | null>, onDrop: (drop
     offsetY: number
     rect: DOMRect
     timer?: ReturnType<typeof setTimeout>
+    /** Whether the pointer moved away since the press, beyond what a finger wobbles. */
+    moved: boolean
   }
 
   let press: Press | null = null
@@ -214,6 +222,7 @@ export function useSidebarDrag(container: Ref<HTMLElement | null>, onDrop: (drop
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
       rect,
+      moved: false,
     }
     point = { x: event.clientX, y: event.clientY }
     document.addEventListener('pointermove', onPointerMove)
@@ -226,8 +235,9 @@ export function useSidebarDrag(container: Ref<HTMLElement | null>, onDrop: (drop
     // Only the pointer that started the drag counts; another finger or device is ignored.
     if (!press || event.pointerId !== press.pointerId) return
     point = { x: event.clientX, y: event.clientY }
+    const moved = Math.hypot(point.x - press.startX, point.y - press.startY)
+    if (moved > 8) press.moved = true
     if (!active && press) {
-      const moved = Math.hypot(point.x - press.startX, point.y - press.startY)
       if (press.pointerType === 'touch') {
         // Moving before the long press means scrolling.
         if (moved > 8) reset()
@@ -245,13 +255,15 @@ export function useSidebarDrag(container: Ref<HTMLElement | null>, onDrop: (drop
   function onPointerUp(event: PointerEvent) {
     if (!press || event.pointerId !== press.pointerId) return
     if (!active) return reset()
+    const held = press.pointerType === 'touch' && !press.moved ? press.dragged : null
     const drop = hit?.drop
     reset()
-    // The click that follows a drag must not open the row.
+    // The click that follows a drag or a long press must not open the row.
     const swallow = (event: Event) => event.stopPropagation()
     document.addEventListener('click', swallow, { capture: true, once: true })
     setTimeout(() => document.removeEventListener('click', swallow, true), 0)
-    if (drop) onDrop(drop)
+    if (held) onHold?.({ type: held.type, id: held.id }, event.clientX, event.clientY)
+    else if (drop) onDrop(drop)
   }
 
   function onPointerCancel(event?: Event) {
