@@ -106,7 +106,7 @@ function trapFocus(event: KeyboardEvent) {
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm sm:p-4 dark:bg-black/80"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 p-2 pt-[max(0.5rem,var(--safe-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:p-4 sm:pt-[max(1rem,var(--safe-top))] sm:pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-black/80"
       :class="[
         alwaysOnTop ? 'z-[60]' : 'z-50',
         { 'app-modal-fullscreen max-sm:top-[var(--navbar-height,0px)] max-sm:p-0': fullscreenOnPhone },
@@ -115,7 +115,7 @@ function trapFocus(event: KeyboardEvent) {
     >
       <div
         ref="panel"
-        class="flex max-h-[calc(100dvh-1rem)] w-full outline-none flex-col sm:max-h-[90vh] overflow-hidden rounded-xl border border-transparent bg-surface shadow-2xl dark:border-zinc-600 dark:shadow-black/75"
+        class="flex max-h-full w-full outline-none flex-col sm:max-h-[90vh] overflow-hidden rounded-xl border border-transparent bg-surface shadow-2xl dark:border-zinc-600 dark:shadow-black/75"
         :class="[
           { md: 'max-w-md', xl: 'max-w-xl', '2xl': 'max-w-3xl' }[size],
           {
@@ -163,7 +163,7 @@ function trapFocus(event: KeyboardEvent) {
         <div
           v-if="$slots.footer"
           class="border-t border-line bg-surface-muted px-4 py-3 sm:px-6 sm:py-4"
-          :class="{ 'max-sm:py-2': fullscreenOnPhone }"
+          :class="{ 'max-sm:py-2 max-sm:pb-[max(0.5rem,env(safe-area-inset-bottom))]': fullscreenOnPhone }"
         >
           <slot name="footer" />
         </div>

@@ -30,11 +30,18 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <!-- Added to the home screen, iOS runs the app edge to edge (viewport-fit=cover): keep clear of the
+       status bar, the notch, the rounded corners and the home indicator. -->
+  <div
+    class="flex h-full flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+    :class="{ 'pt-[var(--safe-top)]': !auth.isLoggedIn }"
+  >
     <AppNavbar v-if="auth.isLoggedIn" />
     <div class="relative flex flex-1 overflow-hidden">
       <CalendarSidebar v-if="auth.isLoggedIn" />
-      <main class="min-w-0 flex-1 overflow-auto bg-surface-muted p-1 sm:p-4">
+      <main
+        class="min-w-0 flex-1 overflow-auto bg-surface-muted p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
         <router-view />
       </main>
     </div>

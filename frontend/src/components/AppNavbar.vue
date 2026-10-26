@@ -102,7 +102,7 @@ async function logout() {
 <template>
   <header
     ref="header"
-    class="app-navbar flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2 shadow-sm sm:px-6 sm:py-3"
+    class="app-navbar flex items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2 shadow-sm pt-[calc(0.5rem+var(--safe-top))] sm:px-6 sm:py-3 sm:pt-[calc(0.75rem+var(--safe-top))]"
   >
     <div class="flex min-w-0 items-center gap-2 sm:gap-3">
       <IconButton
@@ -136,7 +136,7 @@ async function logout() {
         </span>
         <div
           v-if="notificationsOpen"
-          class="fixed inset-x-2 top-14 z-50 rounded-lg border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-10 sm:w-80"
+          class="fixed inset-x-2 top-[calc(var(--navbar-height,3.25rem)+0.25rem)] z-50 rounded-lg border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-10 sm:w-80"
         >
           <div class="flex items-center justify-between border-b border-line px-4 py-2">
             <span class="text-sm font-semibold text-gray-800">{{ $t('notifications.title') }}</span>

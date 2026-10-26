@@ -58,7 +58,7 @@ services:
 
   # Catches every email the backend sends (SMTP on 1025) and shows it at http://localhost:8025.
   mailpit:
-    image: axllent/mailpit:v1.31
+    image: axllent/mailpit:v1.32@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"

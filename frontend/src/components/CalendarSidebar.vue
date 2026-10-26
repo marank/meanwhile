@@ -284,7 +284,7 @@ function startResize(event: MouseEvent) {
 
     <PublicCalendarsDialog v-if="showPublicCalendars" @close="showPublicCalendars = false" />
 
-    <div class="flex items-center gap-2 border-t border-line p-3">
+    <div class="flex items-center gap-2 border-t border-line p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <button
         type="button"
         class="min-w-0 flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700"

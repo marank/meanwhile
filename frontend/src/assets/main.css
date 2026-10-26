@@ -33,9 +33,25 @@
   --color-line: var(--app-border);
 }
 
+/*
+ * How far the app's top content stays from the top edge. Added to the home screen, iOS (26 and later)
+ * blurs the top ~25px of the app below its status bar; no CSS turns that off. There the navbar's
+ * background runs through that band and its content starts below it. -webkit-touch-callout: iOS only.
+ */
+:root {
+  --safe-top: env(safe-area-inset-top);
+}
+
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) {
+    :root {
+      --safe-top: calc(env(safe-area-inset-top) + 1.5rem);
+    }
+  }
+}
+
 /* Light mode uses soft zinc grays instead of pure white to reduce glare. */
 :root {
-  --app-bg: #ebebed;
   --app-surface: #f6f6f7;
   --app-surface-muted: #ededef;
   --app-hover: #e4e4e7;
@@ -47,7 +63,6 @@
 }
 
 .dark {
-  --app-bg: #09090b;
   --app-surface: #18181b;
   --app-surface-muted: #27272a;
   --app-hover: #3f3f46;
@@ -77,8 +92,20 @@
     overflow: hidden;
   }
 
+  /*
+   * The page itself never scrolls; only areas inside the app do. Without this, iOS drags the whole page
+   * when a swipe reaches it, e.g. one over a dialog with nothing to scroll.
+   */
+  html {
+    overscroll-behavior: none;
+  }
+
+  /*
+   * The page behind the app shows only in the status bar of the home-screen app on iOS, which takes
+   * its color. So it takes the navbar's color.
+   */
   body {
-    background: var(--app-bg);
+    background: var(--app-surface);
     color: var(--app-text);
     transition:
       background-color 150ms ease,

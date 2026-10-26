@@ -11,7 +11,7 @@ const toneClasses: Record<ToastTone, string> = {
 
 <template>
   <div
-    class="pointer-events-none fixed inset-x-4 top-4 z-[100] flex flex-col items-end gap-2 sm:left-auto sm:w-96"
+    class="pointer-events-none fixed inset-x-4 top-[max(1rem,var(--safe-top))] z-[100] flex flex-col items-end gap-2 sm:left-auto sm:w-96"
     aria-live="polite"
   >
     <TransitionGroup name="toast">
