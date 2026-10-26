@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { BACK_SWIPE_EDGE } from './useBackSwipe'
 
 /** How far (px) a finger moves before the swipe decides between sideways (tabs) and up and down (scroll). */
 const DECIDE_AFTER = 10
@@ -14,8 +15,6 @@ interface Options<T extends string> {
   tabs: () => readonly T[]
   active: () => T | undefined
   select: (id: T) => void
-  /** Phones only; elsewhere tabs switch at once. */
-  enabled: () => boolean
   /** Off for reduced motion: tabs switch at once, swiping still works. */
   animate: () => boolean
   width: () => number
@@ -122,7 +121,7 @@ export function useTabSwipe<T extends string>(options: Options<T>) {
     if (active === target.value) return
     stopAnimation()
     settle()
-    if (!options.enabled() || active === undefined || base.value === undefined || active === base.value) {
+    if (active === undefined || base.value === undefined || active === base.value) {
       base.value = active
       return
     }
@@ -138,8 +137,10 @@ export function useTabSwipe<T extends string>(options: Options<T>) {
   let pointerId: number | null = null
 
   function onPointerDown(event: PointerEvent) {
-    if (event.pointerType !== 'touch' || !options.enabled() || options.tabs().length < 2) return
+    if (event.pointerType !== 'touch' || options.tabs().length < 2) return
     if (moving.value || base.value === undefined) return
+    // From the very edge, a swipe goes back instead (useBackSwipe).
+    if (event.clientX <= BACK_SWIPE_EDGE) return
     pointerId = event.pointerId
     decided = null
     start = { x: event.clientX, y: event.clientY }

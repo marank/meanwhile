@@ -188,6 +188,70 @@ input[aria-invalid='true']:focus {
   box-shadow: 0 0 0 1px var(--color-red-600);
 }
 
+/*
+ * Page transitions (App.vue, usePageTransition). On phones a page opened from the calendar slides in
+ * over it from the right while the calendar moves a little to the left and darkens ("push"); going back
+ * does the reverse ("pop"), as the swipe back does (useBackSwipe). Pages on the same layer cross-fade.
+ * On larger screens a page fades in, rising a little ("rise"). The pages get the area's background, so
+ * the one below doesn't show through.
+ */
+.page-push-enter-active,
+.page-push-leave-active,
+.page-pop-enter-active,
+.page-pop-leave-active {
+  background: var(--app-surface-muted);
+  transition:
+    translate 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.page-push-enter-active,
+.page-pop-leave-active {
+  position: relative;
+  z-index: 1;
+  box-shadow: -0.5rem 0 1.5rem rgb(0 0 0 / 0.2);
+}
+
+.page-push-enter-from,
+.page-pop-leave-to {
+  translate: 100% 0;
+}
+
+.page-push-leave-to,
+.page-pop-enter-from {
+  translate: -25% 0;
+  filter: brightness(0.85);
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 150ms ease;
+}
+
+.page-fade-enter-from,
+.page-fade-leave-to {
+  opacity: 0;
+}
+
+.page-rise-enter-active {
+  transition:
+    opacity 200ms ease-out,
+    translate 200ms ease-out;
+}
+
+.page-rise-leave-active {
+  transition: opacity 120ms ease-in;
+}
+
+.page-rise-enter-from {
+  opacity: 0;
+  translate: 0 0.5rem;
+}
+
+.page-rise-leave-to {
+  opacity: 0;
+}
+
 /* A dialog shown as a page on phones leaves the navbar usable, its menus included. */
 @media (width < 40rem) {
   body:has(.app-modal-fullscreen) .app-navbar {

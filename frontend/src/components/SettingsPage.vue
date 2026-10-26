@@ -31,16 +31,16 @@ const TabContent = defineComponent({
       slots.default?.(),
 })
 
-const isPhone = useMediaQuery('(width < 40rem)')
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+const isPhone = useMediaQuery('(width < 40rem)')
 const viewport = ref<HTMLElement | null>(null)
 
-// On phones, swiping sideways moves between the tabs.
+// Tabs move when they change (on phones they slide, from sm up their cards fade); on touch screens,
+// swiping sideways moves between them.
 const swipe = useTabSwipe({
   tabs: () => props.tabs?.map((tab) => tab.id) ?? [],
   active: () => props.activeTab,
   select: (id) => emit('selectTab', id),
-  enabled: () => isPhone.value,
   animate: () => !reducedMotion.value,
   width: () => viewport.value?.clientWidth ?? 0,
 })
@@ -98,7 +98,7 @@ watch(swipe.moving, (moving) => {
   if (scroller && swipe.panes.value[0]?.id !== shownBefore) scrollUp(scroller, lowered.value)
   lowered.value = 0
 })
-// Without sliding (larger screens, reduced motion) the new tab is just scrolled to.
+// Without sliding (reduced motion) the new tab is just scrolled to.
 watch(
   () => props.activeTab,
   () => {
@@ -109,21 +109,27 @@ watch(
   { flush: 'post' },
 )
 
+/**
+ * Where a tab is while tabs change, from how far it is shifted aside (in widths). On phones it slides that
+ * far. From sm up, where the tabs are cards, the leaving card fades out in the first half, nudged a little
+ * aside, and the coming one fades in in the second half from the side it lies on.
+ */
 function paneStyle(id: T) {
   const x = shift(id)
   if (!x) return undefined
-  const incoming = swipe.panes.value[1]?.id === id
-  return { translate: `${x * 100}% ${incoming ? lowered.value : 0}px` }
+  const y = swipe.panes.value[1]?.id === id ? lowered.value : 0
+  if (isPhone.value) return { translate: `${x * 100}% ${y}px` }
+  return { translate: `${x * 2}rem ${y}px`, opacity: Math.max(0, 1 - 2 * Math.abs(x)) }
 }
 </script>
 
 <template>
-  <!-- On phones the tabs and panels reach both edges of the screen, and the panels' color runs from the
-       tabs down to the bottom (the negative margins undo the padding of App.vue's <main>); only the
-       heading keeps a margin. -->
   <div
     class="settings-page -mx-1 flex w-[calc(100%+0.5rem)] max-w-5xl flex-col pt-4 sm:mx-auto sm:w-full sm:p-6 max-sm:-mb-[max(0.25rem,env(safe-area-inset-bottom))] max-sm:min-h-[calc(100%+max(0.25rem,env(safe-area-inset-bottom)))]"
   >
+    <!-- On phones the tabs and panels reach both edges of the screen, and the panels' color runs from the
+         tabs down to the bottom (the negative margins undo the padding of App.vue's <main>); only the
+         heading keeps a margin. One element at the top, so App.vue's page transitions can move it. -->
     <header class="mb-2 flex items-center gap-3 px-4 sm:px-0">
       <IconButton bordered :label="$t('app.back')" @click="emit('back')">
         <ChevronLeft :size="20" :stroke-width="2.25" />
@@ -137,7 +143,7 @@ function paneStyle(id: T) {
       ref="tabBar"
       :tabs="tabs"
       :active="activeTab"
-      :position="isPhone ? swipe.position.value : undefined"
+      :position="swipe.position.value"
       :label="$t('app.settingsTabs')"
       class="sticky -top-1 z-10 bg-surface-muted px-1 sm:-top-4 sm:mb-4 sm:px-0"
       @select="emit('selectTab', $event)"

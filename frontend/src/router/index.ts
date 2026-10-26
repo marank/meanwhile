@@ -9,6 +9,11 @@ declare module 'vue-router' {
     anyone?: boolean
     /** Only for administrators. */
     admin?: boolean
+    /**
+     * How deep in the app the page is: the calendar 0, pages opened from it (settings, notifications) 1.
+     * On phones a deeper page slides in over the one below (App.vue). Pages without one change at once.
+     */
+    layer?: number
   }
 }
 
@@ -73,34 +78,39 @@ const router = createRouter({
       name: 'calendar',
       component: () => import('@/views/CalendarView.vue'),
       props: true,
+      meta: { layer: 0 },
     },
     {
       path: '/calendar/:calendarId/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
       props: true,
+      meta: { layer: 1 },
     },
     {
       path: '/calendar/folder/:folderId',
       name: 'folder',
       component: () => import('@/views/CalendarView.vue'),
       props: true,
+      meta: { layer: 0 },
     },
     {
       path: '/notifications',
       name: 'notifications',
       component: () => import('@/views/NotificationsView.vue'),
+      meta: { layer: 1 },
     },
     {
       path: '/account',
       name: 'account',
       component: () => import('@/views/AccountView.vue'),
+      meta: { layer: 1 },
     },
     {
       path: '/admin',
       name: 'admin',
       component: () => import('@/views/AdminView.vue'),
-      meta: { admin: true },
+      meta: { admin: true, layer: 1 },
     },
   ],
 })

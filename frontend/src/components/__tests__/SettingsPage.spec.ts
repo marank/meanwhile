@@ -203,7 +203,7 @@ describe('SettingsPage', () => {
   })
 
   it('starts a tab chosen further down at its top, right below the bar', async () => {
-    media.set(PHONE, false)
+    media.set(REDUCED_MOTION, true)
     const { wrapper, scroller } = openScrolled(500)
     await wrapper.findAll('[role="tab"]')[1]!.trigger('click')
     // 200px down the page, less the bar.
@@ -213,7 +213,7 @@ describe('SettingsPage', () => {
   })
 
   it('leaves the scrolling alone while the content is still in view below the bar', async () => {
-    media.set(PHONE, false)
+    media.set(REDUCED_MOTION, true)
     const { wrapper, scroller } = openScrolled(100)
     await wrapper.findAll('[role="tab"]')[1]!.trigger('click')
     expect(scroller.scrollTop).toBe(100)
@@ -246,16 +246,22 @@ describe('SettingsPage', () => {
     wrapper.unmount()
   })
 
-  it('switches at once from tablets up, without swiping or a sliding underline', async () => {
+  it('fades the cards on larger screens, the underline sliding as on phones', async () => {
     media.set(PHONE, false)
     const wrapper = open()
-    expect(wrapper.find('[data-underline]').exists()).toBe(false)
-    await wrapper.findAll('[role="tab"]')[1]!.trigger('click')
-    expect(shown(wrapper)).toEqual(['content two'])
-
-    swipe(wrapper, 250, [230, 50]).release()
+    // The underline is placed once the tabs are there to measure.
     await wrapper.vm.$nextTick()
-    expect(selected(wrapper)).toBe('Two')
+    expect(wrapper.find('[data-underline]').exists()).toBe(true)
+    await wrapper.findAll('[role="tab"]')[1]!.trigger('click')
+    vi.advanceTimersByTime(100)
+    await wrapper.vm.$nextTick()
+    expect(shown(wrapper)).toEqual(['content one', 'content two'])
+    const panes = wrapper.findAll('[data-tab-panels] .grid > div')
+    // Nudged aside by a little, not by their whole width.
+    expect(panes[0]!.attributes('style')).toMatch(/translate: -?[\d.]+rem 0px; opacity: [\d.]+/)
+    vi.advanceTimersByTime(500)
+    await wrapper.vm.$nextTick()
+    expect(shown(wrapper)).toEqual(['content two'])
     wrapper.unmount()
   })
 })

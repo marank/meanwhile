@@ -1,14 +1,36 @@
 <script setup lang="ts">
-import { onMounted, watchEffect } from 'vue'
+import { computed, onMounted, ref, watchEffect } from 'vue'
+import { useRoute } from 'vue-router'
 import AppNavbar from './components/AppNavbar.vue'
 import CalendarSidebar from './components/CalendarSidebar.vue'
 import DialogHost from './components/DialogHost.vue'
 import ToastHost from './components/ToastHost.vue'
+import { useBackSwipe } from './composables/useBackSwipe'
+import { useMediaQuery } from './composables/useMediaQuery'
+import { usePageTransition } from './composables/usePageTransition'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
+const route = useRoute()
+
+// Pages slide, fade or rise when they change (usePageTransition); in the home-screen app on phones, a
+// swipe from the left edge goes back (useBackSwipe).
+const main = ref<HTMLElement | null>(null)
+const isPhone = useMediaQuery('(width < 40rem)')
+const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+const homeScreenApp = useMediaQuery('(display-mode: standalone)')
+const backSwipe = useBackSwipe({ scroller: main, enabled: () => isPhone.value && homeScreenApp.value })
+const transition = usePageTransition({
+  scroller: main,
+  isPhone: () => isPhone.value,
+  reducedMotion: () => reducedMotion.value,
+  swiping: () => backSwipe.swiping.value,
+})
+// While pages move sideways, the one off to the side mustn't make the area scroll sideways.
+const pagesMoving = ref(0)
+const canSwipeBack = computed(() => isPhone.value && homeScreenApp.value && (route.meta.layer ?? 0) > 0)
 
 onMounted(settings.load)
 
@@ -40,9 +62,26 @@ watchEffect(() => {
     <div class="relative flex flex-1 overflow-hidden">
       <CalendarSidebar v-if="auth.isLoggedIn" />
       <main
-        class="min-w-0 flex-1 overflow-auto bg-surface-muted p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))]"
+        ref="main"
+        class="relative min-w-0 flex-1 overflow-auto bg-surface-muted p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))]"
+        :class="{ 'overflow-x-hidden': pagesMoving > 0, 'touch-pan-y': canSwipeBack }"
+        v-on="backSwipe.handlers"
       >
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <Transition
+            :name="`page-${transition.name.value}`"
+            :css="transition.name.value !== 'none'"
+            @before-enter="pagesMoving++"
+            @after-enter="pagesMoving--"
+            @enter-cancelled="pagesMoving--"
+            @before-leave="transition.beforeLeave"
+            @after-leave="transition.afterLeave"
+          >
+            <KeepAlive :include="backSwipe.kept.value">
+              <component :is="Component" />
+            </KeepAlive>
+          </Transition>
+        </router-view>
       </main>
     </div>
     <DialogHost />
