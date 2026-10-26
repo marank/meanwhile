@@ -18,9 +18,12 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <!-- On phones the tabs and panels reach both edges of the screen (the negative margin undoes the
-       p-1 of App.vue's <main>); only the heading keeps a margin. -->
-  <div class="-mx-1 w-[calc(100%+0.5rem)] max-w-5xl py-4 sm:mx-auto sm:w-full sm:p-6">
+  <!-- On phones the tabs and panels reach both edges of the screen, and the panels' color runs from the
+       tabs down to the bottom (the negative margins undo the padding of App.vue's <main>); only the
+       heading keeps a margin. -->
+  <div
+    class="settings-page -mx-1 flex w-[calc(100%+0.5rem)] max-w-5xl flex-col pt-4 sm:mx-auto sm:w-full sm:p-6 max-sm:-mb-[max(0.25rem,env(safe-area-inset-bottom))] max-sm:min-h-[calc(100%+max(0.25rem,env(safe-area-inset-bottom)))]"
+  >
     <header class="mb-2 flex items-center gap-3 px-4 sm:px-0">
       <IconButton bordered :label="$t('app.back')" @click="emit('back')">
         <ChevronLeft :size="20" :stroke-width="2.25" />
@@ -33,12 +36,14 @@ const emit = defineEmits<{
       :tabs="tabs"
       :active="activeTab"
       :label="$t('app.settingsTabs')"
-      class="mb-4 px-1 sm:px-0"
+      class="px-1 sm:mb-4 sm:px-0"
       @select="emit('selectTab', $event)"
     />
 
-    <div v-else class="mb-4"></div>
+    <div v-else class="max-sm:border-b max-sm:border-line sm:mb-4"></div>
 
-    <slot />
+    <div class="flex-1 max-sm:bg-surface max-sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <slot />
+    </div>
   </div>
 </template>

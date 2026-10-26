@@ -15,8 +15,8 @@ withDefaults(
 </script>
 
 <template>
-  <!-- Edge to edge on phones (SettingsPage leaves no margin there), a card from sm up. -->
-  <section class="overflow-hidden border-y border-line bg-surface sm:rounded-xl sm:border-x">
+  <!-- On phones part of the page's area below the tabs (SettingsPage), a card from sm up. -->
+  <section class="overflow-hidden bg-surface sm:rounded-xl sm:border sm:border-line">
     <header
       class="flex flex-col items-start gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6"
     >

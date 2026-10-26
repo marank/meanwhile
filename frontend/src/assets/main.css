@@ -197,6 +197,16 @@ input[aria-invalid='true']:focus {
 }
 
 /*
+ * Settings pages on phones: when iOS bounces past their end, the area below the tabs goes on in its
+ * color (and above them in the page's). <main>'s background stays put while its content scrolls.
+ */
+@media (width < 40rem) {
+  main:has(> .settings-page) {
+    background: linear-gradient(var(--app-surface-muted) 50%, var(--app-surface) 50%);
+  }
+}
+
+/*
  * Phones: fields a little denser and all equally tall (38px), small selects (AppSelect) included. Their
  * text stays at least 16px, since iOS zooms into fields with smaller text when they get focus.
  * Unlayered, so this wins over the utilities.
