@@ -28,19 +28,30 @@ const calendarStore = useCalendarStore()
 const eventStore = useEventStore()
 const overviewStore = useOverviewStore()
 
-// The URL decides what is shown: /calendar, /calendar/<id-or-readable-path> or /calendar/folder/<id>.
-const selection = computed(() => props.folderId ?? props.calendarId ?? ALL_CALENDARS)
+// The URL decides what is shown: /calendar/all, /calendar/<id-or-readable-path> or /calendar/folder/<id>.
+// /calendar alone (opening the app) shows what was shown last, or else the first calendar; null meanwhile.
+const selection = computed(() => props.folderId ?? props.calendarId ?? null)
 watch(
   () => [selection.value, calendarStore.loaded] as const,
-  ([id]) => calendarStore.select(id),
+  ([id, loaded]) => {
+    if (id !== null) calendarStore.select(id)
+    else if (loaded) {
+      const start = calendarStore.startSelection()
+      calendarStore.select(start)
+      router.replace({ path: calendarStore.selectionPath(start), query: route.query })
+    }
+  },
   { immediate: true },
 )
 
-// A deleted or no longer shared calendar or folder in the URL falls back to all calendars.
+// A deleted or no longer shared calendar or folder in the URL falls back to the start; what is shown is
+// remembered for the next time.
 watch(
   () => [selection.value, calendarStore.loaded, calendarStore.selectedCalendar, calendarStore.selectedFolder] as const,
   ([id, loaded, calendar, folder]) => {
-    if (loaded && id !== ALL_CALENDARS && !calendar && !folder) router.replace('/calendar')
+    if (!loaded || id === null) return
+    if (id === ALL_CALENDARS || calendar || folder) calendarStore.rememberSelection(calendarStore.selectedId)
+    else router.replace('/calendar')
   },
   { immediate: true },
 )

@@ -27,3 +27,4 @@ def test_calendar_url_path_must_be_unique_and_readable() -> None:
     assert api.patch(f"/calendars/{second['id']}", {"url_path": "team-calendar"}).status_code == 409
     assert api.patch(f"/calendars/{second['id']}", {"url_path": "Not readable"}).status_code == 422
     assert api.patch(f"/calendars/{second['id']}", {"url_path": "folder"}).status_code == 422
+    assert api.patch(f"/calendars/{second['id']}", {"url_path": "all"}).status_code == 422

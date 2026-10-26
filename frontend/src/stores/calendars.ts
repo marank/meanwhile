@@ -2,11 +2,14 @@ import { defineStore } from 'pinia'
 import { computed, onScopeDispose, ref } from 'vue'
 import * as api from '@/api'
 import { realtime } from '@/services/realtime'
+import { readStorage, writeStorage } from '@/services/storage'
 import { compareSiblings } from '@/services/sidebarDrag'
 import { hasRole } from '@/services/roles'
 
 /** Selection of the calendar view: a calendar id, a folder id, or 'all'. It follows the URL. */
 export const ALL_CALENDARS = 'all'
+/** What was shown last, to show again when the app is opened at /calendar. */
+const LAST_SELECTION_KEY = 'calendar-selection'
 
 export const useCalendarStore = defineStore('calendars', () => {
   const items = ref<api.CalendarListItem[]>([])
@@ -112,9 +115,36 @@ export const useCalendarStore = defineStore('calendars', () => {
       idOrPath
   }
 
+  /** Whether `id` is something the calendar view can show: all calendars, or one of the user's calendars or folders. */
+  function canSelect(id: string | null): id is string {
+    return id === ALL_CALENDARS || calendarsById.value.has(id ?? '') || folders.value.some((f) => f.id === id)
+  }
+
+  /** The first calendar in the sidebar's order, folders' calendars where their folder is. */
+  function firstCalendarId(parentId: string | null = null): string | null {
+    for (const child of childrenOf(parentId)) {
+      const found = child.type === 'calendar' ? child.id : firstCalendarId(child.id)
+      if (found) return found
+    }
+    return null
+  }
+
+  /**
+   * What /calendar opens: what was shown last (on this device), or else the first calendar in the sidebar,
+   * or all calendars when there are none.
+   */
+  function startSelection(): string {
+    const last = readStorage(LAST_SELECTION_KEY)
+    return canSelect(last) ? last : (firstCalendarId() ?? ALL_CALENDARS)
+  }
+
+  function rememberSelection(id: string) {
+    writeStorage(LAST_SELECTION_KEY, id)
+  }
+
   /** The URL that shows a calendar, a folder, or all calendars. */
   function selectionPath(id: string): string {
-    if (id === ALL_CALENDARS) return '/calendar'
+    if (id === ALL_CALENDARS) return '/calendar/all'
     if (folders.value.some((f) => f.id === id)) return `/calendar/folder/${id}`
     const calendar = calendarsById.value.get(id)
     return `/calendar/${calendar?.url_path || id}`
@@ -235,6 +265,9 @@ export const useCalendarStore = defineStore('calendars', () => {
     calendarsIn,
     descendantFolderIds,
     select,
+    canSelect,
+    startSelection,
+    rememberSelection,
     selectionPath,
     load,
     reset,

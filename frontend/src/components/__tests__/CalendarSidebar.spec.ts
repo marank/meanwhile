@@ -116,7 +116,7 @@ describe('CalendarSidebar', () => {
         key: 'Enter',
       })
     await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/calendar')
+    expect(router.currentRoute.value.fullPath).toBe('/calendar/all')
   })
 
   it('creates a calendar and opens it', async () => {

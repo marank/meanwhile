@@ -73,7 +73,7 @@ describe('calendar store', () => {
     const store = useCalendarStore()
     store.folders = [folder('f')]
     store.items = [calendarItem('c'), calendarItem('readable-id', null, 'team-calendar')]
-    expect(store.selectionPath(ALL_CALENDARS)).toBe('/calendar')
+    expect(store.selectionPath(ALL_CALENDARS)).toBe('/calendar/all')
     expect(store.selectionPath('f')).toBe('/calendar/folder/f')
     expect(store.selectionPath('c')).toBe('/calendar/c')
     expect(store.selectionPath('readable-id')).toBe('/calendar/team-calendar')

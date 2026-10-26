@@ -165,7 +165,7 @@ describe('CalendarView', () => {
 
   describe('what the URL selects', () => {
     it('shows the events of all calendars for the month on screen', async () => {
-      const wrapper = await open('/calendar')
+      const wrapper = await open('/calendar/all')
       expect(backend.calls('GET /api/users/me/settings')).toHaveLength(1)
       // The grid of October 2026, Monday to Sunday once the overview's first weekday is known.
       expect(eventRequests().at(-1)).toEqual({
@@ -197,16 +197,48 @@ describe('CalendarView', () => {
       expect(fullCalendar.options!.hiddenDays).toEqual([])
     })
 
-    it('falls back to all calendars for a calendar that is gone', async () => {
+    it('falls back to the first calendar for a calendar that is gone', async () => {
       await open('/calendar/gone', { loadLayout: false })
       expect(router.currentRoute.value.fullPath).toBe('/calendar/gone')
       await useCalendarStore().load()
       await flushPromises()
-      expect(router.currentRoute.value.fullPath).toBe('/calendar')
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/c2')
+    })
+
+    it('opens the first calendar of the sidebar when opened without one, inside a folder too', async () => {
+      // The folder comes first in the sidebar, with Club in it; Work follows.
+      await open('/calendar?view=week')
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/c2?view=week')
+      expect(eventRequests().map((request) => request.ids)).toEqual([['c2']])
+    })
+
+    it('opens what was shown last, all calendars included', async () => {
+      await open('/calendar/folder/f1')
+      await router.push('/calendar')
+      await flushPromises()
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/folder/f1')
+
+      await router.push('/calendar/all')
+      await flushPromises()
+      await router.push('/calendar')
+      await flushPromises()
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/all')
+    })
+
+    it('opens the first calendar when the one shown last is gone', async () => {
+      localStorage.setItem('calendar-selection', 'gone')
+      await open('/calendar')
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/c2')
+    })
+
+    it('opens all calendars when there are none', async () => {
+      backend.on('GET /api/layout', () => ({ folders: [], calendars: [] }))
+      await open('/calendar')
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/all')
     })
 
     it('loads the events of the new selection when another calendar is chosen', async () => {
-      await open('/calendar')
+      await open('/calendar/all')
       const before = eventRequests().length
       await router.push('/calendar/work')
       await flushPromises()
@@ -219,7 +251,7 @@ describe('CalendarView', () => {
 
     it('uses the app defaults until the overview settings have come', async () => {
       backend.on('GET /api/users/me/settings', reply(500))
-      await open('/calendar')
+      await open('/calendar/all')
       expect(fullCalendar.options!.firstDay).toBe(0)
     })
   })
@@ -242,7 +274,7 @@ describe('CalendarView', () => {
         occurrence({ event_id: 'd', title: 'Party', status: 'cancelled' }),
         allDay('2026-10-20', '2026-10-21', { event_id: 'e', title: 'Fair' }),
       ]
-      await open('/calendar')
+      await open('/calendar/all')
       expect(fcEvents().map((event) => event.title)).toEqual([
         'Yoga (3) · Hall · Mats',
         'Room (pending)',
@@ -261,7 +293,7 @@ describe('CalendarView', () => {
     it('shows all events in the overview color when the overview asks for it, and dark colors in the dark', async () => {
       backend.on('GET /api/users/me/settings', overviewSettings({ use_calendar_colors: false }))
       events = [occurrence()]
-      await open('/calendar')
+      await open('/calendar/all')
       expect(fcEvents()[0].color).toBe('#aa0000')
       useThemeStore().setPreference('dark')
       await nextTick()
@@ -278,7 +310,7 @@ describe('CalendarView', () => {
           location_resource_icon: 'door-open',
         }),
       ]
-      await open('/calendar')
+      await open('/calendar/all')
       const event = fcEvent()
       const { domNodes } = fullCalendar.options!.eventContent({
         event,
@@ -298,7 +330,7 @@ describe('CalendarView', () => {
 
     it('stacks the time above the title of a long event in the week', async () => {
       events = [occurrence({ category_color: '#ff0000', status: 'cancelled' })]
-      await open('/calendar')
+      await open('/calendar/all')
       const event = fcEvent()
       const { domNodes } = fullCalendar.options!.eventContent({
         event,
@@ -317,7 +349,7 @@ describe('CalendarView', () => {
 
     it('marks events over several days, and draws untimed ones without a time', async () => {
       events = [allDay('2026-10-20', '2026-10-22')]
-      await open('/calendar')
+      await open('/calendar/all')
       const event = { ...fcEvent(), end: new Date(2026, 9, 23) }
       const { domNodes } = fullCalendar.options!.eventContent({
         event,
@@ -330,7 +362,7 @@ describe('CalendarView', () => {
     })
 
     it('colors today and the weekend, and labels the current time', async () => {
-      await open('/calendar')
+      await open('/calendar/all')
       const { dayCellClass, dayLaneClass, nowIndicatorHeaderContent } = fullCalendar.options!
       expect(dayCellClass({ dow: 3, isToday: true })).toBe('calendar-default calendar-today')
       expect(dayCellClass({ dow: 6, isToday: false })).toBe('calendar-default calendar-weekend')
@@ -355,7 +387,7 @@ describe('CalendarView', () => {
       const series = occurrence({ event_id: 's1', series_id: 's1', recurrence_id: '20261014T080000Z' })
       const changed = occurrence({ event_id: 'x1', series_id: 's1', recurrence_id: '20261015T080000Z' })
       events = [series, changed]
-      const wrapper = await open('/calendar')
+      const wrapper = await open('/calendar/all')
       fullCalendar.options!.eventClick({ event: fcEvents()[0] })
       await flushPromises()
       expect(modal(wrapper).props('occurrence')).toEqual({
@@ -417,7 +449,7 @@ describe('CalendarView', () => {
     })
 
     it('adds nothing where no single calendar is shown or one may not add events', async () => {
-      const wrapper = await open('/calendar')
+      const wrapper = await open('/calendar/all')
       expect(fullCalendar.options!.selectable).toBe(false)
       fullCalendar.options!.dateClick({ date: new Date(2026, 9, 20) })
       await flushPromises()
@@ -435,7 +467,7 @@ describe('CalendarView', () => {
       const wrapper = await open('/calendar/work')
       fullCalendar.options!.dateClick({ date: new Date(2026, 9, 20) })
       await flushPromises()
-      await router.push('/calendar')
+      await router.push('/calendar/all')
       await flushPromises()
       expect(modal(wrapper).exists()).toBe(false)
 
@@ -444,7 +476,7 @@ describe('CalendarView', () => {
       await flushPromises()
       fullCalendar.options!.eventClick({ event: fcEvents()[0] })
       await flushPromises()
-      await router.push('/calendar')
+      await router.push('/calendar/all')
       await flushPromises()
       expect(modal(wrapper).exists()).toBe(true)
     })
@@ -553,7 +585,7 @@ describe('CalendarView', () => {
 
   describe('moving through the calendar', () => {
     it('steps through months with the toolbar and goes back to today', async () => {
-      const wrapper = await open('/calendar')
+      const wrapper = await open('/calendar/all')
       const today = wrapper.findAll('button').find((button) => button.text() === 'Today')!
       expect(today.attributes('disabled')).toBeDefined()
 
@@ -574,7 +606,7 @@ describe('CalendarView', () => {
     })
 
     it('switches to the week, opening it an hour before the current time', async () => {
-      const wrapper = await open('/calendar')
+      const wrapper = await open('/calendar/all')
       await clickText(wrapper, 'Week')
       expect(fullCalendar.view!.type).toBe('timeGridWeek')
       expect(lastRange()).toEqual([new Date(2026, 9, 12), new Date(2026, 9, 19)])
@@ -599,28 +631,28 @@ describe('CalendarView', () => {
     })
 
     it('opens on the month or week the URL names', async () => {
-      await open('/calendar?date=2026-12-15&view=week')
+      await open('/calendar/all?date=2026-12-15&view=week')
       expect(fullCalendar.view!.type).toBe('timeGridWeek')
       expect(fullCalendar.view!.currentStart).toEqual(new Date(2026, 11, 14))
     })
 
     it('follows links to other months and views while open', async () => {
-      await open('/calendar')
-      await router.push('/calendar?date=2027-02')
+      await open('/calendar/all')
+      await router.push('/calendar/all?date=2027-02')
       await flushPromises()
       expect(fullCalendar.view!.currentStart).toEqual(new Date(2027, 1, 1))
 
-      await router.push('/calendar?view=week&date=2027-02-10')
+      await router.push('/calendar/all?view=week&date=2027-02-10')
       await flushPromises()
       expect(fullCalendar.view).toMatchObject({ type: 'timeGridWeek', currentStart: new Date(2027, 1, 8) })
 
       // What is on screen already stays.
       const requests = eventRequests().length
-      await router.push('/calendar?view=week&date=2027-02-11')
+      await router.push('/calendar/all?view=week&date=2027-02-11')
       await flushPromises()
       expect(eventRequests()).toHaveLength(requests)
 
-      await router.push('/calendar?view=month')
+      await router.push('/calendar/all?view=month')
       await flushPromises()
       expect(fullCalendar.view!.type).toBe('dayGridMonth')
     })
@@ -632,7 +664,7 @@ describe('CalendarView', () => {
         occurrence({ event_id: 'a', title: 'Standup' }),
         occurrence({ event_id: 'b', title: 'Match', calendar_id: 'c2' }),
       ]
-      const wrapper = await open('/calendar?view=list')
+      const wrapper = await open('/calendar/all?view=list')
       expect(fullCalendar.mounts).toBe(0)
       expect(lastRange()).toEqual([new Date(2026, 9, 1), new Date(2026, 10, 1)])
       expect(wrapper.get('.toolbar-title').text()).toBe('October 2026')
@@ -647,7 +679,7 @@ describe('CalendarView', () => {
     })
 
     it('steps through months, and goes back to today', async () => {
-      const wrapper = await open('/calendar?view=list')
+      const wrapper = await open('/calendar/all?view=list')
       await click(wrapper, 'button[aria-label="Next"]')
       expect(lastRange()).toEqual([new Date(2026, 10, 1), new Date(2026, 11, 1)])
       await click(wrapper, 'button[aria-label="Previous"]')
@@ -676,7 +708,7 @@ describe('CalendarView', () => {
     })
 
     it('switches to the month or week the list showed', async () => {
-      const wrapper = await open('/calendar?view=list&date=2026-12')
+      const wrapper = await open('/calendar/all?view=list&date=2026-12')
       await clickText(wrapper, 'Month')
       expect(fullCalendar.mounts).toBe(1)
       expect(fullCalendar.view!.currentStart).toEqual(new Date(2026, 11, 1))
@@ -692,23 +724,23 @@ describe('CalendarView', () => {
     })
 
     it('follows links while the list is open', async () => {
-      const wrapper = await open('/calendar?view=list')
-      await router.push('/calendar?view=list&date=2027-03')
+      const wrapper = await open('/calendar/all?view=list')
+      await router.push('/calendar/all?view=list&date=2027-03')
       await flushPromises()
       expect(lastRange()).toEqual([new Date(2027, 2, 1), new Date(2027, 3, 1)])
 
-      await router.push('/calendar?view=week&date=2027-03-10')
+      await router.push('/calendar/all?view=week&date=2027-03-10')
       await flushPromises()
       expect(wrapper.find('.calendar-agenda').exists()).toBe(false)
       expect(fullCalendar.view).toMatchObject({ type: 'timeGridWeek', currentStart: new Date(2027, 2, 8) })
 
-      await router.push('/calendar?view=list')
+      await router.push('/calendar/all?view=list')
       await flushPromises()
       expect(wrapper.find('.calendar-agenda').exists()).toBe(true)
     })
 
     it('loads the month again when the selection changes', async () => {
-      await open('/calendar?view=list')
+      await open('/calendar/all?view=list')
       await router.push('/calendar/work?view=list')
       await flushPromises()
       expect(eventRequests().at(-1)).toEqual({
@@ -753,7 +785,7 @@ describe('CalendarView', () => {
     })
 
     it('stacks the week chosen on a phone, and leaves it for the month or the list', async () => {
-      const wrapper = await open('/calendar', { phone: true })
+      const wrapper = await open('/calendar/all', { phone: true })
       await clickText(wrapper, 'Week')
       expect(wrapper.find('.week-stack').exists()).toBe(true)
       await clickText(wrapper, 'List')
@@ -765,20 +797,20 @@ describe('CalendarView', () => {
     })
 
     it('follows links while the week is stacked', async () => {
-      const wrapper = await open('/calendar?view=week', { phone: true })
-      await router.push('/calendar?view=week&date=2026-11-04')
+      const wrapper = await open('/calendar/all?view=week', { phone: true })
+      await router.push('/calendar/all?view=week&date=2026-11-04')
       await flushPromises()
       expect(lastRange()).toEqual([new Date(2026, 10, 2), new Date(2026, 10, 9)])
-      await router.push('/calendar?view=list')
+      await router.push('/calendar/all?view=list')
       await flushPromises()
       expect(wrapper.find('.calendar-agenda').exists()).toBe(true)
-      await router.push('/calendar?view=week')
+      await router.push('/calendar/all?view=week')
       await flushPromises()
       expect(wrapper.find('.week-stack').exists()).toBe(true)
     })
 
     it('keeps the week when the screen crosses the phone breakpoint', async () => {
-      const wrapper = await open('/calendar?view=week')
+      const wrapper = await open('/calendar/all?view=week')
       expect(fullCalendar.view!.type).toBe('timeGridWeek')
       media.set(PHONE, true)
       await flushPromises()
@@ -796,7 +828,7 @@ describe('CalendarView', () => {
     })
 
     it('loads the week again when the selection changes', async () => {
-      await open('/calendar?view=week', { phone: true })
+      await open('/calendar/all?view=week', { phone: true })
       await router.push('/calendar/work?view=week')
       await flushPromises()
       expect(eventRequests().at(-1)).toEqual({

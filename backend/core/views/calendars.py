@@ -201,7 +201,8 @@ def update_calendar(request: AuthedRequest, calendar_id: str, payload: CalendarU
         data["weekend_days"] = sorted(set(data["weekend_days"]))
     if "url_path" in data and data["url_path"] is not None:
         url_path = data["url_path"]
-        if url_path == "folder":
+        # Taken by the app's own URLs: /calendar/folder/<id> and /calendar/all.
+        if url_path in {"folder", "all"}:
             raise HttpError(422, "This calendar URL is reserved")
         if Calendar.objects.exclude(id=calendar.id).filter(url_path=url_path).exists():
             raise HttpError(409, "This calendar URL is already in use")
