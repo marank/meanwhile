@@ -197,6 +197,69 @@ input[aria-invalid='true']:focus {
 }
 
 /*
+ * Tables on phones (class stacked-table): each row becomes a block instead of running off the side.
+ * Its cells stack in a middle column; a cell marked data-lead (e.g. a color) sits left of them, the
+ * actions cell (data-actions) right. data-label="…" puts the column's name before a cell's value,
+ * data-empty leaves a cell out. Unlayered, so it wins over the cells' padding utilities.
+ */
+@media (width < 40rem) {
+  .stacked-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .stacked-table tbody tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 0.625rem 1rem;
+  }
+
+  .stacked-table td {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+    min-width: 0;
+    padding: 0.125rem 0;
+    overflow-wrap: anywhere;
+  }
+
+  .stacked-table td[data-lead] {
+    grid-column: 1;
+    grid-row: 1 / span 9;
+    margin-right: 0.75rem;
+  }
+
+  .stacked-table td[data-actions] {
+    grid-column: 3;
+    grid-row: 1 / span 9;
+    margin-left: 0.5rem;
+  }
+
+  .stacked-table td[colspan] {
+    grid-column: 1 / -1;
+    display: block;
+    padding-block: 1.5rem;
+    text-align: center;
+  }
+
+  .stacked-table td[data-empty] {
+    display: none;
+  }
+
+  .stacked-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--app-text-muted);
+  }
+}
+
+/*
  * Settings pages on phones: when iOS bounces past their end, the area below the tabs goes on in its
  * color (and above them in the page's). <main>'s background stays put while its content scrolls.
  */

@@ -170,7 +170,7 @@ async function resetPassword(user: api.AdminUser) {
     </template>
 
     <div v-if="!form" class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table class="stacked-table w-full text-sm">
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
             <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
@@ -210,7 +210,7 @@ async function resetPassword(user: api.AdminUser) {
                 {{ user.is_active ? $t('app.active') : $t('app.inactive') }}
               </span>
             </td>
-            <td class="px-4 py-2">
+            <td class="px-4 py-2" data-actions>
               <div class="row-actions flex justify-end gap-1">
                 <IconButton :label="$t('app.edit')" tone="primary" @click="openForm(user)">
                   <Pencil :size="18" :stroke-width="2.25" />

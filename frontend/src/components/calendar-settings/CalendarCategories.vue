@@ -81,7 +81,7 @@ async function remove(id: string) {
     </template>
 
     <div v-if="!form" class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table class="stacked-table w-full text-sm">
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
             <th class="w-16 px-4 py-2">{{ $t('app.color') }}</th>
@@ -92,12 +92,14 @@ async function remove(id: string) {
         </thead>
         <tbody class="divide-y divide-line">
           <tr v-for="category in categories" :key="category.id" class="group hover:bg-hover">
-            <td class="px-4 py-2">
+            <td class="px-4 py-2" data-lead>
               <span class="block h-5 w-5 rounded" :style="{ backgroundColor: category.color }"></span>
             </td>
             <td class="px-4 py-2 font-medium text-gray-800">{{ category.name }}</td>
-            <td class="px-4 py-2 text-gray-500">{{ category.description || '—' }}</td>
-            <td class="px-4 py-2">
+            <td class="px-4 py-2 text-gray-500" :data-empty="!category.description || undefined">
+              {{ category.description || '—' }}
+            </td>
+            <td class="px-4 py-2" data-actions>
               <div v-if="canManage" class="row-actions flex justify-end gap-1">
                 <IconButton :label="$t('app.edit')" tone="primary" @click="startEdit(category)">
                   <Pencil :size="18" :stroke-width="2.25" />

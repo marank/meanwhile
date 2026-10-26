@@ -78,7 +78,7 @@ async function revoke(item: api.AppPassword) {
       </div>
     </div>
     <div class="overflow-x-auto border-t border-line">
-      <table class="w-full min-w-[34rem] text-sm">
+      <table class="stacked-table w-full text-sm">
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
             <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
@@ -89,10 +89,10 @@ async function revoke(item: api.AppPassword) {
         <tbody class="divide-y divide-line">
           <tr v-for="item in appPasswords" :key="item.id" class="hover:bg-hover">
             <td class="px-4 py-3 font-medium text-gray-800">{{ item.label }}</td>
-            <td class="px-4 py-3 text-gray-500">
+            <td class="px-4 py-3 text-gray-500" :data-label="$t('app.lastUsed')">
               {{ item.last_used_at ? formatDateTime(item.last_used_at) : $t('app.never') }}
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3" data-actions>
               <div class="flex justify-end">
                 <IconButton :label="$t('app.delete')" tone="danger" :disabled="busy" @click="revoke(item)"
                   ><Trash2 :size="18"

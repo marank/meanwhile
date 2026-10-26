@@ -271,7 +271,7 @@ async function remove(id: string) {
         </div>
       </section>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="stacked-table w-full text-sm">
           <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
             <tr>
               <th class="w-16 px-4 py-2">{{ $t('app.color') }}</th>
@@ -289,7 +289,7 @@ async function remove(id: string) {
               class="group hover:bg-hover"
               :class="{ 'opacity-60': !resource.is_active }"
             >
-              <td class="px-4 py-2">
+              <td class="px-4 py-2" data-lead>
                 <span class="block h-5 w-5 rounded" :style="{ backgroundColor: resource.color }"></span>
               </td>
               <td class="px-4 py-2 font-medium text-gray-800">
@@ -306,12 +306,20 @@ async function remove(id: string) {
                   >
                 </div>
               </td>
-              <td class="px-4 py-2 text-gray-500">{{ resource.description || '—' }}</td>
-              <td class="px-4 py-2" :class="resource.requires_approval ? 'text-gray-800' : 'text-gray-500'">
+              <td class="px-4 py-2 text-gray-500" :data-empty="!resource.description || undefined">
+                {{ resource.description || '—' }}
+              </td>
+              <td
+                class="px-4 py-2"
+                :class="resource.requires_approval ? 'text-gray-800' : 'text-gray-500'"
+                :data-label="$t('app.approval')"
+              >
                 {{ approvalLabel(resource) }}
               </td>
-              <td class="px-4 py-2">{{ resource.is_active ? $t('app.active') : $t('app.inactive') }}</td>
-              <td class="px-4 py-2">
+              <td class="px-4 py-2" :data-label="$t('app.status')">
+                {{ resource.is_active ? $t('app.active') : $t('app.inactive') }}
+              </td>
+              <td class="px-4 py-2" data-actions>
                 <div v-if="canManage" class="row-actions flex justify-end gap-1">
                   <IconButton :label="$t('app.edit')" tone="primary" @click="startEdit(resource)">
                     <Pencil :size="18" :stroke-width="2.25" />

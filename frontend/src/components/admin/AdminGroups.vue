@@ -113,7 +113,7 @@ async function remove(group: api.UserGroup) {
     </template>
 
     <div v-if="!form" class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table class="stacked-table w-full text-sm">
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
             <th class="px-4 py-2">{{ $t('app.groupName') }}</th>
@@ -125,12 +125,12 @@ async function remove(group: api.UserGroup) {
         <tbody class="divide-y divide-line">
           <tr v-for="group in groups" :key="group.id" class="group hover:bg-hover">
             <td class="px-4 py-2 font-medium text-gray-800">{{ group.name }}</td>
-            <td class="px-4 py-2 text-gray-600">
+            <td class="px-4 py-2 text-gray-600" :data-empty="!group.description || undefined">
               <span v-if="group.description" class="line-clamp-1">{{ group.description }}</span>
               <span v-else class="text-gray-400">—</span>
             </td>
-            <td class="px-4 py-2 text-gray-600">{{ group.member_count ?? 0 }}</td>
-            <td class="px-4 py-2">
+            <td class="px-4 py-2 text-gray-600" :data-label="$t('app.members')">{{ group.member_count ?? 0 }}</td>
+            <td class="px-4 py-2" data-actions>
               <div class="row-actions flex justify-end gap-1">
                 <IconButton :label="$t('app.edit')" tone="primary" :disabled="busy" @click="startEdit(group)">
                   <Pencil :size="18" :stroke-width="2.25" />
