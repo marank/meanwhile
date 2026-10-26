@@ -208,14 +208,22 @@ function startResize(event: MouseEvent) {
 </script>
 
 <template>
-  <!-- Below the desktop breakpoint the sidebar is a drawer, opened from the navbar. -->
-  <div
-    v-if="sidebarDrawerOpen"
-    class="absolute inset-0 z-40 bg-black/40 lg:hidden"
-    data-drawer-backdrop
-    aria-hidden="true"
-    @click="sidebarDrawerOpen = false"
-  ></div>
+  <!-- Below the desktop breakpoint the sidebar is a drawer, opened from the navbar. What it covers darkens
+       and lightens again as it slides in and out. -->
+  <Transition
+    enter-active-class="transition-opacity duration-200"
+    leave-active-class="transition-opacity duration-200"
+    enter-from-class="opacity-0"
+    leave-to-class="opacity-0"
+  >
+    <div
+      v-if="sidebarDrawerOpen"
+      class="absolute inset-0 z-40 bg-black/40 lg:hidden dark:bg-black/60"
+      data-drawer-backdrop
+      aria-hidden="true"
+      @click="sidebarDrawerOpen = false"
+    ></div>
+  </Transition>
   <aside
     id="calendar-sidebar"
     :data-state="sidebarDrawerOpen ? 'open' : 'closed'"
