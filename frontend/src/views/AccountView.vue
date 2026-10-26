@@ -26,12 +26,11 @@ const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`), 
 
 <template>
   <SettingsPage :title="$t('app.account')" :tabs="tabs" :active-tab="tab" @back="goBack" @select-tab="selectTab">
-    <!-- Kept alive: a tab loads its data when first opened, not again on every switch. -->
-    <KeepAlive>
-      <AccountGeneralSettings v-if="tab === 'general'" />
-      <OverviewSettingsPanel v-else-if="tab === 'overview'" />
-      <EmailNotificationsPanel v-else-if="tab === 'emailNotifications'" />
+    <template #default="{ tab: shown }">
+      <AccountGeneralSettings v-if="shown === 'general'" />
+      <OverviewSettingsPanel v-else-if="shown === 'overview'" />
+      <EmailNotificationsPanel v-else-if="shown === 'emailNotifications'" />
       <AppPasswordsPanel v-else />
-    </KeepAlive>
+    </template>
   </SettingsPage>
 </template>

@@ -24,11 +24,10 @@ const tabs = computed(() => validTabs.map((id) => ({ id, label: t(`app.${id}`), 
 
 <template>
   <SettingsPage :title="$t('app.administration')" :tabs="tabs" :active-tab="tab" @back="goBack" @select-tab="selectTab">
-    <!-- Kept alive: a tab loads its data when first opened, not again on every switch. -->
-    <KeepAlive>
-      <AdminGeneralSettings v-if="tab === 'general'" />
-      <AdminUsers v-else-if="tab === 'users'" />
+    <template #default="{ tab: shown }">
+      <AdminGeneralSettings v-if="shown === 'general'" />
+      <AdminUsers v-else-if="shown === 'users'" />
       <AdminGroups v-else />
-    </KeepAlive>
+    </template>
   </SettingsPage>
 </template>

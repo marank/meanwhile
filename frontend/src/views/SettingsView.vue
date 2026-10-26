@@ -68,27 +68,26 @@ function goBackToCalendar() {
     @back="goBackToCalendar"
     @select-tab="selectTab"
   >
-    <SettingsPanel v-if="!calendar" :title="tabs.find((item) => item.id === tab)!.label" loading />
-    <!-- Kept alive: a tab loads its data when first opened, not again on every switch. Another calendar
-         (the key) starts afresh. -->
-    <div v-else :key="calendar.id">
-      <KeepAlive>
+    <template #default="{ tab: shown }">
+      <SettingsPanel v-if="!calendar" :title="tabs.find((item) => item.id === shown)!.label" loading />
+      <!-- Another calendar (the key) starts afresh. -->
+      <div v-else :key="calendar.id">
         <CalendarGeneralSettings
-          v-if="tab === 'general'"
+          v-if="shown === 'general'"
           :calendar="calendar"
           :can-manage="canManage"
           @updated="calendar = $event"
         />
         <CalendarAccessSettings
-          v-else-if="tab === 'access'"
+          v-else-if="shown === 'access'"
           :calendar="calendar"
           :can-manage="canManage"
           @updated="calendar = $event"
         />
-        <CalendarCategories v-else-if="tab === 'categories'" :calendar-id="calendar.id" :can-manage="canManage" />
-        <CalendarResources v-else-if="tab === 'resources'" :calendar-id="calendar.id" :can-manage="canManage" />
+        <CalendarCategories v-else-if="shown === 'categories'" :calendar-id="calendar.id" :can-manage="canManage" />
+        <CalendarResources v-else-if="shown === 'resources'" :calendar-id="calendar.id" :can-manage="canManage" />
         <CalendarShareSettings v-else :calendar="calendar" :can-manage="canManage" @updated="calendar = $event" />
-      </KeepAlive>
-    </div>
+      </div>
+    </template>
   </SettingsPage>
 </template>
