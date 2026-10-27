@@ -57,18 +57,30 @@ class Application(RadicaleApplication):
 
     # Radicale answers errors raised by the storage with 500, except for PUT; refused writes get 403.
     def do_DELETE(
-        self, environ: types.WSGIEnviron, base_prefix: str, path: str, user: str, request_info: dict[str, Any]
+        self,
+        environ: types.WSGIEnviron,
+        base_prefix: str,
+        path: str,
+        user: str,
+        user_groups: set[str],
+        request_info: dict[str, Any],
     ) -> types.WSGIResponse:
         try:
-            return super().do_DELETE(environ, base_prefix, path, user, request_info)
+            return super().do_DELETE(environ, base_prefix, path, user, user_groups, request_info)
         except Forbidden:
             return httputils.FORBIDDEN
 
     def do_PROPPATCH(
-        self, environ: types.WSGIEnviron, base_prefix: str, path: str, user: str, request_info: dict[str, Any]
+        self,
+        environ: types.WSGIEnviron,
+        base_prefix: str,
+        path: str,
+        user: str,
+        user_groups: set[str],
+        request_info: dict[str, Any],
     ) -> types.WSGIResponse:
         try:
-            return super().do_PROPPATCH(environ, base_prefix, path, user, request_info)
+            return super().do_PROPPATCH(environ, base_prefix, path, user, user_groups, request_info)
         except Forbidden:
             return httputils.FORBIDDEN
 

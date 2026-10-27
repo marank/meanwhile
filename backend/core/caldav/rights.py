@@ -12,7 +12,8 @@ from core.services.permissions import get_membership
 
 
 class Rights(base_rights.BaseRights):
-    def authorization(self, user: str, path: str) -> str:
+    # `user_groups` (Radicale's own groups, from its auth plugin) aren't used: rights come from the memberships.
+    def authorization(self, user: str, user_groups: set[str], path: str) -> str:
         if not user:
             return ""
 

@@ -134,14 +134,14 @@ def test_caldav_rights_follow_calendar_membership(world: World) -> None:
     rights = Rights(config.load())
     u = world["users"]
     path = f"/{u['owner'].email}/{world['cal']['id']}/"
-    assert rights.authorization(u["owner"].email, path) == "RWrw"
-    assert rights.authorization(u["booker"].email, path) == "RWrw"
-    assert rights.authorization(u["outsider"].email, path) == ""
+    assert rights.authorization(u["owner"].email, set(), path) == "RWrw"
+    assert rights.authorization(u["booker"].email, set(), path) == "RWrw"
+    assert rights.authorization(u["outsider"].email, set(), path) == ""
 
     world["api"]["owner"].post(
         f"/calendars/{world['cal']['id']}/members", {"user_id": str(u["outsider"].id), "role": "read"}
     )
-    assert rights.authorization(u["outsider"].email, path) == "Rr"
+    assert rights.authorization(u["outsider"].email, set(), path) == "Rr"
 
 
 def test_caldav_rights_include_group_access(world: World) -> None:
@@ -150,7 +150,7 @@ def test_caldav_rights_include_group_access(world: World) -> None:
     u["outsider"].groups.add(group)
     CalendarGroup.objects.create(calendar_id=world["cal"]["id"], group=group, role="own")
     path = f"/{u['owner'].email}/{world['cal']['id']}/"
-    assert Rights(config.load()).authorization(u["outsider"].email, path) == "RWrw"
+    assert Rights(config.load()).authorization(u["outsider"].email, set(), path) == "RWrw"
 
 
 def test_events_from_clients_keep_their_time_zone(world: World) -> None:
