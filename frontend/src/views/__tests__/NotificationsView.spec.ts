@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
 import type { AppNotification } from '@/api'
 import { i18n } from '@/i18n'
@@ -147,7 +148,7 @@ describe('NotificationsView', () => {
         request({ id: 'b', event_status: 'confirmed' }),
         request({ id: 'c', event_status: 'rejected' }),
         request({ id: 'd', event_status: 'cancelled' }),
-        request({ id: 'e', event_status: null, event_id: null }),
+        request({ id: 'e', event_status: null, event_id: null, link: '/notifications' }),
       ])
       expect(wrapper.findAll('li').map((li) => li.find('span').text())).toEqual([
         'Approved',
@@ -183,7 +184,7 @@ describe('NotificationsView', () => {
     })
 
     it('offers no answers once the event is gone', async () => {
-      await render([invitation({ event_status: null, event_id: null })])
+      await render([invitation({ event_status: null, event_id: null, link: '/notifications' })])
       expect(button('Accept')).toBeUndefined()
       expect(button('Show event')).toBeUndefined()
     })
@@ -198,6 +199,24 @@ describe('NotificationsView', () => {
   })
 
   describe('the event', () => {
+    it("leads to the invitation page of an event that can't be opened in the app", async () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: ['/', '/invitation/:token'].map((path) => ({ path, component: { template: '<div />' } })),
+      })
+      await router.push('/')
+      backend = fakeBackend({
+        'GET /api/notifications': [makeNotification({ link: '/invitation/tok-1' })],
+        'GET /api/notifications/counts': { unread: 0, approvals: 0, invitations: 0 },
+      })
+      wrapper = mount(NotificationsView, { global: { plugins: [i18n, router], stubs: { EventModal: EventModalStub } } })
+      await flushPromises()
+      await button('Show event')!.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/invitation/tok-1')
+      expect(wrapper.find('[data-test="event-modal"]').exists()).toBe(false)
+    })
+
     it('opens the event and closes it without reloading when nothing changed', async () => {
       await render([makeNotification({ type: 'comment_added' })])
       await button('Show event')!.trigger('click')

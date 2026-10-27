@@ -229,10 +229,12 @@ Participants answer either
   only counts when it comes from the participant's own address (or the one they named as `SENT-BY`).
   `process_imip FILE.eml` (or `-` for standard input, e.g. from a mail server's pipe) applies saved
   messages; or
-- with the links in the email, which open `/event/<token>` in the app, no account needed (older
-  emails' `/rsvp/<token>` lead there too). The page shows the event with who else is invited (by
-  name only: anyone with the link can open it) and offers it as a file for calendar apps. The
-  link only preselects the answer; a click on the page gives it (mail scanners open links).
+- with the links in the email, which open `/invitation/<token>` in the app, no account needed. The
+  page shows the event with who else is invited (by name only: anyone with the link can open it)
+  and offers it as a file for calendar apps. The link only preselects the answer; a click on the
+  page gives it (mail scanners open links). Opened by the participant while signed in, the page
+  leads to the event in the app (`/event/<id>`, where notifications lead too), or, where they can't
+  see its calendar, is shown with navbar and sidebar.
 
 The organizer is told of every answer in the app (and by email, as chosen).
 

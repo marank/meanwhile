@@ -119,12 +119,12 @@ def test_invited_guests_get_the_event_as_request_with_links_to_answer(world: Wor
     # Also as a file, for mail programs that don't show invitations.
     assert [a[0] for a in message.attachments] == ["invite.ics"]
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
-    assert f"http://app.test/event/{token}?answer=accepted" in message.body
+    assert f"http://app.test/invitation/{token}?answer=accepted" in message.body
     # A link to see the whole event, for guests without an account too.
-    assert f"View event: http://app.test/event/{token}\n" in message.body
+    assert f"View event: http://app.test/invitation/{token}\n" in message.body
     assert isinstance(message, EmailMultiAlternatives)
     html = str(next(content for content, mimetype in message.alternatives if mimetype == "text/html"))
-    assert f'href="http://app.test/event/{token}"' in html and ">Planning</h1>" in html
+    assert f'href="http://app.test/invitation/{token}"' in html and ">Planning</h1>" in html
     # Light or dark, as the reader's system is set (where the mail program follows it).
     assert 'content="light dark"' in html and "prefers-color-scheme: dark" in html
     # Times are shown in the event's zone to guests (09:00 UTC is 10:00 in Berlin in January).
@@ -267,6 +267,25 @@ def test_the_invitation_page_shows_who_else_comes_without_their_addresses(world:
     assert "owner@example.test" not in res.content.decode()
 
 
+def test_the_invitation_page_leads_its_signed_in_participant_into_the_app(world: World) -> None:
+    event = create(world)
+    invite(world, event, email="other@example.test")
+    invite(world, event, email="outsider@example.test")
+    invite(world, event)
+    token = {p.email: p.rsvp_token for p in EventParticipant.objects.filter(event_id=event["id"])}
+
+    def shown(api: Client, email: str) -> tuple[bool, str | None]:
+        res = api.get(f"/api/rsvp/{token[email]}").json()
+        return res["yours"], res["event_id"]
+
+    # A member of the calendar is led to the event; someone invited from outside sees the page in the app.
+    assert shown(world["api"]["other"].client, "other@example.test") == (True, event["id"])
+    assert shown(world["api"]["outsider"].client, "outsider@example.test") == (True, None)
+    # Someone else's link, and no session, show the page on its own.
+    assert shown(world["api"]["other"].client, GUEST) == (False, None)
+    assert shown(Client(), "other@example.test") == (False, None)
+
+
 def test_the_invitation_page_offers_the_event_as_file_without_the_people(world: World) -> None:
     event = create(world)
     invite(world, event)
@@ -389,10 +408,11 @@ def test_participants_answering_in_the_app_tell_the_organizer(world: World) -> N
 
 def test_notifications_come_by_email_as_each_user_chose(world: World) -> None:
     room = world["resource"]("Room")
-    world["book"](world["api"]["booker"], room["id"])
+    booking = world["book"](world["api"]["booker"], room["id"])
     [message] = to("owner@example.test")
     assert message.subject == "Approval requested: Booking"
-    assert "http://app.test/notifications" in message.body
+    # To the event in the app, where it can be approved.
+    assert f"http://app.test/event/{booking.json()['id']}" in message.body
 
     owner = world["api"]["owner"]
     res = owner.patch("/users/me", {"email_notifications": {"approvals": False}})
@@ -536,7 +556,7 @@ def test_invitations_look_like_the_events_page(world: World) -> None:
     assert "Your answer Accept Tentative Decline You can also answer in your mail program." in text_
     # The button over the address it was sent to: side by side, a long address would be too wide for phones.
     assert f"View event Invited as {GUEST}" in text_
-    assert f'href="http://app.test/event/{token}"' in html_of(to(GUEST)[-1])
+    assert f'href="http://app.test/invitation/{token}"' in html_of(to(GUEST)[-1])
 
 
 def test_cancellations_say_so_on_top_and_strike_the_title_through(world: World) -> None:

@@ -7,12 +7,15 @@ from datetime import datetime
 from typing import Any
 
 from django.core.mail import EmailMultiAlternatives
+from django.db.models import Q
 
-from core.models import Calendar, Event, User
+from core.models import Calendar, Event, EventParticipant, User
+from core.models.base import AnyId
 from core.models.events import Notification
 from core.realtime import broadcast
 from core.services import mail
 from core.services.mail_texts import text
+from core.services.permissions import can_open_event
 from core.services.unsubscribe import muted_user_ids
 
 # Kinds of email users can switch on and off, and whether they get them unless they chose.
@@ -40,6 +43,29 @@ EMAIL_KIND_OF = {
     "participant_replied": "responses",
     "event_reminder": "reminders",
 }
+
+
+MEMBERSHIP_TYPES = {"member_added", "member_role_changed"}
+
+
+def notification_link(user: User, type: str, event: Event | None, calendar_id: AnyId | None) -> str:
+    """
+    Where a notification leads, in the app and in its email: to the calendar one was added to; to the event,
+    open over the calendar, if the user can see it there; to the invitation page, if they are invited but
+    can't see the event's calendar (or no longer the event: cancelled, rejected); else to the notifications.
+    """
+    if type in MEMBERSHIP_TYPES and calendar_id is not None:
+        return f"/calendar/{calendar_id}"
+    if event is None:
+        return "/notifications"
+    if can_open_event(event, user):
+        return f"/event/{event.id}"
+    participant = (
+        EventParticipant.objects.filter(event_id__in=[event.id, event.parent_id])
+        .filter(Q(user=user) | Q(email__iexact=user.email))
+        .first()
+    )
+    return f"/invitation/{participant.rsvp_token}" if participant else "/notifications"
 
 
 def email_preferences(user: User) -> dict[str, bool]:
@@ -142,10 +168,7 @@ def _notification_email(
         "event": (event.parent or event) if event else None,
     }
 
-    if type in ("member_added", "member_role_changed") and calendar is not None:
-        url = mail.app_link(f"/calendar/{calendar.id}")
-    else:
-        url = mail.app_link("/notifications")
+    url = mail.app_link(notification_link(user, type, event, calendar.id if calendar else None))
     label = text(language, "review_request" if type == "approval_requested" else "open", app=app)
     links = [mail.Link(label, url, primary=True)] if url else []
 

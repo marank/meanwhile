@@ -1,18 +1,21 @@
 """
 Answering an invitation from the link in its email: the token in the link is the participant's
-key, so no account or session is needed.
+key, so no account or session is needed. Signed in as the participant, the page leads into the app.
 """
+
+from uuid import UUID
 
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from ninja import Router
 from ninja.errors import HttpError
 
-from core.models import EventParticipant
+from core.models import EventParticipant, User
 from core.models.base import EventStatus, ParticipantStatus
 from core.schemas import RsvpAnswer, RsvpOut, RsvpParticipantOut
 from core.services.ical import FEED, build_event_ical, build_series_ical, new_calendar, to_ical
 from core.services.itip import record_answer, series_of
+from core.services.permissions import get_visible_event
 from core.services.recurrence import as_utc
 
 router = Router()
@@ -35,8 +38,30 @@ def _name(participant: EventParticipant) -> str:
     return participant.user.display_name if participant.user else ""
 
 
-def _serialize(participant: EventParticipant) -> RsvpOut:
+def _owner(participant: EventParticipant, request: HttpRequest) -> User | None:
+    """The signed-in user, if the invitation is theirs (by account or by address)."""
+    user = request.user
+    if not isinstance(user, User):
+        return None
+    if participant.user_id == user.id or participant.email.lower() == user.email.lower():
+        return user
+    return None
+
+
+def _event_in_app(participant: EventParticipant, user: User | None) -> UUID | None:
+    """The event, if its participant can open it in the app (not everyone invited can see the calendar)."""
+    if user is None:
+        return None
+    try:
+        get_visible_event(str(participant.event_id), user)
+    except HttpError:
+        return None
+    return participant.event_id
+
+
+def _serialize(participant: EventParticipant, request: HttpRequest) -> RsvpOut:
     event = participant.event
+    user = _owner(participant, request)
     series = series_of(event)
     organizer = series.creator
     return RsvpOut(
@@ -60,12 +85,14 @@ def _serialize(participant: EventParticipant) -> RsvpOut:
             )
             for other in event.participants.select_related("user").order_by("email")
         ],
+        yours=user is not None,
+        event_id=_event_in_app(participant, user),
     )
 
 
 @router.get("/rsvp/{token}", response=RsvpOut, auth=None)
 def get_invitation(request: HttpRequest, token: str) -> RsvpOut:
-    return _serialize(_participant(token))
+    return _serialize(_participant(token), request)
 
 
 @router.post("/rsvp/{token}", response=RsvpOut, auth=None)
@@ -75,7 +102,7 @@ def answer_invitation(request: HttpRequest, token: str, payload: RsvpAnswer) -> 
         raise HttpError(409, "This event has been cancelled")
     with transaction.atomic():
         record_answer(participant, payload.status)
-    return _serialize(participant)
+    return _serialize(participant, request)
 
 
 @router.get("/rsvp/{token}/ics", auth=None)

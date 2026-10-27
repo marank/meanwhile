@@ -15,11 +15,17 @@ import { useCalendarDisplay } from '@/composables/useCalendarDisplay'
 import { useCalendarNavigation } from '@/composables/useCalendarNavigation'
 import { useLoader } from '@/composables/useLoader'
 import { useNowColumns } from '@/composables/useNowColumns'
+import * as api from '@/api'
 import type { Occurrence } from '@/api'
+import { i18n } from '@/i18n'
+import { errorMessage } from '@/services/errors'
+import { toast } from '@/services/toast'
 
 const props = defineProps<{
   calendarId?: string
   folderId?: string
+  /** /event/<id>: the event, open over the calendar. */
+  eventId?: string
 }>()
 
 const router = useRouter()
@@ -30,6 +36,7 @@ const overviewStore = useOverviewStore()
 
 // The URL decides what is shown: /calendar/all, /calendar/<id-or-readable-path> or /calendar/folder/<id>.
 // /calendar alone (opening the app) shows what was shown last, or else the first calendar; null meanwhile.
+// Below an event (/event/<id>) the same is shown, keeping the event's URL.
 const selection = computed(() => props.folderId ?? props.calendarId ?? null)
 watch(
   () => [selection.value, calendarStore.loaded] as const,
@@ -38,7 +45,7 @@ watch(
     else if (loaded) {
       const start = calendarStore.startSelection()
       calendarStore.select(start)
-      router.replace({ path: calendarStore.selectionPath(start), query: route.query })
+      if (!props.eventId) router.replace({ path: calendarStore.selectionPath(start), query: route.query })
     }
   },
   { immediate: true },
@@ -107,7 +114,43 @@ function closeModal() {
   modalOccurrence.value = null
   modalEndDate.value = undefined
   modalAllDay.value = undefined
+  // Closed, the event's URL gives way to the calendar's.
+  if (props.eventId) void router.replace(calendarStore.selectionPath(calendarStore.selectedId))
 }
+
+/** The day an event starts on; all-day events on their UTC date, the same in every zone. */
+function startDay(event: api.Event): Date {
+  const start = new Date(event.start)
+  if (!event.all_day) return start
+  return new Date(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
+}
+
+// /event/<id> opens the event at its date; the calendar is switched to the event's if it doesn't show it.
+watch(
+  () => [props.eventId, calendarStore.loaded] as const,
+  async ([eventId, loaded]) => {
+    if (!eventId || !loaded) return
+    let event: api.Event
+    try {
+      event = await api.getEvent(eventId)
+    } catch (error) {
+      // The server's own words are English only; a missing event is said in the reader's language.
+      const missing = error instanceof api.ApiError && error.status === 404
+      toast.error(missing ? i18n.global.t('event.notFound') : errorMessage(error, i18n.global.t('app.loadFailed')))
+      void router.replace(calendarStore.selectionPath(calendarStore.selectedId))
+      return
+    }
+    if (props.eventId !== eventId) return
+    if (!calendarStore.selectedCalendarIds.includes(event.calendar_id) && calendarStore.canSelect(event.calendar_id)) {
+      calendarStore.select(event.calendar_id)
+    }
+    nav.gotoDate(startDay(event))
+    modalEventId.value = eventId
+    modalOccurrence.value = null
+    showModal.value = true
+  },
+  { immediate: true },
+)
 
 function saved() {
   closeModal()

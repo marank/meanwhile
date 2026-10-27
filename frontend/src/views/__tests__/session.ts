@@ -34,6 +34,7 @@ export function makeNotification(overrides: Partial<AppNotification> = {}): AppN
     event_status: null,
     response_status: null,
     deletable: false,
+    link: '/event/e1',
     ...overrides,
   }
 }

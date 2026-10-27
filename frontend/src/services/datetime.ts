@@ -94,3 +94,25 @@ export function toDateInputValue(date: Date): string {
 export function toTimeInputValue(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
+
+/** Whole calendar days from `value` back to `now`, in local time: 0 today, 1 yesterday. */
+export function daysAgo(value: string | Date, now = new Date()): number {
+  const day = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  return Math.round((day(now) - day(toDate(value))) / 86_400_000)
+}
+
+/**
+ * How long ago `value` was, short: "just now", "5 min. ago", "3 hr. ago", "yesterday", "4 days ago";
+ * older than a week, the date.
+ */
+export function formatTimeAgo(value: string | Date, now = new Date()): string {
+  const date = toDate(value)
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000)
+  if (minutes < 1) return i18n.global.t('app.justNow')
+  const relative = new Intl.RelativeTimeFormat(i18n.global.locale.value, { numeric: 'auto', style: 'short' })
+  if (minutes < 60) return relative.format(-minutes, 'minute')
+  const days = daysAgo(date, now)
+  if (days === 0) return relative.format(-Math.floor(minutes / 60), 'hour')
+  if (days < 7) return relative.format(-days, 'day')
+  return formatDate(date)
+}

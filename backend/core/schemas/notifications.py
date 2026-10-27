@@ -37,6 +37,8 @@ class NotificationOut(Schema):
     event_status: EventStatus | None = None
     response_status: ParticipantStatus | None = None
     deletable: bool = True
+    # Where it leads in the app (core.services.notifications.notification_link).
+    link: str
 
 
 class NotificationCountsOut(Schema):

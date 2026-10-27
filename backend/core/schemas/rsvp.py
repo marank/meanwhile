@@ -4,6 +4,7 @@ Answering invitations by link (no account needed).
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from core.models.base import ParticipantStatus
 from core.schemas.common import Schema
@@ -34,6 +35,10 @@ class RsvpOut(Schema):
     # Cancelled or rejected: there is nothing to answer any more.
     cancelled: bool
     participants: list[RsvpParticipantOut]
+    # The invitation is the signed-in user's own: the page is shown inside the app.
+    yours: bool = False
+    # Theirs and visible to them in the app: the page leads there instead.
+    event_id: UUID | None = None
 
 
 class RsvpAnswer(Schema):

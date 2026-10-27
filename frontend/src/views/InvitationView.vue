@@ -1,23 +1,29 @@
 <script setup lang="ts">
 import { CalendarPlus, Check, CircleHelp, Clock, MapPin, Repeat, User, X } from '@lucide/vue'
-import { computed, ref, type Component } from 'vue'
+import { computed, onBeforeUnmount, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import * as api from '@/api'
 import AppLogo from '@/components/AppLogo.vue'
 import { browserTimeZone, formatDateTime, formatLongDate, formatTime, monthName } from '@/services/datetime'
 import { errorMessage } from '@/services/errors'
 import { participantStatusLabel, recurrenceSummary } from '@/services/labels'
+import { standaloneFramed } from '@/services/pageFrame'
+import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 
 type Answer = Exclude<api.ParticipantStatus, 'needs_action'>
 
 // The page anyone with the link in an invitation email reaches, with or without an account: the event
 // as the invitation has it, who else is invited, and the answer, which can be changed until it starts.
+// Opened by the participant themselves while signed in, it leads to the event in the app, or, where they
+// can't see the calendar, is shown in the app's frame; links meant for someone else stay on their own.
 const props = defineProps<{ token: string }>()
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const settings = useSettingsStore()
 
 const invitation = ref<api.Invitation | null>(null)
@@ -123,8 +129,18 @@ async function load() {
     invitation.value = await api.getInvitation(props.token)
   } catch {
     missing.value = true
+    return
   }
+  if (!invitation.value.yours) return
+  // Pages open to anyone don't ask for the session by themselves.
+  await auth.init()
+  if (!auth.isLoggedIn) return
+  // A link with an answer is there to give it: that is done here.
+  if (invitation.value.event_id && !suggested.value) await router.replace(`/event/${invitation.value.event_id}`)
+  else standaloneFramed.value = true
 }
+
+onBeforeUnmount(() => (standaloneFramed.value = false))
 
 async function answer(status: Answer) {
   error.value = ''
@@ -145,7 +161,7 @@ void load()
 <template>
   <div class="min-h-full bg-surface-muted px-4 py-6 sm:py-12">
     <div class="mx-auto w-full max-w-lg">
-      <div class="mb-4 flex items-center gap-2 px-1">
+      <div v-if="!standaloneFramed" class="mb-4 flex items-center gap-2 px-1">
         <AppLogo />
         <span class="font-semibold text-gray-700">{{ settings.appName }}</span>
       </div>

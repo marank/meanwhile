@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { createMemoryHistory, createRouter, type RouteMeta } from 'vue-router'
 import { fakeBackend, reply } from '@/__tests__/fakeBackend'
 import type { User } from '@/api'
 import App from '@/App.vue'
 import { i18n } from '@/i18n'
+import { standaloneFramed } from '@/services/pageFrame'
 import { toast, toasts } from '@/services/toast'
 import { useAuthStore } from '@/stores/auth'
 import { makeUser, sessionRoutes, stubBrowser } from '@/views/__tests__/session'
@@ -15,7 +16,7 @@ let wrapper: VueWrapper
 
 const settings = { app_name: 'Team Calendar', logo_url: '', favicon_url: '' }
 
-async function render(user: User | null, appSettings: object = settings) {
+async function render(user: User | null, appSettings: object = settings, meta: RouteMeta = {}) {
   fakeBackend({
     ...sessionRoutes(user),
     'GET /api/settings': appSettings,
@@ -24,7 +25,7 @@ async function render(user: User | null, appSettings: object = settings) {
   await useAuthStore().init()
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: defineComponent(() => () => h('p', 'The page')) }],
+    routes: [{ path: '/', component: defineComponent(() => () => h('p', 'The page')), meta }],
   })
   await router.push('/')
   wrapper = mount(App, {
@@ -65,6 +66,17 @@ describe('App', () => {
     expect(wrapper.get('header').text()).toContain('Team Calendar')
     expect(wrapper.get('aside').text()).toBe('Sidebar')
     expect(wrapper.text()).toContain('The page')
+  })
+
+  it('leaves them out on pages of their own, unless the page asks for them', async () => {
+    await render(makeUser(), settings, { standalone: true })
+    expect(wrapper.find('header').exists()).toBe(false)
+    expect(wrapper.find('aside').exists()).toBe(false)
+    standaloneFramed.value = true
+    await flushPromises()
+    expect(wrapper.find('header').exists()).toBe(true)
+    expect(wrapper.find('aside').exists()).toBe(true)
+    standaloneFramed.value = false
   })
 
   it('shows toasts', async () => {

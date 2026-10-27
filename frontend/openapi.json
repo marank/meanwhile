@@ -7813,6 +7813,10 @@
             "default": true,
             "title": "Deletable",
             "type": "boolean"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
           }
         },
         "required": [
@@ -7828,7 +7832,8 @@
           "created_at",
           "event_status",
           "response_status",
-          "deletable"
+          "deletable",
+          "link"
         ],
         "title": "NotificationOut",
         "type": "object"
@@ -8370,6 +8375,23 @@
             },
             "title": "Participants",
             "type": "array"
+          },
+          "yours": {
+            "default": false,
+            "title": "Yours",
+            "type": "boolean"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
           }
         },
         "required": [
@@ -8385,7 +8407,9 @@
           "email",
           "status",
           "cancelled",
-          "participants"
+          "participants",
+          "yours",
+          "event_id"
         ],
         "title": "RsvpOut",
         "type": "object"

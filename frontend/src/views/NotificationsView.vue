@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { Bell, Calendar, Check, Mail, X } from '@lucide/vue'
 import EventModal from '@/components/event/EventModal.vue'
 import IconButton from '@/components/IconButton.vue'
@@ -18,6 +19,7 @@ type Tab = NotificationGroup | 'all'
 
 const notifications = useNotificationsStore()
 const { t } = useI18n()
+const router = useRouter()
 const { busy, run } = useAction()
 
 const openEventId = ref<string | null>(null)
@@ -62,6 +64,17 @@ function requestState(notification: AppNotification): string | null {
 
 function isInvitation(notification: AppNotification) {
   return notification.type === 'participant_added'
+}
+
+/** Whether the notification leads to its event: in the app, or (out of sight there) on its invitation page. */
+function hasEvent(notification: AppNotification) {
+  return notification.link.startsWith('/event/') || notification.link.startsWith('/invitation/')
+}
+
+// Events open here, over the list; the invitation page is a page of its own.
+function showEvent(notification: AppNotification) {
+  if (notification.link.startsWith('/event/')) openEventId.value = notification.event_id
+  else void router.push(notification.link)
 }
 
 function closeEvent(changed: boolean) {
@@ -188,11 +201,11 @@ async function respondToInvitation(notification: AppNotification, status: api.Pa
             </template>
 
             <button
-              v-if="n.event_id"
+              v-if="hasEvent(n)"
               type="button"
               :disabled="busy"
               class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-line hover:bg-hover disabled:opacity-50"
-              @click="openEventId = n.event_id"
+              @click="showEvent(n)"
             >
               {{ $t('notifications.showEvent') }}
             </button>

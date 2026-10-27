@@ -2566,6 +2566,8 @@ export interface components {
        * @default true
        */
       deletable: boolean
+      /** Link */
+      link: string
     }
     /** NotificationCountsOut */
     NotificationCountsOut: {
@@ -2791,6 +2793,13 @@ export interface components {
       cancelled: boolean
       /** Participants */
       participants: components['schemas']['RsvpParticipantOut'][]
+      /**
+       * Yours
+       * @default false
+       */
+      yours: boolean
+      /** Event Id */
+      event_id: string | null
     }
     /** RsvpParticipantOut */
     RsvpParticipantOut: {

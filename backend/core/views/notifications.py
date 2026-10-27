@@ -15,6 +15,7 @@ from core.models import EventParticipant, Notification, User
 from core.models.base import EventStatus, ParticipantStatus
 from core.realtime import broadcast
 from core.schemas import NotificationCountsOut, NotificationOut, OkOut
+from core.services.notifications import notification_link
 from core.views.common import AuthedRequest
 
 router = Router()
@@ -39,6 +40,7 @@ def _my_responses(user: User, notifications: Iterable[Notification]) -> dict[UUI
 
 def _serialize(notification: Notification, responses: dict[UUID, str] | None = None) -> dict[str, Any]:
     event = notification.event
+    user = notification.user
     return {
         "id": notification.id,
         "type": notification.type,
@@ -53,6 +55,7 @@ def _serialize(notification: Notification, responses: dict[UUID, str] | None = N
         "event_status": event.status if event else None,
         "response_status": responses.get(notification.event_id) if responses and notification.event_id else None,
         "deletable": notification.type not in UNDELETABLE_TYPES,
+        "link": notification_link(user, notification.type, event, notification.calendar_id),
     }
 
 
@@ -67,7 +70,7 @@ def list_notifications(
     query = Notification.objects.filter(user=request.user)
     if group is not None:
         query = query.filter(type__in=TYPE_GROUPS[group])
-    notifications = list(query.select_related("actor", "event").order_by("-created_at")[:limit])
+    notifications = list(query.select_related("actor", "event__calendar", "user").order_by("-created_at")[:limit])
     responses = _my_responses(request.user, notifications)
     return [_serialize(n, responses) for n in notifications]
 

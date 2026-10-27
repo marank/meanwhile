@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell, EllipsisVertical, Menu, Moon, Sun } from '@lucide/vue'
 import AppLogo from '@/components/AppLogo.vue'
 import IconButton from '@/components/IconButton.vue'
-import type { AppNotification } from '@/api'
-import { useAction } from '@/composables/useAction'
+import NotificationsMenu from '@/components/NotificationsMenu.vue'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
-import { useLoader } from '@/composables/useLoader'
-import { formatDateTime } from '@/services/datetime'
-import { notificationText } from '@/services/labels'
 import { sidebarDrawerOpen } from '@/services/sidebarState'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -21,8 +17,6 @@ const theme = useThemeStore()
 const settings = useSettingsStore()
 const notifications = useNotificationsStore()
 const router = useRouter()
-const { run } = useAction()
-const { reload: loadNotifications } = useLoader(notifications.loadRecent, { immediate: false })
 
 const menuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
@@ -61,7 +55,6 @@ onBeforeUnmount(() => {
   document.documentElement.style.removeProperty('--navbar-height')
   document.removeEventListener('pointerdown', closeOnOutsideClick)
   notifications.stopPolling()
-  notifications.setRecentShown(false)
 })
 
 const unreadBadge = computed(() => (notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount)))
@@ -74,18 +67,6 @@ const initials = computed(() =>
     .toUpperCase()
     .slice(0, 2),
 )
-
-// The dropdown has its own list, loaded whenever it opens and kept current while it is open.
-watch(notificationsOpen, (open) => {
-  notifications.setRecentShown(open)
-  if (open) void loadNotifications()
-})
-
-async function openNotification(notification: AppNotification) {
-  // The page is worth showing even if marking it read failed (reported as a toast).
-  await run(() => notifications.markRead(notification.id))
-  navigate('/notifications')
-}
 
 function navigate(path: string) {
   menuOpen.value = false
@@ -123,7 +104,7 @@ async function logout() {
         <IconButton
           :label="$t('notifications.title')"
           :aria-expanded="notificationsOpen"
-          aria-haspopup="true"
+          aria-haspopup="dialog"
           @click="notificationsOpen = !notificationsOpen"
         >
           <Bell :size="20" :stroke-width="2.25" />
@@ -134,43 +115,18 @@ async function logout() {
         >
           {{ unreadBadge }}
         </span>
-        <div
-          v-if="notificationsOpen"
-          class="fixed inset-x-2 top-[calc(var(--navbar-height,3.25rem)+0.25rem)] z-50 rounded-lg border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-10 sm:w-80"
+        <Transition
+          enter-from-class="opacity-0 scale-95 -translate-y-1"
+          enter-active-class="transition duration-150 ease-out motion-reduce:transition-none"
+          leave-active-class="transition duration-100 ease-in motion-reduce:transition-none"
+          leave-to-class="opacity-0 scale-95"
         >
-          <div class="flex items-center justify-between border-b border-line px-4 py-2">
-            <span class="text-sm font-semibold text-gray-800">{{ $t('notifications.title') }}</span>
-            <button
-              v-if="notifications.unreadCount > 0"
-              type="button"
-              class="text-xs text-blue-600 hover:underline"
-              @click="run(notifications.markAllRead)"
-            >
-              {{ $t('notifications.markAllRead') }}
-            </button>
-          </div>
-          <div v-if="!notifications.recent.length" class="px-4 py-6 text-center text-sm text-gray-500">
-            {{ $t('notifications.empty') }}
-          </div>
-          <ul v-else class="max-h-[min(24rem,70vh)] divide-y divide-line overflow-y-auto">
-            <li v-for="notification in notifications.recent" :key="notification.id">
-              <button
-                type="button"
-                class="block w-full px-4 py-3 text-left text-sm hover:bg-hover"
-                :class="{ 'bg-blue-50/60 dark:bg-blue-950/40': !notification.read_at }"
-                @click="openNotification(notification)"
-              >
-                <span class="block text-gray-800">{{ notificationText(notification) }}</span>
-                <span class="mt-0.5 block text-xs text-gray-400">{{ formatDateTime(notification.created_at) }}</span>
-              </button>
-            </li>
-          </ul>
-          <div class="border-t border-line px-4 py-2 text-center">
-            <button type="button" class="text-xs text-blue-600 hover:underline" @click="navigate('/notifications')">
-              {{ $t('notifications.viewAll') }}
-            </button>
-          </div>
-        </div>
+          <NotificationsMenu
+            v-if="notificationsOpen"
+            class="fixed inset-x-2 top-[calc(var(--navbar-height,3.25rem)+0.25rem)] z-50 origin-top sm:absolute sm:inset-x-auto sm:right-0 sm:top-10 sm:w-96 sm:origin-top-right"
+            @navigate="navigate"
+          />
+        </Transition>
       </div>
 
       <IconButton :label="$t('app.toggleTheme')" @click="theme.toggle">

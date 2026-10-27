@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
 import type { Invitation } from '@/api'
 import { i18n } from '@/i18n'
 import { browserTimeZone } from '@/services/datetime'
+import { standaloneFramed } from '@/services/pageFrame'
 import { useAuthStore } from '@/stores/auth'
 import InvitationView from '../InvitationView.vue'
 import { makeUser, sessionRoutes, stubBrowser } from './session'
@@ -27,15 +28,22 @@ const invitation = (overrides: Partial<Invitation> = {}): Invitation => ({
   status: 'needs_action',
   cancelled: false,
   participants: [{ name: 'alice@example.com', status: 'needs_action', you: true }],
+  yours: false,
+  event_id: null,
   ...overrides,
 })
 
+let router: Router
+
 async function render(answer?: string) {
-  const router = createRouter({
+  router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/event/:token', component: { template: '<div />' } }],
+    routes: [
+      { path: '/invitation/:token', component: { template: '<div />' } },
+      { path: '/event/:eventId', component: { template: '<div />' } },
+    ],
   })
-  await router.push({ path: '/event/tok en', query: answer ? { answer } : {} })
+  await router.push({ path: '/invitation/tok en', query: answer ? { answer } : {} })
   wrapper = mount(InvitationView, { props: { token: 'tok en' }, global: { plugins: [i18n, router] } })
   await flushPromises()
 }
@@ -238,5 +246,49 @@ describe('InvitationView', () => {
     backend.on('GET /api/rsvp/*', reply(404))
     await render()
     expect(wrapper.text()).toContain('This invitation no longer exists.')
+  })
+
+  describe('opened by the participant themselves', () => {
+    const logo = () => wrapper.findAll('span').some((span) => span.text() === 'Meanwhile')
+
+    it('leads to the event in the app', async () => {
+      backend.on('GET /api/rsvp/*', invitation({ yours: true, event_id: 'e1' }))
+      await render()
+      expect(router.currentRoute.value.fullPath).toBe('/event/e1')
+    })
+
+    it("shows itself in the app's frame where the event can't be opened in the app", async () => {
+      backend.on('GET /api/rsvp/*', invitation({ yours: true }))
+      await render()
+      expect(router.currentRoute.value.path).toBe('/invitation/tok en')
+      expect(standaloneFramed.value).toBe(true)
+      // The navbar shows the app's name.
+      expect(logo()).toBe(false)
+      wrapper.unmount()
+      expect(standaloneFramed.value).toBe(false)
+    })
+
+    it('stays to give the answer its link suggests', async () => {
+      backend.on('GET /api/rsvp/*', invitation({ yours: true, event_id: 'e1' }))
+      await render('accepted')
+      expect(router.currentRoute.value.path).toBe('/invitation/tok en')
+      expect(standaloneFramed.value).toBe(true)
+    })
+
+    it('stays on its own for someone else, or without a session', async () => {
+      backend.on('GET /api/rsvp/*', invitation())
+      await render()
+      expect(standaloneFramed.value).toBe(false)
+      expect(logo()).toBe(true)
+      wrapper.unmount()
+
+      // The server can't tell it's theirs then; should it anyway, nothing changes without a session.
+      setActivePinia(createPinia())
+      backend.on('GET /api/users/me', reply(401))
+      backend.on('GET /api/rsvp/*', invitation({ yours: true, event_id: 'e1' }))
+      await render()
+      expect(router.currentRoute.value.path).toBe('/invitation/tok en')
+      expect(standaloneFramed.value).toBe(false)
+    })
   })
 })

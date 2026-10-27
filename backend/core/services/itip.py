@@ -186,7 +186,7 @@ def _message(
     if method == "REQUEST":
         paragraphs.append(text(language, "rsvp_prompt"))
         # The answer page shows the whole event, also to guests without an account.
-        url = mail.app_link(f"/event/{participant.rsvp_token}")
+        url = mail.app_link(f"/invitation/{participant.rsvp_token}")
         if url:
             view = mail.Link(text(language, "view_event"), url)
             links.append(mail.Link(view.label, url, primary=True))
@@ -196,7 +196,7 @@ def _message(
             ("declined", "decline"),
         ]
         for answer, label in answers:
-            url = mail.app_link(f"/event/{participant.rsvp_token}?answer={answer}")
+            url = mail.app_link(f"/invitation/{participant.rsvp_token}?answer={answer}")
             if url:
                 links.append(mail.Link(text(language, label), url, tone=label))
 

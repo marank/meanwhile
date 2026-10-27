@@ -179,6 +179,12 @@ def can_see_event(event: Event, user: User, membership: MembershipInfo) -> bool:
     return True
 
 
+def can_open_event(event: Event, user: User) -> bool:
+    """Whether the user can open the event in the app (get_visible_event without raising)."""
+    membership = get_membership(event.calendar, user)
+    return membership is not None and can_see_event(event, user, membership)
+
+
 def accessible_calendars(user: User) -> QuerySet[Calendar]:
     """Calendars the user can read: own, shared directly or via a group, and public ones."""
     return Calendar.objects.filter(

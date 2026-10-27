@@ -19,6 +19,7 @@ function notification(overrides: Partial<AppNotification> = {}): AppNotification
     event_status: null,
     response_status: null,
     deletable: true,
+    link: '/event/e1',
     ...overrides,
   }
 }

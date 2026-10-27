@@ -8,6 +8,7 @@ import ToastHost from './components/ToastHost.vue'
 import { useBackSwipe } from './composables/useBackSwipe'
 import { useMediaQuery } from './composables/useMediaQuery'
 import { usePageTransition } from './composables/usePageTransition'
+import { standaloneFramed } from './services/pageFrame'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
 
@@ -31,6 +32,9 @@ const transition = usePageTransition({
 // While pages move sideways, the one off to the side mustn't make the area scroll sideways.
 const pagesMoving = ref(0)
 const canSwipeBack = computed(() => isPhone.value && homeScreenApp.value && (route.meta.layer ?? 0) > 0)
+
+// Signed in, pages come with navbar and sidebar; pages meant for anyone with a link may come without.
+const framed = computed(() => auth.isLoggedIn && (!route.meta.standalone || standaloneFramed.value))
 
 onMounted(settings.load)
 
@@ -56,11 +60,11 @@ watchEffect(() => {
        status bar, the notch, the rounded corners and the home indicator. -->
   <div
     class="flex h-full flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
-    :class="{ 'pt-[var(--safe-top)]': !auth.isLoggedIn }"
+    :class="{ 'pt-[var(--safe-top)]': !framed }"
   >
-    <AppNavbar v-if="auth.isLoggedIn" />
+    <AppNavbar v-if="framed" />
     <div class="relative flex flex-1 overflow-hidden">
-      <CalendarSidebar v-if="auth.isLoggedIn" />
+      <CalendarSidebar v-if="framed" />
       <main
         ref="main"
         class="relative min-w-0 flex-1 overflow-auto bg-surface-muted p-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))]"

@@ -7,6 +7,8 @@ declare module 'vue-router' {
     public?: boolean
     /** Reachable with and without a session. */
     anyone?: boolean
+    /** Shown without navbar and sidebar, unless the page asks for them (`standaloneFramed`). */
+    standalone?: boolean
     /** Only for administrators. */
     admin?: boolean
     /**
@@ -50,11 +52,11 @@ const router = createRouter({
     },
     {
       // The event an invitation is for, and the answer to it, from the link in its email; the token is the key.
-      path: '/event/:token',
+      path: '/invitation/:token',
       name: 'invitation',
       component: () => import('@/views/InvitationView.vue'),
       props: true,
-      meta: { anyone: true },
+      meta: { anyone: true, standalone: true },
     },
     {
       // The unsubscribe link in an email's footer; the token names the person and the kind of email.
@@ -63,11 +65,6 @@ const router = createRouter({
       component: () => import('@/views/UnsubscribeView.vue'),
       props: true,
       meta: { anyone: true },
-    },
-    {
-      // Where emails sent before linked to.
-      path: '/rsvp/:token',
-      redirect: (to) => ({ name: 'invitation', params: to.params, query: to.query }),
     },
     {
       path: '/',
@@ -86,6 +83,14 @@ const router = createRouter({
       component: () => import('@/views/SettingsView.vue'),
       props: true,
       meta: { layer: 1 },
+    },
+    {
+      // An event, open over the calendar: where notifications lead.
+      path: '/event/:eventId',
+      name: 'event',
+      component: () => import('@/views/CalendarView.vue'),
+      props: true,
+      meta: { layer: 0 },
     },
     {
       path: '/calendar/folder/:folderId',

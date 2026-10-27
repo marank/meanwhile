@@ -8,6 +8,7 @@ import { i18n } from '@/i18n'
 import { dialog, submitDialog } from '@/services/dialog'
 import { browserTimeZone } from '@/services/datetime'
 import { realtime } from '@/services/realtime'
+import { toasts } from '@/services/toast'
 import { useCalendarStore } from '@/stores/calendars'
 import { useThemeStore } from '@/stores/theme'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
@@ -20,6 +21,7 @@ import {
   overviewSettings,
   stubMatchMedia,
 } from '@/components/calendar/__tests__/calendarFixtures'
+import { event } from '@/components/event/__tests__/helpers'
 import CalendarView from '../CalendarView.vue'
 import { fullCalendar } from './fullCalendarStub'
 
@@ -78,6 +80,7 @@ async function open(path: string, options: { phone?: boolean; loadLayout?: boole
     routes: [
       { path: '/calendar/folder/:folderId', component: CalendarView, props: true },
       { path: '/calendar/:calendarId?', component: CalendarView, props: true },
+      { path: '/event/:eventId', component: CalendarView, props: true },
     ],
   })
   await router.push(path)
@@ -368,6 +371,63 @@ describe('CalendarView', () => {
       expect(dayCellClass({ dow: 6, isToday: false })).toBe('calendar-default calendar-weekend')
       expect(dayLaneClass({ dow: 1, isToday: false })).toBe('calendar-default calendar-day-lane')
       expect(nowIndicatorHeaderContent({ date: new Date(2026, 9, 14, 9, 5) })).toMatch(/9:05/)
+    })
+  })
+
+  describe('an event in the URL', () => {
+    const monthShown = (wrapper: Wrapper) => wrapper.get('.toolbar-title').text()
+
+    it('opens over what was shown last, at its date, and gives way to the calendar when closed', async () => {
+      localStorage.setItem('calendar-selection', 'c1')
+      backend.on('GET /api/events/e9', event({ id: 'e9', calendar_id: 'c1', start: '2026-12-03T10:00:00' }))
+      const wrapper = await open('/event/e9')
+      expect(modal(wrapper).props()).toMatchObject({ eventId: 'e9', occurrence: null })
+      expect(monthShown(wrapper)).toBe(`Month of ${new Date(2026, 11, 1).toDateString()}`)
+      expect(eventRequests().at(-1)!.ids).toEqual(['c1'])
+      expect(router.currentRoute.value.fullPath).toBe('/event/e9')
+
+      await click(wrapper, '.modal-cancel')
+      expect(modal(wrapper).exists()).toBe(false)
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/work')
+    })
+
+    it("switches to the event's calendar where what was shown doesn't have it", async () => {
+      localStorage.setItem('calendar-selection', 'c2')
+      backend.on(
+        'GET /api/events/e9',
+        event({ id: 'e9', calendar_id: 'c1', start: '2026-11-20T00:00:00Z', all_day: true }),
+      )
+      const wrapper = await open('/event/e9')
+      expect(eventRequests().at(-1)!.ids).toEqual(['c1'])
+      expect(monthShown(wrapper)).toBe(`Month of ${new Date(2026, 10, 1).toDateString()}`)
+      await click(wrapper, '.modal-save')
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/work')
+    })
+
+    it('opens one followed from the calendar over it', async () => {
+      backend.on('GET /api/events/e9', event({ id: 'e9', calendar_id: 'c1', start: '2026-10-20T10:00:00' }))
+      const wrapper = await open('/calendar/work')
+      await router.push('/event/e9')
+      await flushPromises()
+      expect(modal(wrapper).props('eventId')).toBe('e9')
+      expect(eventRequests().every((request) => request.ids.join() === 'c1')).toBe(true)
+    })
+
+    it('reports other failures as they come', async () => {
+      toasts.splice(0)
+      backend.on('GET /api/events/e9', reply(500))
+      await open('/event/e9')
+      expect(toasts.map((t) => t.message)).toEqual(['Could not load the requested settings.'])
+    })
+
+    it('says so and shows the calendar for an event that is gone or not to be seen', async () => {
+      toasts.splice(0)
+      localStorage.setItem('calendar-selection', 'c1')
+      backend.on('GET /api/events/gone', reply(404, { detail: 'Event not found' }))
+      const wrapper = await open('/event/gone')
+      expect(modal(wrapper).exists()).toBe(false)
+      expect(toasts.map((t) => t.message)).toEqual(['This event no longer exists, or you can’t see it.'])
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/work')
     })
   })
 
