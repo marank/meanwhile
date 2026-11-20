@@ -113,59 +113,63 @@ function endOfSiblings(container: HTMLElement, parentId: string | null, dragged:
   }
 }
 
-export function findHit(container: HTMLElement, point: { x: number; y: number }, dragged: Dragged): Hit | null {
-  const box = container.getBoundingClientRect()
-  if (point.x < box.left || point.x > box.right || point.y < box.top || point.y > box.bottom) return null
+type Point = { x: number; y: number }
+type DragItem = { type: NodeType; id: string }
 
-  // On the dragged item itself (and the gap around it) the item stays where it is: without this, a
-  // small movement while letting go would count as a drop on the row below or above it.
-  const own = dragged.el.getBoundingClientRect()
-  if (point.x >= own.left && point.x <= own.right && point.y >= own.top - ROW_GAP && point.y <= own.bottom + ROW_GAP) {
-    return null
+/** Whether the point lies in the rectangle, widened by `gapY` above and below. */
+function isInside(rect: DOMRect, point: Point, gapY = 0): boolean {
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top - gapY && point.y <= rect.bottom + gapY
+}
+
+function folderHit(container: HTMLElement, row: Row, point: Point, item: DragItem): Hit {
+  const zone = dropZone(row.rect.top, row.rect.bottom, point.y)
+  if (zone === 'into') {
+    return { drop: { ...item, parentId: row.id, anchor: 'end' }, into: row.id, line: null }
   }
-
-  // The row at the pointer; the gap below a row counts for the row above it.
-  const row = visibleRows(container, dragged).find((candidate) => point.y <= candidate.rect.bottom + ROW_GAP)
-  if (!row) return endOfSiblings(container, null, dragged)
-
-  const share = Math.max(0, Math.min(1, (point.y - row.rect.top) / row.rect.height))
-  const item = { type: dragged.type, id: dragged.id }
-
-  if (row.type === 'folder') {
-    const zone = dropZone(row.rect.top, row.rect.bottom, point.y)
-    if (zone === 'into') {
-      return { drop: { ...item, parentId: row.id, anchor: 'end' }, into: row.id, line: null }
-    }
-    if (zone === 'before') {
-      return {
-        drop: { ...item, parentId: parentOf(row.el), anchor: { before: row.id } },
-        into: null,
-        line: { x: row.rect.left, y: row.rect.top - 2, width: row.rect.width },
-      }
-    }
-    // Below an open folder with content comes its first entry.
-    const children = listOf(container, row.id)
-    if (children && children.getBoundingClientRect().height > 0) {
-      return {
-        drop: { ...item, parentId: row.id, anchor: 'first' },
-        into: null,
-        line: { x: row.rect.left + 16, y: row.rect.bottom + 2, width: row.rect.width - 16 },
-      }
-    }
+  if (zone === 'before') {
     return {
-      drop: { ...item, parentId: parentOf(row.el), anchor: { after: row.id } },
+      drop: { ...item, parentId: parentOf(row.el), anchor: { before: row.id } },
       into: null,
-      line: { x: row.rect.left, y: row.rect.bottom + 2, width: row.rect.width },
+      line: { x: row.rect.left, y: row.rect.top - 2, width: row.rect.width },
     }
   }
+  // Below an open folder with content comes its first entry.
+  const children = listOf(container, row.id)
+  if (children && children.getBoundingClientRect().height > 0) {
+    return {
+      drop: { ...item, parentId: row.id, anchor: 'first' },
+      into: null,
+      line: { x: row.rect.left + 16, y: row.rect.bottom + 2, width: row.rect.width - 16 },
+    }
+  }
+  return {
+    drop: { ...item, parentId: parentOf(row.el), anchor: { after: row.id } },
+    into: null,
+    line: { x: row.rect.left, y: row.rect.bottom + 2, width: row.rect.width },
+  }
+}
 
-  // A calendar row.
+function calendarHit(row: Row, point: Point, item: DragItem): Hit {
+  const share = Math.max(0, Math.min(1, (point.y - row.rect.top) / row.rect.height))
   const before = share < 0.5
   return {
     drop: { ...item, parentId: parentOf(row.el), anchor: before ? { before: row.id } : { after: row.id } },
     into: null,
     line: { x: row.rect.left, y: (before ? row.rect.top : row.rect.bottom) + (before ? -2 : 2), width: row.rect.width },
   }
+}
+
+export function findHit(container: HTMLElement, point: Point, dragged: Dragged): Hit | null {
+  if (!isInside(container.getBoundingClientRect(), point)) return null
+  // On the dragged item itself (and the gap around it) the item stays where it is: without this, a
+  // small movement while letting go would count as a drop on the row below or above it.
+  if (isInside(dragged.el.getBoundingClientRect(), point, ROW_GAP)) return null
+
+  // The row at the pointer; the gap below a row counts for the row above it.
+  const row = visibleRows(container, dragged).find((candidate) => point.y <= candidate.rect.bottom + ROW_GAP)
+  if (!row) return endOfSiblings(container, null, dragged)
+  const item = { type: dragged.type, id: dragged.id }
+  return row.type === 'folder' ? folderHit(container, row, point, item) : calendarHit(row, point, item)
 }
 
 /**

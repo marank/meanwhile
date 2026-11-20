@@ -8,7 +8,13 @@ const LESSER = /LGPL/i
 // { 'package-name': 'reason' }
 const ALLOW = {}
 
-const byLicense = JSON.parse(execFileSync('pnpm', ['licenses', 'list', '--prod', '--json'], { encoding: 'utf8' }))
+// On Windows pnpm is a .cmd shim, which only a shell starts.
+const byLicense = JSON.parse(
+  execFileSync('pnpm', ['licenses', 'list', '--prod', '--json'], {
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  }),
+)
 const bad = []
 for (const [license, packages] of Object.entries(byLicense)) {
   if (!FORBIDDEN.test(license) || LESSER.test(license)) continue

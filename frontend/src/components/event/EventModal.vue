@@ -163,21 +163,31 @@ const loadingTimer = setTimeout(() => (loadingShown.value = true), SHOW_LOADING_
 onBeforeUnmount(() => clearTimeout(loadingTimer))
 const ready = computed(() => !!calendar.value || !!error.value || loadingShown.value)
 
-onMounted(async () => {
+/** Loads the event (when editing) and its calendar; false when that failed or there is no calendar. */
+async function loadCalendar(): Promise<boolean> {
   try {
     if (props.eventId) event.value = await api.getEvent(props.eventId)
     const calendarId = event.value?.calendar_id ?? props.calendarId
-    if (!calendarId) return
+    if (!calendarId) return false
     // Along with the calendar, so the dialog opens with the fields it will keep.
     ;[calendar.value] = await Promise.all([api.getCalendar(calendarId), choices.load(calendarId)])
+    return true
   } catch (e) {
     error.value = errorMessage(e, t('app.loadFailed'))
-    return
+    return false
   }
+}
+
+function fillForm() {
   if (event.value) fillFromEvent(event.value, forceAllDay.value)
   else if (props.defaultStart)
     fillDefaults(props.defaultStart, props.defaultEnd, forceAllDay.value || !!props.defaultAllDay)
   if (seriesOccurrence.value) fillFromOccurrence(seriesOccurrence.value)
+}
+
+onMounted(async () => {
+  if (!(await loadCalendar())) return
+  fillForm()
   // Shown early, the dialog had no title field to focus yet.
   if (loadingShown.value)
     nextTick(() => panel.value?.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)')?.focus())

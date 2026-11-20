@@ -1,0 +1,17 @@
+export default {
+  invitation: 'Invitation',
+  from: 'Invitation from {name}',
+  organizer: 'Organizer',
+  showMap: 'Show on a map',
+  yourTimeZone: 'Times in your time zone ({zone})',
+  participants: 'Participants ({count})',
+  guest: 'Guest',
+  you: 'you',
+  invitedAs: 'Invited as {email}',
+  addToCalendar: 'Add to calendar',
+  yourAnswer: 'Your answer',
+  notSaved: 'not saved yet',
+  cancelled: 'This event has been cancelled.',
+  notFound: 'This invitation no longer exists. It may have been withdrawn.',
+  repeats: 'Repeats',
+}

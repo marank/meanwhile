@@ -7,6 +7,9 @@ export interface Weekday {
   code: string
 }
 
+/** RFC 5545 weekday codes, Monday first. */
+export const WEEK_ORDER = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+
 export const weekdays: Weekday[] = [
   { value: 0, key: 'sunday', code: 'SU' },
   { value: 1, key: 'monday', code: 'MO' },

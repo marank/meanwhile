@@ -1,6 +1,7 @@
-# Production: `docker compose up -d --build`, configured through .env (template: .env.example).
-# The app container serves the frontend and the backend on APP_BIND over HTTP; HTTPS is
-# terminated in front of it (see README, "Deployment with Docker").
+# Production: PostgreSQL, Redis, the app and the worker. Works with a .env next to it and nothing
+# else from the repository: copy this file and .env.example (as .env) to the server, fill in .env,
+# `docker compose up -d`. The app serves the frontend and the backend on APP_BIND over HTTP; HTTPS
+# is terminated in front of it (see README, "Deployment with Docker").
 name: meanwhile
 
 # Unprivileged, without any capabilities, and nothing writable but /tmp (and the volumes).
@@ -13,9 +14,29 @@ x-hardened: &hardened
   cap_drop:
     - ALL
 
+# The app and the worker: same image, same configuration.
+x-app: &app
+  <<: *hardened
+  # The image CI pushes; APP_IMAGE pins a version (ghcr.io/marank/meanwhile:1.2) or points at a
+  # local build (`docker build -t meanwhile .`, APP_IMAGE=meanwhile).
+  image: ${APP_IMAGE:-ghcr.io/marank/meanwhile:latest}
+  restart: unless-stopped
+  env_file: .env
+  # Fixed by this setup; the rest comes from .env.
+  environment:
+    DEBUG: "false"
+    DB_HOST: db
+    DB_PORT: "5432"
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
 services:
   db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-meanwhile}
@@ -34,61 +55,40 @@ services:
   # Passes live updates between the uvicorn processes and the worker; holds no data.
   redis:
     <<: *hardened
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     restart: unless-stopped
     user: redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
-  # nginx (frontend, proxy), uvicorn and the task queue's worker under supervisord (Dockerfile).
+  # nginx (frontend, proxy) and uvicorn (API, CalDAV, WebSockets) under supervisord.
   app:
-    <<: *hardened
-    build: .
-    image: meanwhile-app
-    restart: unless-stopped
-    env_file: .env
-    # Fixed by this setup; the rest comes from .env.
-    environment:
-      DEBUG: "false"
-      DB_HOST: db
-      DB_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
+    <<: *app
     ports:
       - "${APP_BIND:-127.0.0.1:6326}:8080"
     volumes:
       - app_data:/data
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
 
-  # Nightly pg_dump into the "backups" volume (docker/backup.sh). Manual dump:
-  #   docker compose exec backup sh /backup.sh now
-  # Restore (into an empty database):
-  #   docker compose exec -T backup sh -c 'pg_restore --clean --if-exists -d "$PGDATABASE"' < file.dump
-  # Copy dumps off the host: docker compose cp backup:/var/lib/postgresql/backups ./backups
-  backup:
-    <<: *hardened
-    image: postgres:18-alpine
-    restart: unless-stopped
-    entrypoint: ["sh", "/backup.sh"]
-    user: postgres
-    environment:
-      PGHOST: db
-      PGDATABASE: ${DB_NAME:-meanwhile}
-      PGUSER: ${DB_USER:-meanwhile}
-      PGPASSWORD: ${DB_PASSWORD}
-      TZ: ${TIME_ZONE:-UTC}
-      BACKUP_TIME: ${BACKUP_TIME:-02:30}
-      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+  # The task queue (apps/core/tasks.py): emails, reminders, iMIP answers, clean-ups and the nightly
+  # backup. Own container, so it has its own logs, restarts and health check; waits until the app
+  # has migrated.
+  worker:
+    <<: *app
+    command: ["sh", "/usr/local/bin/worker"]
+    # A minimal init as PID 1 forwards `docker stop` and reaps finished child processes (pg_dump).
+    init: true
     volumes:
-      - ./docker/backup.sh:/backup.sh:ro
-      # Mounted on the image's postgres-owned home, so the new volume is writable for the
-      # postgres user without any capabilities.
-      - backups:/var/lib/postgresql
-    depends_on:
-      db:
-        condition: service_healthy
+      - app_data:/data
+      # Nightly pg_dump at BACKUP_TIME (in TIME_ZONE), kept BACKUP_KEEP_DAYS days. Manual dump:
+      #   docker compose exec worker python manage.py backup_database
+      # Copy dumps off the host:  docker compose cp worker:/backups ./backups
+      # Restore (README, "Backups"): pg_restore --clean --if-exists into the db container.
+      - backups:/backups
+    healthcheck:
+      # The image's HTTP health check is for the app; this checks the worker's database link.
+      test: ["CMD", "python", "manage.py", "procrastinate", "healthchecks"]
+      interval: 60s
+      timeout: 10s
+      start_period: 60s
 
 volumes:
   pgdata:

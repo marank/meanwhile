@@ -2,7 +2,7 @@
 // left to the server (python-dateutil).
 
 import { sortWithLastAtEnd } from './numberList'
-import { weekdays } from './weekdays'
+import { WEEK_ORDER, weekdays } from './weekdays'
 
 export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
 export type RecurrenceEnd = 'never' | 'until' | 'count'
@@ -36,7 +36,6 @@ export interface RecurrenceDefaults {
   ordinal: number
 }
 
-const WEEK_ORDER = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
 const FREQUENCIES: RecurrenceFrequency[] = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']
 
 export function recurrenceDefaults(start: Date): RecurrenceDefaults {
@@ -72,62 +71,84 @@ function numberList(value: string | undefined, valid: (n: number) => boolean): n
   return numbers.every((n) => Number.isInteger(n) && valid(n)) ? numbers : null
 }
 
-/**
- * Reads a rule into the editor's model. Returns null for an empty rule and for rules the editor can't
- * represent (e.g. BYSETPOS or several ordinal weekdays from other clients); those are kept as they are.
- */
-export function parseRrule(value: string | null, defaults: RecurrenceDefaults): RecurrenceRule | null {
-  if (!value) return null
+const KNOWN_PARTS = new Set(['FREQ', 'INTERVAL', 'UNTIL', 'COUNT', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'WKST'])
+
+/** The rule's NAME=value parts; null when one is malformed or beyond the editor. */
+function ruleParts(value: string): Record<string, string> | null {
   const parts: Record<string, string> = {}
   for (const part of value.replace(/^RRULE:/, '').split(';')) {
     const [key, partValue] = part.split('=', 2)
     if (!key || partValue === undefined) return null
     parts[key] = partValue
   }
-  const known = new Set(['FREQ', 'INTERVAL', 'UNTIL', 'COUNT', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'WKST'])
-  if (Object.keys(parts).some((key) => !known.has(key)) || (parts.WKST && parts.WKST !== 'MO')) return null
+  if (Object.keys(parts).some((key) => !KNOWN_PARTS.has(key)) || (parts.WKST && parts.WKST !== 'MO')) return null
+  return parts
+}
 
-  const frequency = parts.FREQ as RecurrenceFrequency
-  if (!FREQUENCIES.includes(frequency)) return null
-  const rule = defaultRecurrenceRule(defaults)
-  rule.frequency = frequency
-  rule.interval = Math.max(1, Number(parts.INTERVAL) || 1)
+function readWeekdays(rule: RecurrenceRule, byDay: string | undefined, defaults: RecurrenceDefaults): boolean {
+  const days = byDay?.split(',') ?? [defaults.weekday]
+  if (!days.every((day) => WEEK_ORDER.includes(day))) return false
+  rule.weekdays = days
+  return true
+}
 
-  const monthDays = numberList(parts.BYMONTHDAY, (n) => (n >= 1 && n <= 31) || n === -1)
-  const months = numberList(parts.BYMONTH, (n) => n >= 1 && n <= 12)
-  if (!monthDays || !months) return null
+function readOrdinalWeekday(rule: RecurrenceRule, byDay: string): boolean {
+  // Several positions of one weekday ("1TU,3TU"); mixed weekdays are beyond the editor.
+  const entries = byDay.split(',').map((entry) => entry.match(/^([1-5]|-1)(MO|TU|WE|TH|FR|SA|SU)$/))
+  const weekday = entries[0]?.[2]
+  if (!entries.every((entry) => entry && entry[2] === weekday)) return false
+  rule.dayMode = 'weekday'
+  rule.ordinals = sortWithLastAtEnd(entries.map((entry) => Number(entry![1])))
+  rule.ordinalWeekday = weekday!
+  return true
+}
 
-  if (frequency === 'DAILY') {
-    if (parts.BYDAY || monthDays.length || months.length) return null
-  } else if (frequency === 'WEEKLY') {
-    const days = parts.BYDAY?.split(',') ?? [defaults.weekday]
-    if (!days.every((day) => WEEK_ORDER.includes(day)) || monthDays.length || months.length) return null
-    rule.weekdays = days
-  } else {
-    if (frequency === 'MONTHLY' && months.length) return null
-    if (months.length) rule.months = months
-    if (parts.BYDAY) {
-      // Several positions of one weekday ("1TU,3TU"); mixed weekdays are beyond the editor.
-      const entries = parts.BYDAY.split(',').map((entry) => entry.match(/^([1-5]|-1)(MO|TU|WE|TH|FR|SA|SU)$/))
-      const weekday = entries[0]?.[2]
-      if (monthDays.length || !entries.every((entry) => entry && entry[2] === weekday)) return null
-      rule.dayMode = 'weekday'
-      rule.ordinals = sortWithLastAtEnd(entries.map((entry) => Number(entry![1])))
-      rule.ordinalWeekday = weekday!
-    } else if (monthDays.length) {
-      rule.monthDays = monthDays
-    }
-  }
+/** Reads which days the rule repeats on; false when the editor can't show them. */
+function readDays(
+  rule: RecurrenceRule,
+  parts: Record<string, string>,
+  { monthDays, months }: { monthDays: number[]; months: number[] },
+  defaults: RecurrenceDefaults,
+): boolean {
+  if (rule.frequency === 'DAILY') return !parts.BYDAY && !monthDays.length && !months.length
+  if (rule.frequency === 'WEEKLY')
+    return !monthDays.length && !months.length && readWeekdays(rule, parts.BYDAY, defaults)
+  if (rule.frequency === 'MONTHLY' && months.length) return false
+  if (months.length) rule.months = months
+  if (parts.BYDAY) return !monthDays.length && readOrdinalWeekday(rule, parts.BYDAY)
+  if (monthDays.length) rule.monthDays = monthDays
+  return true
+}
 
+/** Reads when the rule ends; false for an UNTIL that isn't a date. */
+function readEnd(rule: RecurrenceRule, parts: Record<string, string>): boolean {
   if (parts.UNTIL) {
-    if (!/^\d{8}/.test(parts.UNTIL)) return null
+    if (!/^\d{8}/.test(parts.UNTIL)) return false
     rule.end = 'until'
     rule.until = `${parts.UNTIL.slice(0, 4)}-${parts.UNTIL.slice(4, 6)}-${parts.UNTIL.slice(6, 8)}`
   } else if (parts.COUNT) {
     rule.end = 'count'
     rule.count = Math.max(1, Number(parts.COUNT) || 1)
   }
-  return rule
+  return true
+}
+
+/**
+ * Reads a rule into the editor's model. Returns null for an empty rule and for rules the editor can't
+ * represent (e.g. BYSETPOS or several ordinal weekdays from other clients); those are kept as they are.
+ */
+export function parseRrule(value: string | null, defaults: RecurrenceDefaults): RecurrenceRule | null {
+  const parts = value ? ruleParts(value) : null
+  const frequency = parts?.FREQ as RecurrenceFrequency
+  if (!parts || !FREQUENCIES.includes(frequency)) return null
+  const rule = defaultRecurrenceRule(defaults)
+  rule.frequency = frequency
+  rule.interval = Math.max(1, Number(parts.INTERVAL) || 1)
+
+  const monthDays = numberList(parts.BYMONTHDAY, (n) => (n >= 1 && n <= 31) || n === -1)
+  const months = numberList(parts.BYMONTH, (n) => n >= 1 && n <= 12)
+  if (!monthDays || !months || !readDays(rule, parts, { monthDays, months }, defaults)) return null
+  return readEnd(rule, parts) ? rule : null
 }
 
 /** The rule's pattern without its end, e.g. to compare it with the presets. */

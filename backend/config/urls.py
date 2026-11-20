@@ -8,10 +8,10 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
 
-from core.api import api
-from core.views.auth import csrf_view
-from core.views.dav import well_known_caldav
-from core.views.feed import calendar_feed
+from apps.core.api import api
+from apps.core.views.auth import csrf_view
+from apps.core.views.dav import well_known_caldav
+from apps.core.views.feed import calendar_feed
 
 urlpatterns = [
     path("api/auth/csrf", csrf_view),

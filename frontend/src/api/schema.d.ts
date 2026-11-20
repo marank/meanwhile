@@ -12,7 +12,7 @@ export interface paths {
       cookie?: never
     }
     /** Health */
-    get: operations['core_views_misc_health']
+    get: operations['apps_core_views_misc_health']
     put?: never
     post?: never
     delete?: never
@@ -29,7 +29,7 @@ export interface paths {
       cookie?: never
     }
     /** Public Settings */
-    get: operations['core_views_misc_public_settings']
+    get: operations['apps_core_views_misc_public_settings']
     put?: never
     post?: never
     delete?: never
@@ -46,14 +46,14 @@ export interface paths {
       cookie?: never
     }
     /** Me */
-    get: operations['core_views_users_me']
+    get: operations['apps_core_views_users_me']
     put?: never
     post?: never
     delete?: never
     options?: never
     head?: never
     /** Update Me */
-    patch: operations['core_views_users_update_me']
+    patch: operations['apps_core_views_users_update_me']
     trace?: never
   }
   '/api/users/me/settings': {
@@ -64,14 +64,14 @@ export interface paths {
       cookie?: never
     }
     /** Get Overview Settings */
-    get: operations['core_views_users_get_overview_settings']
+    get: operations['apps_core_views_users_get_overview_settings']
     put?: never
     post?: never
     delete?: never
     options?: never
     head?: never
     /** Update Overview Settings */
-    patch: operations['core_views_users_update_overview_settings']
+    patch: operations['apps_core_views_users_update_overview_settings']
     trace?: never
   }
   '/api/users/me/app-passwords': {
@@ -82,10 +82,10 @@ export interface paths {
       cookie?: never
     }
     /** List App Passwords */
-    get: operations['core_views_users_list_app_passwords']
+    get: operations['apps_core_views_users_list_app_passwords']
     put?: never
     /** Create App Password */
-    post: operations['core_views_users_create_app_password']
+    post: operations['apps_core_views_users_create_app_password']
     delete?: never
     options?: never
     head?: never
@@ -103,7 +103,7 @@ export interface paths {
     put?: never
     post?: never
     /** Delete App Password */
-    delete: operations['core_views_users_delete_app_password']
+    delete: operations['apps_core_views_users_delete_app_password']
     options?: never
     head?: never
     patch?: never
@@ -117,14 +117,14 @@ export interface paths {
       cookie?: never
     }
     /** Admin Settings */
-    get: operations['core_views_admin_admin_settings']
+    get: operations['apps_core_views_admin_admin_settings']
     put?: never
     post?: never
     delete?: never
     options?: never
     head?: never
     /** Admin Settings Update */
-    patch: operations['core_views_admin_admin_settings_update']
+    patch: operations['apps_core_views_admin_admin_settings_update']
     trace?: never
   }
   '/api/admin/users': {
@@ -135,10 +135,10 @@ export interface paths {
       cookie?: never
     }
     /** Admin Users */
-    get: operations['core_views_admin_admin_users']
+    get: operations['apps_core_views_admin_admin_users']
     put?: never
     /** Admin Create User */
-    post: operations['core_views_admin_admin_create_user']
+    post: operations['apps_core_views_admin_admin_create_user']
     delete?: never
     options?: never
     head?: never
@@ -153,15 +153,15 @@ export interface paths {
       cookie?: never
     }
     /** Admin Get User */
-    get: operations['core_views_admin_admin_get_user']
+    get: operations['apps_core_views_admin_admin_get_user']
     put?: never
     post?: never
     /** Admin Delete User */
-    delete: operations['core_views_admin_admin_delete_user']
+    delete: operations['apps_core_views_admin_admin_delete_user']
     options?: never
     head?: never
     /** Admin Update User */
-    patch: operations['core_views_admin_admin_update_user']
+    patch: operations['apps_core_views_admin_admin_update_user']
     trace?: never
   }
   '/api/admin/users/{user_id}/reset-password': {
@@ -174,7 +174,7 @@ export interface paths {
     get?: never
     put?: never
     /** Admin Reset Password */
-    post: operations['core_views_admin_admin_reset_password']
+    post: operations['apps_core_views_admin_admin_reset_password']
     delete?: never
     options?: never
     head?: never
@@ -194,7 +194,7 @@ export interface paths {
      * Admin Invite User
      * @description Emails the user about their account; without a password, with the link to choose one.
      */
-    post: operations['core_views_admin_admin_invite_user']
+    post: operations['apps_core_views_admin_admin_invite_user']
     delete?: never
     options?: never
     head?: never
@@ -209,10 +209,10 @@ export interface paths {
       cookie?: never
     }
     /** List Groups */
-    get: operations['core_views_groups_list_groups']
+    get: operations['apps_core_views_groups_list_groups']
     put?: never
     /** Create Group */
-    post: operations['core_views_groups_create_group']
+    post: operations['apps_core_views_groups_create_group']
     delete?: never
     options?: never
     head?: never
@@ -227,15 +227,15 @@ export interface paths {
       cookie?: never
     }
     /** Get Group */
-    get: operations['core_views_groups_get_group']
+    get: operations['apps_core_views_groups_get_group']
     put?: never
     post?: never
     /** Delete Group */
-    delete: operations['core_views_groups_delete_group']
+    delete: operations['apps_core_views_groups_delete_group']
     options?: never
     head?: never
     /** Update Group */
-    patch: operations['core_views_groups_update_group']
+    patch: operations['apps_core_views_groups_update_group']
     trace?: never
   }
   '/api/groups/{group_id}/members/{user_id}': {
@@ -248,9 +248,9 @@ export interface paths {
     get?: never
     put?: never
     /** Add Member */
-    post: operations['core_views_groups_add_member']
+    post: operations['apps_core_views_groups_add_member']
     /** Remove Member */
-    delete: operations['core_views_groups_remove_member']
+    delete: operations['apps_core_views_groups_remove_member']
     options?: never
     head?: never
     patch?: never
@@ -264,7 +264,7 @@ export interface paths {
       cookie?: never
     }
     /** Get Layout */
-    get: operations['core_views_layout_get_layout']
+    get: operations['apps_core_views_layout_get_layout']
     put?: never
     post?: never
     delete?: never
@@ -283,7 +283,7 @@ export interface paths {
     get?: never
     put?: never
     /** Create Folder */
-    post: operations['core_views_layout_create_folder']
+    post: operations['apps_core_views_layout_create_folder']
     delete?: never
     options?: never
     head?: never
@@ -301,11 +301,11 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Folder */
-    delete: operations['core_views_layout_delete_folder']
+    delete: operations['apps_core_views_layout_delete_folder']
     options?: never
     head?: never
     /** Update Folder */
-    patch: operations['core_views_layout_update_folder']
+    patch: operations['apps_core_views_layout_update_folder']
     trace?: never
   }
   '/api/layout/items': {
@@ -325,7 +325,7 @@ export interface paths {
      * Update Layout Items
      * @description Sets parent folder and position of folders and calendars; ones that are gone meanwhile are skipped.
      */
-    patch: operations['core_views_layout_update_layout_items']
+    patch: operations['apps_core_views_layout_update_layout_items']
     trace?: never
   }
   '/api/search': {
@@ -336,7 +336,7 @@ export interface paths {
       cookie?: never
     }
     /** Search */
-    get: operations['core_views_search_search']
+    get: operations['apps_core_views_search_search']
     put?: never
     post?: never
     delete?: never
@@ -353,10 +353,10 @@ export interface paths {
       cookie?: never
     }
     /** List Calendars */
-    get: operations['core_views_calendars_list_calendars']
+    get: operations['apps_core_views_calendars_list_calendars']
     put?: never
     /** Create Calendar */
-    post: operations['core_views_calendars_create_calendar']
+    post: operations['apps_core_views_calendars_create_calendar']
     delete?: never
     options?: never
     head?: never
@@ -374,7 +374,7 @@ export interface paths {
      * Public Calendars
      * @description Public calendars the user doesn't have through a direct membership or a group anyway.
      */
-    get: operations['core_views_calendars_public_calendars']
+    get: operations['apps_core_views_calendars_public_calendars']
     put?: never
     post?: never
     delete?: never
@@ -395,13 +395,13 @@ export interface paths {
      * Add Public Calendar
      * @description Adds a public calendar to the sidebar, at its end; its public role applies (see get_membership).
      */
-    put: operations['core_views_calendars_add_public_calendar']
+    put: operations['apps_core_views_calendars_add_public_calendar']
     post?: never
     /**
      * Remove Public Calendar
      * @description Takes a public calendar the user added out of the sidebar again.
      */
-    delete: operations['core_views_calendars_remove_public_calendar']
+    delete: operations['apps_core_views_calendars_remove_public_calendar']
     options?: never
     head?: never
     patch?: never
@@ -415,15 +415,15 @@ export interface paths {
       cookie?: never
     }
     /** Get Calendar */
-    get: operations['core_views_calendars_get_calendar']
+    get: operations['apps_core_views_calendars_get_calendar']
     put?: never
     post?: never
     /** Delete Calendar */
-    delete: operations['core_views_calendars_delete_calendar']
+    delete: operations['apps_core_views_calendars_delete_calendar']
     options?: never
     head?: never
     /** Update Calendar */
-    patch: operations['core_views_calendars_update_calendar']
+    patch: operations['apps_core_views_calendars_update_calendar']
     trace?: never
   }
   '/api/calendars/{calendar_id}/members': {
@@ -434,10 +434,10 @@ export interface paths {
       cookie?: never
     }
     /** List Members */
-    get: operations['core_views_calendars_list_members']
+    get: operations['apps_core_views_calendars_list_members']
     put?: never
     /** Add Member */
-    post: operations['core_views_calendars_add_member']
+    post: operations['apps_core_views_calendars_add_member']
     delete?: never
     options?: never
     head?: never
@@ -455,11 +455,11 @@ export interface paths {
     put?: never
     post?: never
     /** Remove Member */
-    delete: operations['core_views_calendars_remove_member']
+    delete: operations['apps_core_views_calendars_remove_member']
     options?: never
     head?: never
     /** Update Member */
-    patch: operations['core_views_calendars_update_member']
+    patch: operations['apps_core_views_calendars_update_member']
     trace?: never
   }
   '/api/calendars/{calendar_id}/feed-url': {
@@ -470,7 +470,7 @@ export interface paths {
       cookie?: never
     }
     /** Get Feed Url */
-    get: operations['core_views_calendars_get_feed_url']
+    get: operations['apps_core_views_calendars_get_feed_url']
     put?: never
     post?: never
     delete?: never
@@ -492,7 +492,7 @@ export interface paths {
      * Rotate Feed Token
      * @description A new feed URL for the user, e.g. after they shared theirs by mistake.
      */
-    post: operations['core_views_calendars_rotate_feed_token']
+    post: operations['apps_core_views_calendars_rotate_feed_token']
     delete?: never
     options?: never
     head?: never
@@ -507,12 +507,12 @@ export interface paths {
       cookie?: never
     }
     /** List Calendar Approvers */
-    get: operations['core_views_calendars_list_calendar_approvers']
+    get: operations['apps_core_views_calendars_list_calendar_approvers']
     /**
      * Set Calendar Approvers
      * @description Sets the default approvers, who decide on resources that have none of their own.
      */
-    put: operations['core_views_calendars_set_calendar_approvers']
+    put: operations['apps_core_views_calendars_set_calendar_approvers']
     post?: never
     delete?: never
     options?: never
@@ -528,10 +528,10 @@ export interface paths {
       cookie?: never
     }
     /** List Calendar Groups */
-    get: operations['core_views_calendars_list_calendar_groups']
+    get: operations['apps_core_views_calendars_list_calendar_groups']
     put?: never
     /** Add Calendar Group */
-    post: operations['core_views_calendars_add_calendar_group']
+    post: operations['apps_core_views_calendars_add_calendar_group']
     delete?: never
     options?: never
     head?: never
@@ -549,11 +549,11 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Calendar Group */
-    delete: operations['core_views_calendars_delete_calendar_group']
+    delete: operations['apps_core_views_calendars_delete_calendar_group']
     options?: never
     head?: never
     /** Update Calendar Group */
-    patch: operations['core_views_calendars_update_calendar_group']
+    patch: operations['apps_core_views_calendars_update_calendar_group']
     trace?: never
   }
   '/api/calendars/{calendar_id}/categories': {
@@ -564,10 +564,10 @@ export interface paths {
       cookie?: never
     }
     /** List Categories */
-    get: operations['core_views_categories_list_categories']
+    get: operations['apps_core_views_categories_list_categories']
     put?: never
     /** Create Category */
-    post: operations['core_views_categories_create_category']
+    post: operations['apps_core_views_categories_create_category']
     delete?: never
     options?: never
     head?: never
@@ -585,11 +585,11 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Category */
-    delete: operations['core_views_categories_delete_category']
+    delete: operations['apps_core_views_categories_delete_category']
     options?: never
     head?: never
     /** Update Category */
-    patch: operations['core_views_categories_update_category']
+    patch: operations['apps_core_views_categories_update_category']
     trace?: never
   }
   '/api/calendars/{calendar_id}/resources': {
@@ -600,10 +600,10 @@ export interface paths {
       cookie?: never
     }
     /** List Resources */
-    get: operations['core_views_resources_list_resources']
+    get: operations['apps_core_views_resources_list_resources']
     put?: never
     /** Create Resource */
-    post: operations['core_views_resources_create_resource']
+    post: operations['apps_core_views_resources_create_resource']
     delete?: never
     options?: never
     head?: never
@@ -621,11 +621,11 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Resource */
-    delete: operations['core_views_resources_delete_resource']
+    delete: operations['apps_core_views_resources_delete_resource']
     options?: never
     head?: never
     /** Update Resource */
-    patch: operations['core_views_resources_update_resource']
+    patch: operations['apps_core_views_resources_update_resource']
     trace?: never
   }
   '/api/calendars/{calendar_id}/resources/{resource_id}/approvers': {
@@ -636,12 +636,12 @@ export interface paths {
       cookie?: never
     }
     /** List Resource Approvers */
-    get: operations['core_views_resources_list_resource_approvers']
+    get: operations['apps_core_views_resources_list_resource_approvers']
     /**
      * Set Resource Approvers
      * @description Sets the resource's own approvers; without any, the calendar's default approvers decide.
      */
-    put: operations['core_views_resources_set_resource_approvers']
+    put: operations['apps_core_views_resources_set_resource_approvers']
     post?: never
     delete?: never
     options?: never
@@ -660,7 +660,7 @@ export interface paths {
      * List Events Of Calendars
      * @description Occurrences of several calendars at once; calendars the user can't read are skipped.
      */
-    get: operations['core_views_events_list_events_of_calendars']
+    get: operations['apps_core_views_events_list_events_of_calendars']
     put?: never
     post?: never
     delete?: never
@@ -677,10 +677,10 @@ export interface paths {
       cookie?: never
     }
     /** List Events */
-    get: operations['core_views_events_list_events']
+    get: operations['apps_core_views_events_list_events']
     put?: never
     /** Create Event */
-    post: operations['core_views_events_create_event']
+    post: operations['apps_core_views_events_create_event']
     delete?: never
     options?: never
     head?: never
@@ -695,15 +695,15 @@ export interface paths {
       cookie?: never
     }
     /** Get Event */
-    get: operations['core_views_events_get_event']
+    get: operations['apps_core_views_events_get_event']
     put?: never
     post?: never
     /** Delete Event */
-    delete: operations['core_views_events_delete_event']
+    delete: operations['apps_core_views_events_delete_event']
     options?: never
     head?: never
     /** Update Event */
-    patch: operations['core_views_events_update_event']
+    patch: operations['apps_core_views_events_update_event']
     trace?: never
   }
   '/api/events/{event_id}/occurrences/{recurrence_id}': {
@@ -720,7 +720,7 @@ export interface paths {
      * Delete Occurrence
      * @description Removes one occurrence of a series ("this"), it and the later ones ("following"), or all.
      */
-    delete: operations['core_views_events_delete_occurrence']
+    delete: operations['apps_core_views_events_delete_occurrence']
     options?: never
     head?: never
     /**
@@ -730,7 +730,7 @@ export interface paths {
      *     `recurrence_id` is the original start of the occurrence; start and end in the payload are
      *     the occurrence's new times. Returns the event that was changed.
      */
-    patch: operations['core_views_events_update_occurrence']
+    patch: operations['apps_core_views_events_update_occurrence']
     trace?: never
   }
   '/api/events/{event_id}/reminders': {
@@ -744,9 +744,9 @@ export interface paths {
      * Get Reminders
      * @description The current user's own reminders for the event (of a series: for all its occurrences).
      */
-    get: operations['core_views_events_get_reminders']
+    get: operations['apps_core_views_events_get_reminders']
     /** Put Reminders */
-    put: operations['core_views_events_put_reminders']
+    put: operations['apps_core_views_events_put_reminders']
     post?: never
     delete?: never
     options?: never
@@ -762,10 +762,10 @@ export interface paths {
       cookie?: never
     }
     /** List Event Participants */
-    get: operations['core_views_events_list_event_participants']
+    get: operations['apps_core_views_events_list_event_participants']
     put?: never
     /** Add Event Participant */
-    post: operations['core_views_events_add_event_participant']
+    post: operations['apps_core_views_events_add_event_participant']
     delete?: never
     options?: never
     head?: never
@@ -789,7 +789,7 @@ export interface paths {
      * Update My Participation
      * @description Answers an invitation: sets the status of the current user's own participation.
      */
-    patch: operations['core_views_events_update_my_participation']
+    patch: operations['apps_core_views_events_update_my_participation']
     trace?: never
   }
   '/api/events/{event_id}/participants/{participant_id}': {
@@ -803,11 +803,11 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Event Participant */
-    delete: operations['core_views_events_delete_event_participant']
+    delete: operations['apps_core_views_events_delete_event_participant']
     options?: never
     head?: never
     /** Update Event Participant */
-    patch: operations['core_views_events_update_event_participant']
+    patch: operations['apps_core_views_events_update_event_participant']
     trace?: never
   }
   '/api/events/{event_id}/comments': {
@@ -818,10 +818,10 @@ export interface paths {
       cookie?: never
     }
     /** List Comments */
-    get: operations['core_views_comments_list_comments']
+    get: operations['apps_core_views_comments_list_comments']
     put?: never
     /** Create Comment */
-    post: operations['core_views_comments_create_comment']
+    post: operations['apps_core_views_comments_create_comment']
     delete?: never
     options?: never
     head?: never
@@ -839,7 +839,7 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Comment */
-    delete: operations['core_views_comments_delete_comment']
+    delete: operations['apps_core_views_comments_delete_comment']
     options?: never
     head?: never
     patch?: never
@@ -853,7 +853,7 @@ export interface paths {
       cookie?: never
     }
     /** List Activity */
-    get: operations['core_views_comments_list_activity']
+    get: operations['apps_core_views_comments_list_activity']
     put?: never
     post?: never
     delete?: never
@@ -870,7 +870,7 @@ export interface paths {
       cookie?: never
     }
     /** List Notifications */
-    get: operations['core_views_notifications_list_notifications']
+    get: operations['apps_core_views_notifications_list_notifications']
     put?: never
     post?: never
     delete?: never
@@ -891,7 +891,7 @@ export interface paths {
      * @description The numbers the app shows as badges: unread notifications, and requests still waiting for this user
      *     (pending approvals and unanswered invitations).
      */
-    get: operations['core_views_notifications_counts']
+    get: operations['apps_core_views_notifications_counts']
     put?: never
     post?: never
     delete?: never
@@ -910,7 +910,7 @@ export interface paths {
     get?: never
     put?: never
     /** Mark All Read */
-    post: operations['core_views_notifications_mark_all_read']
+    post: operations['apps_core_views_notifications_mark_all_read']
     delete?: never
     options?: never
     head?: never
@@ -927,7 +927,7 @@ export interface paths {
     get?: never
     put?: never
     /** Mark Read */
-    post: operations['core_views_notifications_mark_read']
+    post: operations['apps_core_views_notifications_mark_read']
     delete?: never
     options?: never
     head?: never
@@ -945,7 +945,7 @@ export interface paths {
     put?: never
     post?: never
     /** Delete Notification */
-    delete: operations['core_views_notifications_delete_notification']
+    delete: operations['apps_core_views_notifications_delete_notification']
     options?: never
     head?: never
     patch?: never
@@ -959,7 +959,7 @@ export interface paths {
       cookie?: never
     }
     /** List Pending Approvals */
-    get: operations['core_views_approvals_list_pending_approvals']
+    get: operations['apps_core_views_approvals_list_pending_approvals']
     put?: never
     post?: never
     delete?: never
@@ -978,7 +978,7 @@ export interface paths {
     get?: never
     put?: never
     /** Approve Event */
-    post: operations['core_views_approvals_approve_event']
+    post: operations['apps_core_views_approvals_approve_event']
     delete?: never
     options?: never
     head?: never
@@ -995,7 +995,7 @@ export interface paths {
     get?: never
     put?: never
     /** Reject Event */
-    post: operations['core_views_approvals_reject_event']
+    post: operations['apps_core_views_approvals_reject_event']
     delete?: never
     options?: never
     head?: never
@@ -1012,7 +1012,7 @@ export interface paths {
     get?: never
     put?: never
     /** Cancel Event */
-    post: operations['core_views_approvals_cancel_event']
+    post: operations['apps_core_views_approvals_cancel_event']
     delete?: never
     options?: never
     head?: never
@@ -1034,7 +1034,7 @@ export interface paths {
      *     the user search; resources only by members of their calendar. A POST, though it changes nothing:
      *     see AvailabilityIn.
      */
-    post: operations['core_views_availability_availability']
+    post: operations['apps_core_views_availability_availability']
     delete?: never
     options?: never
     head?: never
@@ -1049,10 +1049,10 @@ export interface paths {
       cookie?: never
     }
     /** Get Invitation */
-    get: operations['core_views_rsvp_get_invitation']
+    get: operations['apps_core_views_rsvp_get_invitation']
     put?: never
     /** Answer Invitation */
-    post: operations['core_views_rsvp_answer_invitation']
+    post: operations['apps_core_views_rsvp_answer_invitation']
     delete?: never
     options?: never
     head?: never
@@ -1071,7 +1071,7 @@ export interface paths {
      * @description The event as a file for calendar apps, without organizer and participants: anyone with the link may
      *     load it, and answers are given on the page.
      */
-    get: operations['core_views_rsvp_invitation_ics']
+    get: operations['apps_core_views_rsvp_invitation_ics']
     put?: never
     post?: never
     delete?: never
@@ -1088,12 +1088,12 @@ export interface paths {
       cookie?: never
     }
     /** Get Subscription */
-    get: operations['core_views_unsubscribe_get_subscription']
+    get: operations['apps_core_views_unsubscribe_get_subscription']
     put?: never
     /** Unsubscribe By Link */
-    post: operations['core_views_unsubscribe_unsubscribe_by_link']
+    post: operations['apps_core_views_unsubscribe_unsubscribe_by_link']
     /** Resubscribe By Link */
-    delete: operations['core_views_unsubscribe_resubscribe_by_link']
+    delete: operations['apps_core_views_unsubscribe_resubscribe_by_link']
     options?: never
     head?: never
     patch?: never
@@ -1156,7 +1156,7 @@ export interface components {
     }
     /**
      * ProfileOut
-     * @description The signed-in user, as /users/me and the login and signup answers (core.headless_adapter) show them.
+     * @description The signed-in user, as /users/me and the login and signup answers (apps.core.headless_adapter) show them.
      */
     ProfileOut: {
       /**
@@ -1883,7 +1883,7 @@ export interface components {
     }
     /** CalendarMemberUpdate */
     CalendarMemberUpdate: {
-      role?: components['schemas']['Role'] | null
+      role: components['schemas']['Role']
     }
     /** FeedUrlOut */
     FeedUrlOut: {
@@ -2357,10 +2357,10 @@ export interface components {
       /** Resource Id */
       resource_id?: string | null
       /** Participants */
-      participants?: components['schemas']['EventParticipantInvite'][] | null
+      participants?: components['schemas']['EventParticipantCreate'][] | null
     }
-    /** EventParticipantInvite */
-    EventParticipantInvite: {
+    /** EventParticipantCreate */
+    EventParticipantCreate: {
       /** User Id */
       user_id?: string | null
       /** Email */
@@ -2442,15 +2442,6 @@ export interface components {
        * Format: date-time
        */
       updated_at: string
-    }
-    /** EventParticipantCreate */
-    EventParticipantCreate: {
-      /** User Id */
-      user_id?: string | null
-      /** Email */
-      email?: string | null
-      /** @default needs_action */
-      status?: components['schemas']['ParticipantStatus'] | null
     }
     /** EventParticipantUpdate */
     EventParticipantUpdate: {
@@ -2852,7 +2843,7 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
-  core_views_misc_health: {
+  apps_core_views_misc_health: {
     parameters: {
       query?: never
       header?: never
@@ -2870,7 +2861,7 @@ export interface operations {
       }
     }
   }
-  core_views_misc_public_settings: {
+  apps_core_views_misc_public_settings: {
     parameters: {
       query?: never
       header?: never
@@ -2890,7 +2881,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_me: {
+  apps_core_views_users_me: {
     parameters: {
       query?: never
       header?: never
@@ -2910,7 +2901,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_update_me: {
+  apps_core_views_users_update_me: {
     parameters: {
       query?: never
       header?: never
@@ -2934,7 +2925,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_get_overview_settings: {
+  apps_core_views_users_get_overview_settings: {
     parameters: {
       query?: never
       header?: never
@@ -2954,7 +2945,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_update_overview_settings: {
+  apps_core_views_users_update_overview_settings: {
     parameters: {
       query?: never
       header?: never
@@ -2978,7 +2969,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_list_app_passwords: {
+  apps_core_views_users_list_app_passwords: {
     parameters: {
       query?: never
       header?: never
@@ -2998,7 +2989,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_create_app_password: {
+  apps_core_views_users_create_app_password: {
     parameters: {
       query?: never
       header?: never
@@ -3022,7 +3013,7 @@ export interface operations {
       }
     }
   }
-  core_views_users_delete_app_password: {
+  apps_core_views_users_delete_app_password: {
     parameters: {
       query?: never
       header?: never
@@ -3044,7 +3035,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_settings: {
+  apps_core_views_admin_admin_settings: {
     parameters: {
       query?: never
       header?: never
@@ -3064,7 +3055,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_settings_update: {
+  apps_core_views_admin_admin_settings_update: {
     parameters: {
       query?: never
       header?: never
@@ -3088,7 +3079,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_users: {
+  apps_core_views_admin_admin_users: {
     parameters: {
       query?: never
       header?: never
@@ -3108,7 +3099,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_create_user: {
+  apps_core_views_admin_admin_create_user: {
     parameters: {
       query?: never
       header?: never
@@ -3132,7 +3123,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_get_user: {
+  apps_core_views_admin_admin_get_user: {
     parameters: {
       query?: never
       header?: never
@@ -3154,7 +3145,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_delete_user: {
+  apps_core_views_admin_admin_delete_user: {
     parameters: {
       query?: never
       header?: never
@@ -3176,7 +3167,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_update_user: {
+  apps_core_views_admin_admin_update_user: {
     parameters: {
       query?: never
       header?: never
@@ -3202,7 +3193,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_reset_password: {
+  apps_core_views_admin_admin_reset_password: {
     parameters: {
       query?: never
       header?: never
@@ -3224,7 +3215,7 @@ export interface operations {
       }
     }
   }
-  core_views_admin_admin_invite_user: {
+  apps_core_views_admin_admin_invite_user: {
     parameters: {
       query?: never
       header?: never
@@ -3246,7 +3237,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_list_groups: {
+  apps_core_views_groups_list_groups: {
     parameters: {
       query?: never
       header?: never
@@ -3266,7 +3257,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_create_group: {
+  apps_core_views_groups_create_group: {
     parameters: {
       query?: never
       header?: never
@@ -3290,7 +3281,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_get_group: {
+  apps_core_views_groups_get_group: {
     parameters: {
       query?: never
       header?: never
@@ -3312,7 +3303,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_delete_group: {
+  apps_core_views_groups_delete_group: {
     parameters: {
       query?: never
       header?: never
@@ -3334,7 +3325,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_update_group: {
+  apps_core_views_groups_update_group: {
     parameters: {
       query?: never
       header?: never
@@ -3360,7 +3351,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_add_member: {
+  apps_core_views_groups_add_member: {
     parameters: {
       query?: never
       header?: never
@@ -3383,7 +3374,7 @@ export interface operations {
       }
     }
   }
-  core_views_groups_remove_member: {
+  apps_core_views_groups_remove_member: {
     parameters: {
       query?: never
       header?: never
@@ -3406,7 +3397,7 @@ export interface operations {
       }
     }
   }
-  core_views_layout_get_layout: {
+  apps_core_views_layout_get_layout: {
     parameters: {
       query?: never
       header?: never
@@ -3426,7 +3417,7 @@ export interface operations {
       }
     }
   }
-  core_views_layout_create_folder: {
+  apps_core_views_layout_create_folder: {
     parameters: {
       query?: never
       header?: never
@@ -3450,7 +3441,7 @@ export interface operations {
       }
     }
   }
-  core_views_layout_delete_folder: {
+  apps_core_views_layout_delete_folder: {
     parameters: {
       query?: never
       header?: never
@@ -3472,7 +3463,7 @@ export interface operations {
       }
     }
   }
-  core_views_layout_update_folder: {
+  apps_core_views_layout_update_folder: {
     parameters: {
       query?: never
       header?: never
@@ -3498,7 +3489,7 @@ export interface operations {
       }
     }
   }
-  core_views_layout_update_layout_items: {
+  apps_core_views_layout_update_layout_items: {
     parameters: {
       query?: never
       header?: never
@@ -3522,7 +3513,7 @@ export interface operations {
       }
     }
   }
-  core_views_search_search: {
+  apps_core_views_search_search: {
     parameters: {
       query: {
         entity: 'users' | 'members' | 'groups' | 'resources' | 'locations' | 'categories'
@@ -3547,7 +3538,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_list_calendars: {
+  apps_core_views_calendars_list_calendars: {
     parameters: {
       query?: never
       header?: never
@@ -3567,7 +3558,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_create_calendar: {
+  apps_core_views_calendars_create_calendar: {
     parameters: {
       query?: never
       header?: never
@@ -3591,7 +3582,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_public_calendars: {
+  apps_core_views_calendars_public_calendars: {
     parameters: {
       query?: never
       header?: never
@@ -3611,7 +3602,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_add_public_calendar: {
+  apps_core_views_calendars_add_public_calendar: {
     parameters: {
       query?: never
       header?: never
@@ -3633,7 +3624,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_remove_public_calendar: {
+  apps_core_views_calendars_remove_public_calendar: {
     parameters: {
       query?: never
       header?: never
@@ -3655,7 +3646,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_get_calendar: {
+  apps_core_views_calendars_get_calendar: {
     parameters: {
       query?: never
       header?: never
@@ -3677,7 +3668,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_delete_calendar: {
+  apps_core_views_calendars_delete_calendar: {
     parameters: {
       query?: never
       header?: never
@@ -3699,7 +3690,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_update_calendar: {
+  apps_core_views_calendars_update_calendar: {
     parameters: {
       query?: never
       header?: never
@@ -3725,7 +3716,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_list_members: {
+  apps_core_views_calendars_list_members: {
     parameters: {
       query?: never
       header?: never
@@ -3747,7 +3738,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_add_member: {
+  apps_core_views_calendars_add_member: {
     parameters: {
       query?: never
       header?: never
@@ -3773,7 +3764,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_remove_member: {
+  apps_core_views_calendars_remove_member: {
     parameters: {
       query?: never
       header?: never
@@ -3796,7 +3787,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_update_member: {
+  apps_core_views_calendars_update_member: {
     parameters: {
       query?: never
       header?: never
@@ -3823,7 +3814,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_get_feed_url: {
+  apps_core_views_calendars_get_feed_url: {
     parameters: {
       query?: never
       header?: never
@@ -3845,7 +3836,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_rotate_feed_token: {
+  apps_core_views_calendars_rotate_feed_token: {
     parameters: {
       query?: never
       header?: never
@@ -3867,7 +3858,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_list_calendar_approvers: {
+  apps_core_views_calendars_list_calendar_approvers: {
     parameters: {
       query?: never
       header?: never
@@ -3889,7 +3880,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_set_calendar_approvers: {
+  apps_core_views_calendars_set_calendar_approvers: {
     parameters: {
       query?: never
       header?: never
@@ -3915,7 +3906,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_list_calendar_groups: {
+  apps_core_views_calendars_list_calendar_groups: {
     parameters: {
       query?: never
       header?: never
@@ -3937,7 +3928,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_add_calendar_group: {
+  apps_core_views_calendars_add_calendar_group: {
     parameters: {
       query?: never
       header?: never
@@ -3963,7 +3954,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_delete_calendar_group: {
+  apps_core_views_calendars_delete_calendar_group: {
     parameters: {
       query?: never
       header?: never
@@ -3986,7 +3977,7 @@ export interface operations {
       }
     }
   }
-  core_views_calendars_update_calendar_group: {
+  apps_core_views_calendars_update_calendar_group: {
     parameters: {
       query?: never
       header?: never
@@ -4013,7 +4004,7 @@ export interface operations {
       }
     }
   }
-  core_views_categories_list_categories: {
+  apps_core_views_categories_list_categories: {
     parameters: {
       query?: never
       header?: never
@@ -4035,7 +4026,7 @@ export interface operations {
       }
     }
   }
-  core_views_categories_create_category: {
+  apps_core_views_categories_create_category: {
     parameters: {
       query?: never
       header?: never
@@ -4061,7 +4052,7 @@ export interface operations {
       }
     }
   }
-  core_views_categories_delete_category: {
+  apps_core_views_categories_delete_category: {
     parameters: {
       query?: never
       header?: never
@@ -4084,7 +4075,7 @@ export interface operations {
       }
     }
   }
-  core_views_categories_update_category: {
+  apps_core_views_categories_update_category: {
     parameters: {
       query?: never
       header?: never
@@ -4111,7 +4102,7 @@ export interface operations {
       }
     }
   }
-  core_views_resources_list_resources: {
+  apps_core_views_resources_list_resources: {
     parameters: {
       query?: never
       header?: never
@@ -4133,7 +4124,7 @@ export interface operations {
       }
     }
   }
-  core_views_resources_create_resource: {
+  apps_core_views_resources_create_resource: {
     parameters: {
       query?: never
       header?: never
@@ -4159,7 +4150,7 @@ export interface operations {
       }
     }
   }
-  core_views_resources_delete_resource: {
+  apps_core_views_resources_delete_resource: {
     parameters: {
       query?: never
       header?: never
@@ -4182,7 +4173,7 @@ export interface operations {
       }
     }
   }
-  core_views_resources_update_resource: {
+  apps_core_views_resources_update_resource: {
     parameters: {
       query?: never
       header?: never
@@ -4209,7 +4200,7 @@ export interface operations {
       }
     }
   }
-  core_views_resources_list_resource_approvers: {
+  apps_core_views_resources_list_resource_approvers: {
     parameters: {
       query?: never
       header?: never
@@ -4232,7 +4223,7 @@ export interface operations {
       }
     }
   }
-  core_views_resources_set_resource_approvers: {
+  apps_core_views_resources_set_resource_approvers: {
     parameters: {
       query?: never
       header?: never
@@ -4259,7 +4250,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_list_events_of_calendars: {
+  apps_core_views_events_list_events_of_calendars: {
     parameters: {
       query: {
         start: string
@@ -4283,7 +4274,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_list_events: {
+  apps_core_views_events_list_events: {
     parameters: {
       query: {
         start: string
@@ -4308,7 +4299,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_create_event: {
+  apps_core_views_events_create_event: {
     parameters: {
       query?: never
       header?: never
@@ -4334,7 +4325,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_get_event: {
+  apps_core_views_events_get_event: {
     parameters: {
       query?: never
       header?: never
@@ -4356,7 +4347,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_delete_event: {
+  apps_core_views_events_delete_event: {
     parameters: {
       query?: never
       header?: never
@@ -4378,7 +4369,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_update_event: {
+  apps_core_views_events_update_event: {
     parameters: {
       query?: never
       header?: never
@@ -4404,7 +4395,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_delete_occurrence: {
+  apps_core_views_events_delete_occurrence: {
     parameters: {
       query?: {
         scope?: 'this' | 'following' | 'all'
@@ -4429,7 +4420,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_update_occurrence: {
+  apps_core_views_events_update_occurrence: {
     parameters: {
       query?: {
         scope?: 'this' | 'following' | 'all'
@@ -4458,7 +4449,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_get_reminders: {
+  apps_core_views_events_get_reminders: {
     parameters: {
       query?: never
       header?: never
@@ -4480,7 +4471,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_put_reminders: {
+  apps_core_views_events_put_reminders: {
     parameters: {
       query?: never
       header?: never
@@ -4506,7 +4497,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_list_event_participants: {
+  apps_core_views_events_list_event_participants: {
     parameters: {
       query?: never
       header?: never
@@ -4528,7 +4519,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_add_event_participant: {
+  apps_core_views_events_add_event_participant: {
     parameters: {
       query?: never
       header?: never
@@ -4554,7 +4545,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_update_my_participation: {
+  apps_core_views_events_update_my_participation: {
     parameters: {
       query?: never
       header?: never
@@ -4580,7 +4571,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_delete_event_participant: {
+  apps_core_views_events_delete_event_participant: {
     parameters: {
       query?: never
       header?: never
@@ -4603,7 +4594,7 @@ export interface operations {
       }
     }
   }
-  core_views_events_update_event_participant: {
+  apps_core_views_events_update_event_participant: {
     parameters: {
       query?: never
       header?: never
@@ -4630,7 +4621,7 @@ export interface operations {
       }
     }
   }
-  core_views_comments_list_comments: {
+  apps_core_views_comments_list_comments: {
     parameters: {
       query?: never
       header?: never
@@ -4652,7 +4643,7 @@ export interface operations {
       }
     }
   }
-  core_views_comments_create_comment: {
+  apps_core_views_comments_create_comment: {
     parameters: {
       query?: never
       header?: never
@@ -4678,7 +4669,7 @@ export interface operations {
       }
     }
   }
-  core_views_comments_delete_comment: {
+  apps_core_views_comments_delete_comment: {
     parameters: {
       query?: never
       header?: never
@@ -4701,7 +4692,7 @@ export interface operations {
       }
     }
   }
-  core_views_comments_list_activity: {
+  apps_core_views_comments_list_activity: {
     parameters: {
       query?: never
       header?: never
@@ -4723,7 +4714,7 @@ export interface operations {
       }
     }
   }
-  core_views_notifications_list_notifications: {
+  apps_core_views_notifications_list_notifications: {
     parameters: {
       query?: {
         limit?: number
@@ -4746,7 +4737,7 @@ export interface operations {
       }
     }
   }
-  core_views_notifications_counts: {
+  apps_core_views_notifications_counts: {
     parameters: {
       query?: never
       header?: never
@@ -4766,7 +4757,7 @@ export interface operations {
       }
     }
   }
-  core_views_notifications_mark_all_read: {
+  apps_core_views_notifications_mark_all_read: {
     parameters: {
       query?: never
       header?: never
@@ -4786,7 +4777,7 @@ export interface operations {
       }
     }
   }
-  core_views_notifications_mark_read: {
+  apps_core_views_notifications_mark_read: {
     parameters: {
       query?: never
       header?: never
@@ -4808,7 +4799,7 @@ export interface operations {
       }
     }
   }
-  core_views_notifications_delete_notification: {
+  apps_core_views_notifications_delete_notification: {
     parameters: {
       query?: never
       header?: never
@@ -4830,7 +4821,7 @@ export interface operations {
       }
     }
   }
-  core_views_approvals_list_pending_approvals: {
+  apps_core_views_approvals_list_pending_approvals: {
     parameters: {
       query?: never
       header?: never
@@ -4850,7 +4841,7 @@ export interface operations {
       }
     }
   }
-  core_views_approvals_approve_event: {
+  apps_core_views_approvals_approve_event: {
     parameters: {
       query?: never
       header?: never
@@ -4876,7 +4867,7 @@ export interface operations {
       }
     }
   }
-  core_views_approvals_reject_event: {
+  apps_core_views_approvals_reject_event: {
     parameters: {
       query?: never
       header?: never
@@ -4902,7 +4893,7 @@ export interface operations {
       }
     }
   }
-  core_views_approvals_cancel_event: {
+  apps_core_views_approvals_cancel_event: {
     parameters: {
       query?: never
       header?: never
@@ -4924,7 +4915,7 @@ export interface operations {
       }
     }
   }
-  core_views_availability_availability: {
+  apps_core_views_availability_availability: {
     parameters: {
       query?: never
       header?: never
@@ -4948,7 +4939,7 @@ export interface operations {
       }
     }
   }
-  core_views_rsvp_get_invitation: {
+  apps_core_views_rsvp_get_invitation: {
     parameters: {
       query?: never
       header?: never
@@ -4970,7 +4961,7 @@ export interface operations {
       }
     }
   }
-  core_views_rsvp_answer_invitation: {
+  apps_core_views_rsvp_answer_invitation: {
     parameters: {
       query?: never
       header?: never
@@ -4996,7 +4987,7 @@ export interface operations {
       }
     }
   }
-  core_views_rsvp_invitation_ics: {
+  apps_core_views_rsvp_invitation_ics: {
     parameters: {
       query?: never
       header?: never
@@ -5016,7 +5007,7 @@ export interface operations {
       }
     }
   }
-  core_views_unsubscribe_get_subscription: {
+  apps_core_views_unsubscribe_get_subscription: {
     parameters: {
       query?: never
       header?: never
@@ -5038,7 +5029,7 @@ export interface operations {
       }
     }
   }
-  core_views_unsubscribe_unsubscribe_by_link: {
+  apps_core_views_unsubscribe_unsubscribe_by_link: {
     parameters: {
       query?: never
       header?: never
@@ -5060,7 +5051,7 @@ export interface operations {
       }
     }
   }
-  core_views_unsubscribe_resubscribe_by_link: {
+  apps_core_views_unsubscribe_resubscribe_by_link: {
     parameters: {
       query?: never
       header?: never

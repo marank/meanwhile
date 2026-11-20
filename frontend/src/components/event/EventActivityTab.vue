@@ -53,32 +53,35 @@ function occurrenceDate(entry: api.EventActivity): string {
   return occurrence ? formatDateTime(occurrence) : ''
 }
 
+function changedFields(entry: api.EventActivity): string {
+  return (entry.details?.fields || []).map((field) => t(`activity.field.${field}`)).join(', ')
+}
+
+// The text for each kind of entry; kinds the app doesn't know yet show their name.
+const activityTexts: Record<string, (entry: api.EventActivity, name: string) => string> = {
+  created: (_, name) => t('activity.created', { name }),
+  updated: (entry, name) =>
+    t(entry.details?.status === 'pending' ? 'activity.updatedPending' : 'activity.updated', {
+      name,
+      fields: changedFields(entry),
+    }),
+  approved: (entry, name) => {
+    const note = entry.details?.note
+    return note ? t('activity.approvedWithNote', { name, note }) : t('activity.approved', { name })
+  },
+  rejected: (entry, name) => {
+    const note = entry.details?.note
+    return note ? t('activity.rejectedWithNote', { name, note }) : t('activity.rejected', { name })
+  },
+  cancelled: (_, name) => t('activity.cancelled', { name }),
+  occurrence_changed: (entry, name) => t('activity.occurrenceChanged', { name, date: occurrenceDate(entry) }),
+  occurrence_deleted: (entry, name) => t('activity.occurrenceDeleted', { name, date: occurrenceDate(entry) }),
+  series_ended: (entry, name) => t('activity.seriesEnded', { name, date: occurrenceDate(entry) }),
+}
+
 function activityText(entry: api.EventActivity): string {
-  const name = entry.actor_name || t('app.someone')
-  const fields = (entry.details?.fields || []).map((field) => t(`activity.field.${field}`)).join(', ')
-  const note = entry.details?.note
-  switch (entry.action) {
-    case 'created':
-      return t('activity.created', { name })
-    case 'updated':
-      return entry.details?.status === 'pending'
-        ? t('activity.updatedPending', { name, fields })
-        : t('activity.updated', { name, fields })
-    case 'approved':
-      return note ? t('activity.approvedWithNote', { name, note }) : t('activity.approved', { name })
-    case 'rejected':
-      return note ? t('activity.rejectedWithNote', { name, note }) : t('activity.rejected', { name })
-    case 'cancelled':
-      return t('activity.cancelled', { name })
-    case 'occurrence_changed':
-      return t('activity.occurrenceChanged', { name, date: occurrenceDate(entry) })
-    case 'occurrence_deleted':
-      return t('activity.occurrenceDeleted', { name, date: occurrenceDate(entry) })
-    case 'series_ended':
-      return t('activity.seriesEnded', { name, date: occurrenceDate(entry) })
-    default:
-      return entry.action
-  }
+  const text = activityTexts[entry.action]
+  return text ? text(entry, entry.actor_name || t('app.someone')) : entry.action
 }
 
 function canDelete(comment: api.EventComment): boolean {

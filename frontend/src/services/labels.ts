@@ -1,10 +1,16 @@
 import type { AppNotification, NotificationType, ParticipantStatus } from '@/api'
 import { i18n } from '@/i18n'
+import { allValues } from '@/utils/enums'
 import { formatDayMonth, weekdayName } from './datetime'
 import { reminderText } from './reminders'
 import { matchingPreset, parseRrule, recurrenceDefaults, type RecurrencePreset } from './rrule'
 
-export const participantStatuses: ParticipantStatus[] = ['needs_action', 'accepted', 'declined', 'tentative']
+export const participantStatuses = allValues<ParticipantStatus>({
+  needs_action: true,
+  accepted: true,
+  declined: true,
+  tentative: true,
+})
 
 const participantStatusKeys: Record<ParticipantStatus, string> = {
   needs_action: 'event.statusNeedsAction',

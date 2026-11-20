@@ -13,3 +13,5 @@ backend/staticfiles
 **/.coverage
 **/coverage
 backend/data
+**/*.sqlite3
+**/*.mo

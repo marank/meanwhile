@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import type { CalendarApi, ViewApi } from '@fullcalendar/vue3'
 import type { CalendarViewType } from '@/components/calendar/CalendarToolbar.vue'
 import { showsTarget, type CalendarTarget, type CalendarViewName } from '@/services/calendarUrl'
+import { addDays } from '@/services/days'
 import { useMediaQuery } from './useMediaQuery'
 
 export type GridViewType = Exclude<CalendarViewType, 'list'>
@@ -27,10 +28,6 @@ const VIEW_TYPES: Record<CalendarViewName, CalendarViewType> = {
 
 function firstOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
 }
 
 /**
@@ -195,24 +192,24 @@ export function useCalendarNavigation(options: {
 
   /** Shows what a link names (another month, the week view), unless it is shown already. */
   function showTarget(target: CalendarTarget) {
-    if (stackMode.value) {
-      if (target.view && target.view !== 'week') changeView(VIEW_TYPES[target.view], target.date)
-      else if (target.date) stackDate.value = target.date
-      return
-    }
-    if (target.view === 'week' && isPhone.value) {
-      changeView('timeGridWeek', target.date)
-      return
-    }
-    if (listMode.value) {
-      if (target.view && target.view !== 'list') changeView(VIEW_TYPES[target.view], target.date)
-      else if (target.date) listMonth.value = firstOfMonth(target.date)
-      return
-    }
-    if (target.view === 'list') {
-      changeView('list', target.date)
-      return
-    }
+    if (stackMode.value) showInStack(target)
+    else if (target.view === 'week' && isPhone.value) changeView('timeGridWeek', target.date)
+    else if (listMode.value) showInList(target)
+    else if (target.view === 'list') changeView('list', target.date)
+    else showInGrid(target)
+  }
+
+  function showInStack(target: CalendarTarget) {
+    if (target.view && target.view !== 'week') changeView(VIEW_TYPES[target.view], target.date)
+    else if (target.date) stackDate.value = target.date
+  }
+
+  function showInList(target: CalendarTarget) {
+    if (target.view && target.view !== 'list') changeView(VIEW_TYPES[target.view], target.date)
+    else if (target.date) listMonth.value = firstOfMonth(target.date)
+  }
+
+  function showInGrid(target: CalendarTarget) {
     const api = gridApi()
     if (!api) return
     const { currentStart, currentEnd, type } = api.view

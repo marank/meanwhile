@@ -46,7 +46,7 @@ describe('matchingPalette', () => {
 
 describe('presets the server knows', () => {
   // The backend creates new calendars and overviews with these presets, so both sides must agree.
-  const backend = readFileSync(join(__dirname, '../../../../backend/core/models/calendar_colors.py'), 'utf8')
+  const backend = readFileSync(join(__dirname, '../../../../backend/apps/core/models/calendar_colors.py'), 'utf8')
 
   function serverColors(name: string): Record<string, string> {
     const block = backend.match(new RegExp(`${name} = \\{([^}]*)\\}`))![1]!

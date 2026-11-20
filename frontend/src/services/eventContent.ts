@@ -1,9 +1,8 @@
 import type { EventDisplayInfo } from '@fullcalendar/vue3'
 import type { Occurrence } from '@/api'
 import { formatTime } from './datetime'
+import { DAY_MS } from './days'
 import { resourceIconSvg } from './resourceIcons'
-
-const DAY_MS = 24 * 60 * 60 * 1000
 
 export interface LabelPart {
   text: string

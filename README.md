@@ -1,6 +1,8 @@
 # Meanwhile
 
-Meanwhile is a self-hosted calendar application with a Django backend and a Vue 3 frontend.
+Meanwhile is a self-hosted group calendar with a Django backend and a Vue 3 frontend, shipped as
+one hardened container image (`ghcr.io/marank/meanwhile`). Licensed under the
+[AGPL-3.0-or-later](LICENSE).
 
 ## Features
 
@@ -11,94 +13,104 @@ Meanwhile is a self-hosted calendar application with a Django backend and a Vue 
 - Per-calendar iCal feed with unguessable token URL.
 - Email notifications with per-user choices, and invitations by email (iMIP) that participants answer from their mail program or a link.
 - Embedded CalDAV server (Radicale) with optional app passwords.
-- English and German UI locales.
+- English and German, in the app and in emails.
 
 ## Tech stack
 
 - **Backend**: Python 3.14, Django 6.0, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI (daphne in development, uvicorn in production).
 - **Frontend**: Vue 3, Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS.
-- **Database**: PostgreSQL, in development too; it also holds the task queue (procrastinate).
-- **Package managers**: `uv` (backend), `pnpm` (frontend).
+- **Database**: PostgreSQL in Docker, CI and production, where it also holds the task queue (procrastinate); SQLite for native development.
+- **Tools**: `uv` (backend), `pnpm` (frontend), [`just`](https://just.systems) (every command).
 
 ## Project structure
 
 ```text
-calendar/
-  backend/            Django backend
-  backend_fastapi/    Reference FastAPI implementation
+meanwhile/
+  backend/            Django backend (config/, apps/core/, locale/de, scripts/ with the CI checks)
   frontend/           Vue SPA
   branding/           Logo (logo.svg; logo-alt.svg is the spare design) and build.sh, which renders
                       favicon and home screen icons into frontend/public/ and the logo emails
-                      carry into backend/core/assets/
+                      carry into backend/apps/core/assets/
   scripts/            sync_env.py: brings a .env up to date with .env.example
-  docker/             nginx, supervisord, entrypoint, healthcheck and backup script of the production image
-  Dockerfile          Production image (frontend + backend in one container)
-  compose.yml         Production: PostgreSQL, Redis, app, nightly backups
-  compose.dev.yml     Development stack with live reload
-  .gitea/workflows/   CI (checks, image build, smoke test, scans, push) and Renovate
-  BACKLOG.md          Feature backlog and known limitations
+  docker/             nginx, supervisord, entrypoint, worker, healthcheck and smoke test of the image
+  justfile            Every command: development, checks (= CI), API types, migrations, Docker
+  Dockerfile          Production image (frontend + backend; app and worker containers)
+  compose.yml         Production: PostgreSQL, Redis, app, worker (with nightly backups)
+  compose.dev.yml     Development stack with live reload; or only its PostgreSQL, Redis, Mailpit
+  .github/            CI (checks, multi-platform image, smoke test, scans), releases, Dependabot
   AGENTS.md           Conventions for contributors and coding agents (CLAUDE.md imports it)
+  CONTRIBUTING.md     How to contribute: checks, Conventional Commits
+  BACKLOG.md          Feature backlog and known limitations
 ```
 
-## Development with Docker
+## Contributing
 
-The whole stack with live reload: PostgreSQL, Redis, Mailpit, the backend (`runserver`), the
-task queue's worker and the Vite dev server.
+Meanwhile is still in active development, so pull requests are not accepted yet; bug reports
+and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Development
+
+Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js 24 with pnpm (`corepack enable` or
+`npm install -g pnpm`), and just (`uv tool install rust-just`, `winget install Casey.Just` or
+`brew install just`), and GNU gettext for the translation checks (`winget install
+mlocati.GetText`, `brew install gettext`, `apt install gettext`). Docker only for the image and
+the optional services.
 
 ```bash
-cp .env.example .env     # once; ADMIN_EMAIL and ADMIN_PASSWORD give you a user to sign in with
-docker compose -f compose.dev.yml up --build
+cp .env.example .env     # once, in the project root (DEBUG=true; ADMIN_* give you a user to sign in with)
+just setup               # uv sync + pnpm install
+just dev-backend         # migrations, admin user, Django on :8000 (SQLite in backend/data)
+just dev-frontend        # in a second terminal: Vite on http://localhost:6326
 ```
 
+In VS Code the task `dev` starts both; every task only calls a just recipe (`just` lists them).
+
+Natively there is no database server and no worker: the backend uses SQLite, and jobs (emails)
+run right after the request's transaction. Periodic jobs (reminders, iMIP answers, clean-ups,
+backups) don't run. To run like CI and production, start PostgreSQL, Redis and Mailpit, then the
+worker:
+
+```bash
+just services           # compose.dev.yml; then in .env: DB_HOST=localhost, REDIS_URL=redis://localhost:6379/0
+just dev-worker         # the task queue's worker (apps/core/tasks.py)
+```
+
+Without `DEBUG=true` the backend runs as in production: it refuses to start without a real
+`SECRET_KEY`. The tests always use development settings (`config/settings_test.py`):
+
+```bash
+cd backend && uv run pytest
+```
+
+They run in parallel (pytest-xdist); `uv run pytest -n 0` runs them in one process, e.g. to debug
+with `-s` or `--pdb`. Natively on SQLite, with `DB_HOST` on PostgreSQL like CI.
+
+### Development with Docker
+
+The whole stack with live reload: PostgreSQL, Redis, Mailpit, the backend (`runserver`), the
+worker and the Vite dev server (`just docker-dev`, i.e. `docker compose -f compose.dev.yml up --build`).
 The app is at http://localhost:6326, the backend at http://localhost:8000, the emails at
 http://localhost:8025. The source is mounted into the containers: `runserver` and the worker
 (through `watchfiles`) restart on changes to Python files, Vite updates the page right away.
-Migrations run on every start (service `migrate`), followed by `manage.py ensure_admin`. After changing dependencies (`uv.lock`,
-`pnpm-lock.yaml`), start it again with `--build`; the frontend installs its packages on start.
-
-Commands run in the backend's container:
+Migrations run on every start (service `migrate`), followed by `manage.py ensure_admin`. After
+changing dependencies (`uv.lock`, `pnpm-lock.yaml`), start it again with `--build`.
 
 ```bash
 docker compose -f compose.dev.yml exec backend pytest
 docker compose -f compose.dev.yml exec backend python manage.py fetch_imip --mailpit http://mailpit:8025
 ```
 
-All setups read the `.env` of the project root (template: `.env.example`).
-`compose.dev.yml` sets the database, Redis and Mailpit addresses itself, overriding it.
+### Everyday commands
 
-## Backend development
+| Command | When |
+| --- | --- |
+| `just check` | Before every push: exactly what CI runs (backend, deploy settings, frontend, workflows) |
+| `just api-types` | After API changes: schema → `frontend/openapi.json` → `src/api/schema.d.ts`; commit both |
+| `just migrations` | After model changes; commit the migrations |
+| `just messages` | After new backend texts; translate `backend/locale/de/LC_MESSAGES/django.po` |
+| `just sync-env` | After pulling: adds new entries of `.env.example` to `.env` |
 
-Without Docker for the app itself, only the services next to it:
-
-```bash
-docker compose -f compose.dev.yml up -d postgres redis mailpit   # the default database, Redis, Mailpit
-cp .env.example .env     # once, in the project root; set DEBUG=true there
-cd backend
-uv sync
-uv run python manage.py migrate
-uv run python manage.py runserver 0.0.0.0:8000
-```
-
-Without `DEBUG=true` the backend runs as in production: it refuses to start without a real
-`SECRET_KEY` and `DB_PASSWORD`. The tests always use development settings (`config/settings_test.py`).
-In VS Code, the tasks `dev: services` and `dev` do the same.
-
-In a second terminal, the worker of the task queue: it sends emails, delivers reminders and runs
-the other regular jobs (`core/tasks.py`).
-
-```bash
-uv run python manage.py procrastinate worker
-```
-
-The tests need the PostgreSQL of `compose.dev.yml`, too:
-
-```bash
-uv run pytest
-```
-
-They run in parallel, one process per CPU (pytest-xdist); `uv run pytest -n 0` runs them in one,
-e.g. to debug with `-s` or `--pdb`. The test settings (`config/settings_test.py`) use a fast password
-hasher and no delay for wrong CalDAV passwords.
+Fast checks before each commit: `uv tool run pre-commit install` once.
 
 ### Superusers (Django admin)
 
@@ -114,40 +126,9 @@ In the Docker setups: `docker compose exec app python manage.py set_superuser ..
 `docker compose -f compose.dev.yml exec backend python manage.py set_superuser ...`
 (development).
 
-### Checks
-
-The VS Code task `check` runs everything CI runs (`.gitea/workflows/build.yaml`); keep both in
-sync. Without VS Code, in `backend/` (with `DEBUG=true` and the services above running):
-
-```bash
-uv run ruff check . && uv run ruff format --check .
-uv run mypy .
-uv run deptry .
-uv run python manage.py makemigrations --check --dry-run
-uv run python manage.py check --fail-level WARNING
-uv run pytest -q --cov --cov-fail-under=90
-```
-
-And in `frontend/`: `pnpm check` (Prettier, oxlint, ESLint, knip, vue-tsc, Vitest with its coverage
-minimum), `pnpm build-only && pnpm size` (bundle budget) and `pnpm check:licenses`.
-
-Fast checks before each commit: `uv tool run pre-commit install` once.
-
 ## Frontend development
 
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
-
-Build for production:
-
-```bash
-pnpm build
-```
-
-Checks:
+`just dev-frontend` runs Vite; in `frontend/`:
 
 ```bash
 pnpm test:unit      # Vitest
@@ -167,9 +148,12 @@ Backend settings are read from environment variables:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `APP_URLS` | `http://localhost:6326` | Every URL the app is opened under, comma separated. Allowed hosts and CSRF trusted origins come from it; the first is the app's address in emails and feed links. With https URLs only, cookies are secure and plain http is redirected to https. In DEBUG the dev servers are added. |
-| `DEBUG` | `false` | `true` for running the backend without Docker: DEBUG, the dev `SECRET_KEY` and database password, the defaults marked as such below. |
+| `DEBUG` | `false` | `true` for native development: the dev `SECRET_KEY`, the defaults marked as such below (`.env.example` sets it; compose.yml always sets `false`). |
 | `SECRET_KEY` | dev key in DEBUG | At least 40 random characters; the app refuses to start with a placeholder. |
-| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | `meanwhile`, `meanwhile`, `meanwhile` in DEBUG, `localhost`, `5432` | PostgreSQL only (the one of `compose.dev.yml` by default). |
+| `DB_HOST` | - | PostgreSQL server; compose.yml sets `db`. Empty: SQLite in `DATA_DIR`, no task queue (native development). |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` | `meanwhile`, `meanwhile`, -, `5432` | PostgreSQL login (with `DB_HOST`). |
+| `BACKUP_DIR`, `BACKUP_TIME`, `BACKUP_KEEP_DAYS` | `/backups` in the image, `01:30`, `14` | Nightly dump by the worker: directory (empty: off), time of day in `TIME_ZONE`, days to keep. |
+| `WEB_WORKERS`, `WORKER_CONCURRENCY` | `4`, `4` | uvicorn processes in the app; jobs the worker runs at once. |
 | `ADMIN_ENABLED` | value of `DEBUG` | Serve the Django admin under `/django-admin/`. |
 | `TIME_ZONE`, `LANGUAGE_CODE` | `UTC`, `en-us` | Server defaults; users choose their own zone and language in the app. |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
@@ -291,33 +275,40 @@ server passes `/ws` on.
 
 ## Deployment with Docker
 
+On the server, next to each other: `compose.yml` and `.env.example` (as `.env`) from this
+repository; nothing else is needed.
+
 ```bash
-cp .env.example .env     # fill in; SECRET_KEY and DB_PASSWORD as described there
-docker compose up -d --build
+cp .env.example .env     # fill in; DEBUG has no effect here, SECRET_KEY and DB_PASSWORD as described there
+docker compose up -d
 ```
 
-This starts PostgreSQL, Redis, the `app` container, built by the `Dockerfile`, and `backup`:
+This pulls `ghcr.io/marank/meanwhile:latest` (`APP_IMAGE` pins a version, e.g.
+`ghcr.io/marank/meanwhile:1.2`) and starts PostgreSQL, Redis and the image twice:
 
-- On every start, `docker/entrypoint.sh` checks the production settings
+- `app`: on every start, `docker/entrypoint.sh` checks the production settings
   (`manage.py check --deploy`), applies the migrations and creates or updates the admin user of
-  `ADMIN_EMAIL` (`manage.py ensure_admin`).
-- Then supervisord (`docker/supervisord.conf`) runs, like everything in the container, as the
-  unprivileged user `app`:
+  `ADMIN_EMAIL` (`manage.py ensure_admin`). Then supervisord (`docker/supervisord.conf`) runs:
   - nginx (`docker/app.conf.template`, port 8080 inside the container), which serves the built
     frontend and Django admin's static files and passes `/api`, `/ics`, `/caldav`,
     `/.well-known/caldav` and the WebSocket `/ws/` on (`/django-admin` only with `ADMIN_ENABLED=true`);
-  - uvicorn, with `WEB_WORKERS` processes;
-  - the task queue's worker. It sends emails, delivers reminders, reads participants' answers
-    from the iMIP mailbox (with `IMIP_ADDRESS` and the IMAP settings) and cleans up. Jobs wait in
-    the database, so none is lost while it restarts.
+  - uvicorn, with `WEB_WORKERS` processes.
   If one of them keeps failing, the container stops and Docker restarts it.
+- `worker` (`docker/worker`): waits for the app's migrations, then runs the task queue. It sends
+  emails, delivers reminders, reads participants' answers from the iMIP mailbox (with
+  `IMIP_ADDRESS` and the IMAP settings), cleans up and dumps the database nightly. Jobs wait in the
+  database, so none is lost while it restarts.
 
-The app, Redis and backup containers are hardened: read-only root filesystem, no capabilities,
-no privilege escalation, unprivileged users. The app writes only to `/tmp` (tmpfs) and `/data`
-(volume). Anything new that needs to write goes there, rather than loosening `compose.yml`.
+Every container but the database is hardened: read-only root filesystem, no capabilities, no
+privilege escalation, unprivileged users. The app writes only to `/tmp` (tmpfs) and `/data`, the
+worker also to `/backups` (volumes). Anything new that needs to write goes there, rather than
+loosening `compose.yml`.
 
 `.env` holds the URLs, the secrets, the mail settings and a few optional values; see
 `.env.example`. `compose.yml` sets the wiring itself: `DEBUG=false`, `DB_HOST`, `REDIS_URL`.
+
+To check that an image was built by this repository's CI:
+`gh attestation verify oci://ghcr.io/marank/meanwhile:latest --owner marank`.
 
 The container serves HTTP on `APP_BIND` (`127.0.0.1:6326` by default). Put a proxy in front that
 terminates HTTPS, passes everything on, including WebSocket upgrades, and sets
@@ -334,47 +325,55 @@ to be listed there too, e.g. `TRUSTED_PROXIES=203.0.113.10`; `none` trusts no pr
 
 ### Backups
 
-The `backup` service dumps the database every night at `BACKUP_TIME` (in `TIME_ZONE`) into the
-`backups` volume and keeps `BACKUP_KEEP_DAYS` days. Dumps on the same host don't protect against
-losing the host, so copy them off regularly:
+The worker dumps the database every night at `BACKUP_TIME` (in `TIME_ZONE`) into the `backups`
+volume and keeps `BACKUP_KEEP_DAYS` days. Dumps on the same host don't protect against losing the
+host, so copy them off regularly (or point the host's backup at the volume):
 
 ```bash
-docker compose exec backup sh /backup.sh now                                   # a dump right now
-docker compose cp backup:/var/lib/postgresql/backups ./backups                 # copy all off the container
-docker compose exec -T backup sh -c 'pg_restore --clean --if-exists -d "$PGDATABASE"' < file.dump   # restore
+docker compose exec worker python manage.py backup_database                  # a dump right now, e.g. before an update
+docker compose cp worker:/backups ./backups                                   # copy all off the container
+docker compose exec -T db sh -c 'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < file.dump   # restore
 ```
 
-### Upgrading an existing installation
+### Updating
 
-New versions may bring new settings. `python3 scripts/sync_env.py` brings `.env` up to date with
+`docker compose pull && docker compose up -d`. New versions may bring new settings:
+`python3 scripts/sync_env.py` (natively `just sync-env`) brings `.env` up to date with
 `.env.example`: same order and explanations, your values unchanged, new settings added commented
 out (their defaults apply until you set them), and settings that are gone listed at the end. The
 old file stays as `.env.bak`; `--dry-run` only shows the changes.
 
-The configuration changed: in `.env`, rename `POSTGRES_PASSWORD` to `DB_PASSWORD` and replace
-`DOMAIN=meanwhile.example.com` with `APP_URLS=https://meanwhile.example.com`. `ENVIRONMENT`,
-`BEHIND_PROXY`, `SECURE_COOKIES`, `BASE_URL`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` and
-`CORS_ORIGINS` are gone (`DEBUG` and `APP_URLS` replace them). `SECRET_KEY` must be at least 40
-characters, and `ADMIN_PASSWORD` must pass the password rules. The database volume keeps its name.
+Installations from before the GitHub move built the image themselves and had a `backup` service:
+its old dumps stay in the `backups` volume under `backups/`; new ones go to the volume's root.
+Remove the orphaned service with `docker compose up -d --remove-orphans`.
 
-### CI and Renovate (Gitea)
+## Releases and CI
 
-`.gitea/workflows/build.yaml` checks backend and frontend, scans the repository (Trivy), builds
-the image, starts it hardened against a throwaway PostgreSQL, scans it and pushes it to the Gitea
-registry of this instance (`latest` and `sha-…` from `main`, versions from `v1.2.3` tags).
-`renovate.yaml` runs Renovate daily (`renovate.json`): minor and patch updates merge themselves
-once CI is green, majors wait for a look.
+Pull requests are squash-merged with a [Conventional Commit](https://www.conventionalcommits.org/)
+title (CONTRIBUTING.md). release-please (`.github/workflows/release.yaml`) keeps a release pull
+request up to date with CHANGELOG.md and the next version; merging it tags `vX.Y.Z` and pushes the
+image as `X.Y.Z`, `X.Y` and `X`.
 
-Set up once in Gitea:
+`.github/workflows/build.yaml` runs `just check-backend` (on PostgreSQL), `check-deploy`,
+`check-frontend` and `check-workflows`, scans the repository (Trivy), then builds the image on
+amd64 and arm64, smoke-tests app and worker hardened against a throwaway PostgreSQL
+(`docker/smoke-test`), scans it and pushes one multi-platform image with a provenance
+attestation (`latest` and `sha-…` from `main`). `main` is rebuilt weekly for Debian's security
+fixes. Dependabot proposes updates weekly; AGENTS.md lists what it doesn't cover.
 
-1. **Branch protection on `main` with required status checks** `backend`, `frontend`,
-   `repository` and `image`. Renovate's automerge waits for them; without required checks Gitea
-   merges right away, even with red CI.
-2. Actions enabled for the repository, and a runner with Docker.
-3. Secrets: `REGISTRY_USER` and `REGISTRY_TOKEN` (scope `write:package`) for the image;
-   `RENOVATE_TOKEN` (`write:repository`, `write:issue`, `read:organization`, `read:user`,
-   `read:package`) and optionally `GH_COM_TOKEN` (a read-only github.com token, for release notes)
-   for Renovate.
+Set up once on GitHub:
+
+1. **Ruleset for `main`**: pull requests required, squash merge only (PR title as commit message),
+   required status checks `backend`, `frontend`, `workflows`, `repository`, both `image` jobs and
+   `dependency-review`.
+2. **Actions → General**: allow GitHub Actions to create and approve pull requests (release-please).
+3. **Advanced Security**: private vulnerability reporting, Dependabot alerts, secret scanning with
+   push protection, CodeQL default setup.
+4. **Releases**: immutable releases on.
+5. **Package**: after the first push, make `ghcr.io/marank/meanwhile` public and link it to the
+   repository.
+
+### TLS proxy examples
 
 Caddy (obtains the certificate itself):
 

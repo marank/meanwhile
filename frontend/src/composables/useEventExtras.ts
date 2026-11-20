@@ -46,11 +46,12 @@ export function useEventParticipants() {
   /** Sends the participants added and removed in the dialog (of a series: for all occurrences).
    * Each one leaves its list once sent, so saving again after a failure sends only the rest. */
   async function save(eventId: string) {
-    for (const id of [...removedIds.value]) {
+    // Filtering replaces the lists, so the loops go on over the ones they started with.
+    for (const id of removedIds.value) {
       await api.removeEventParticipant(eventId, id)
       removedIds.value = removedIds.value.filter((removed) => removed !== id)
     }
-    for (const participant of [...pending.value]) {
+    for (const participant of pending.value) {
       const { user_id, email, status } = participant
       await api.addEventParticipant(eventId, user_id ? { user_id, status } : { email, status })
       pending.value = pending.value.filter((p) => p !== participant)

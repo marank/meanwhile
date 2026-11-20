@@ -1,0 +1,8 @@
+#!/bin/sh
+# The task queue's worker (apps/core/tasks.py): its own compose service, from the same image as the app.
+#   command: ["sh", "/usr/local/bin/worker"]
+# The queue lives in PostgreSQL, so it waits until the app container has migrated.
+set -eu
+cd /app
+until python manage.py migrate --check >/dev/null 2>&1; do sleep 2; done
+exec python manage.py procrastinate worker --concurrency "${WORKER_CONCURRENCY:-4}"

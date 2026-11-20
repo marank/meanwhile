@@ -14,7 +14,7 @@ cp logo.svg "$out/logo.svg"
 # Emails: Gmail and Outlook show no SVG; 96 px for a 32 px logo on high-density screens. The backend
 # sends it along with every email; the frontend keeps serving it for emails that linked to it.
 png logo.svg 96 "$out/mail-logo.png"
-cp "$out/mail-logo.png" ../backend/core/assets/mail-logo.png
+cp "$out/mail-logo.png" ../backend/apps/core/assets/mail-logo.png
 # iOS rounds the corners itself and wants a square without transparency.
 sed 's/rx="14" //' logo.svg > "$tmp/square.svg"
 png "$tmp/square.svg" 180 "$out/apple-touch-icon.png"

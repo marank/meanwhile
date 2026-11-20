@@ -9,9 +9,10 @@ export interface AccessGrantTarget {
 </script>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Search, User, Users } from '@lucide/vue'
 import * as api from '@/api'
+import { useFloatingList } from '@/composables/useFloatingList'
 
 const props = defineProps<{
   placeholder: string
@@ -31,12 +32,13 @@ type Option = AccessGrantTarget
 
 const root = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
+const listRef = ref<HTMLElement | null>(null)
 const query = ref('')
 const found = ref<Option[]>([])
 const loading = ref(false)
 const isOpen = ref(false)
 const activeIndex = ref(-1)
-const listStyle = ref<Record<string, string>>({})
+const { style: listStyle, place } = useFloatingList(inputRef, listRef, { width: 'exact' })
 
 let timer: ReturnType<typeof setTimeout> | null = null
 let seq = 0
@@ -44,6 +46,11 @@ let seq = 0
 const options = computed(() =>
   found.value.filter((o) => !(o.kind === 'user' ? props.excludeUserIds : props.excludeGroupIds).has(o.id)),
 )
+
+// Loaded results change the list's height, and with it whether it fits below the field.
+watch([() => options.value.length, loading], () => {
+  if (isOpen.value) void nextTick(place)
+})
 
 async function search() {
   const q = query.value.trim()
@@ -72,8 +79,7 @@ async function search() {
 function open() {
   if (props.disabled) return
   isOpen.value = true
-  const rect = inputRef.value?.getBoundingClientRect()
-  if (rect) listStyle.value = { top: `${rect.bottom}px`, left: `${rect.left}px`, width: `${rect.width}px` }
+  void nextTick(place)
   search()
 }
 
@@ -154,8 +160,9 @@ onBeforeUnmount(() => {
     />
     <ul
       v-if="isOpen"
+      ref="listRef"
       role="listbox"
-      class="fixed z-[100] mt-1 max-h-72 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg"
+      class="fixed z-[100] max-h-72 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg"
       :style="listStyle"
       @mousedown.prevent
       @mouseleave="activeIndex = -1"

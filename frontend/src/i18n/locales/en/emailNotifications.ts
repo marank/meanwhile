@@ -1,0 +1,21 @@
+export default {
+  title: 'Email notifications',
+  description: 'Choose which notifications also come by email to {email}. You always see them in the app.',
+  invitations: 'Invitations',
+  invitationsHelp:
+    'Invitations to events, their changes and cancellations, with the event attached for your mail program.',
+  responses: 'Answers to your invitations',
+  responsesHelp: 'When participants accept or decline an event you organize.',
+  approvals: 'Approval requests',
+  approvalsHelp: 'Bookings that wait for your decision, and cancelled bookings.',
+  decisions: 'Decisions on your bookings',
+  decisionsHelp: 'When your bookings are approved or rejected.',
+  comments: 'Comments',
+  commentsHelp: 'New comments on events you created or commented on.',
+  memberships: 'Calendar access',
+  membershipsHelp: 'When you are added to a calendar.',
+  role_changes: 'More rights in a calendar',
+  role_changesHelp: 'When you get a role with more rights in a calendar.',
+  reminders: 'Reminders',
+  remindersHelp: 'Your event reminders, also by email.',
+}

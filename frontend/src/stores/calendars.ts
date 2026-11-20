@@ -35,21 +35,6 @@ export const useCalendarStore = defineStore('calendars', () => {
 
   const selectedFolder = computed<api.Folder | null>(() => folders.value.find((f) => f.id === selectedId.value) ?? null)
 
-  function groupBy<T>(list: T[], key: (item: T) => string | null): Map<string | null, T[]> {
-    const groups = new Map<string | null, T[]>()
-    for (const item of list) {
-      const group = key(item)
-      const members = groups.get(group)
-      if (members) members.push(item)
-      else groups.set(group, [item])
-    }
-    return groups
-  }
-
-  // Indexed once per change, so rendering the tree doesn't filter the full lists for every folder.
-  const foldersByParent = computed(() => groupBy(folders.value, (f) => f.parent_id ?? null))
-  const calendarsByFolder = computed(() => groupBy(items.value, (i) => i.membership.folder_id ?? null))
-
   /** What is shown directly under a folder (or the root): its folders and calendars in one list. */
   type TreeChild =
     { type: 'folder'; id: string; folder: api.Folder } | { type: 'calendar'; id: string; item: api.CalendarListItem }
@@ -76,35 +61,19 @@ export const useCalendarStore = defineStore('calendars', () => {
     return childrenByParent.value.get(parentId) ?? []
   }
 
-  function childFolders(parentId: string | null): api.Folder[] {
-    return foldersByParent.value.get(parentId) ?? []
-  }
-
-  function calendarsIn(folderId: string | null): api.CalendarListItem[] {
-    return calendarsByFolder.value.get(folderId) ?? []
-  }
-
-  /** All folders below `folderId`; the visited set guards against cycles in inconsistent data. */
-  function descendantFolderIds(folderId: string): string[] {
-    const found = new Set<string>()
-    const pending = [folderId]
-    while (pending.length) {
-      for (const child of childFolders(pending.pop()!)) {
-        if (found.has(child.id) || child.id === folderId) continue
-        found.add(child.id)
-        pending.push(child.id)
-      }
-    }
-    return [...found]
+  /** Calendars in a folder and its subfolders; the visited set guards against cycles in inconsistent data. */
+  function calendarIdsBelow(folderId: string, visited = new Set<string>()): string[] {
+    visited.add(folderId)
+    return childrenOf(folderId).flatMap((child) => {
+      if (child.type === 'calendar') return [child.id]
+      return visited.has(child.id) ? [] : calendarIdsBelow(child.id, visited)
+    })
   }
 
   /** Calendars whose events are shown for the current selection. */
   const selectedCalendarIds = computed<string[]>(() => {
     if (allSelected.value) return items.value.map((i) => i.calendar.id)
-    if (selectedFolder.value) {
-      const folderIds = [selectedFolder.value.id, ...descendantFolderIds(selectedFolder.value.id)]
-      return folderIds.flatMap((id) => calendarsIn(id).map((i) => i.calendar.id))
-    }
+    if (selectedFolder.value) return calendarIdsBelow(selectedFolder.value.id)
     return selectedCalendar.value ? [selectedCalendar.value.id] : []
   })
 
@@ -261,9 +230,6 @@ export const useCalendarStore = defineStore('calendars', () => {
     selectedCalendarIds,
     calendarsById,
     childrenOf,
-    childFolders,
-    calendarsIn,
-    descendantFolderIds,
     select,
     canSelect,
     startSelection,

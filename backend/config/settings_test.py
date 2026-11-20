@@ -1,5 +1,6 @@
 """
-Settings for the tests (pytest): development's (DEBUG), whatever .env says.
+Settings for the tests (pytest): development's (DEBUG), whatever .env says. SQLite natively,
+PostgreSQL with DB_HOST (CI).
 """
 
 import os
@@ -15,3 +16,5 @@ from config.settings import *  # noqa: E402, F403
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # Nor is waiting before a wrong password is refused.
 CALDAV_FAILED_LOGIN_DELAY = 0
+# No nightly dumps from the tests.
+BACKUP_DIR = ""

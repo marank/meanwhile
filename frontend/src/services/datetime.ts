@@ -1,5 +1,6 @@
 import { i18n } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
+import { WEEK_ORDER } from './weekdays'
 
 function toDate(value: string | Date): Date {
   return value instanceof Date ? value : new Date(value)
@@ -61,8 +62,6 @@ export function formatDateTime(value: string | Date): string {
   const date = toDate(value)
   return `${formatDate(date)} ${formatTime(date)}`
 }
-
-const WEEK_ORDER = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
 
 /** Localized name of a weekday given as RFC 5545 code (MO…SU). */
 export function weekdayName(code: string, style: 'long' | 'short' = 'long'): string {

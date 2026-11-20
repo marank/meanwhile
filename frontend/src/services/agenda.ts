@@ -1,4 +1,5 @@
 import type { Occurrence } from '@/api'
+import { DAY_MS, addDays, dayKey, startOfDay } from './days'
 
 /** Which part of an occurrence a day shows: all of it, or its first, a middle or its last day. */
 type AgendaSpan = 'single' | 'first' | 'middle' | 'last'
@@ -18,21 +19,6 @@ export interface AgendaDay {
   entries: AgendaEntry[]
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function midnight(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
-}
-
-export function dayKey(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
 /** All-day occurrences come as UTC midnights: of their first day, and of the day after their last. */
 function utcDay(value: string): Date {
   const date = new Date(value)
@@ -48,8 +34,8 @@ function occurrenceDays(occ: Occurrence): [Date, Date] {
   }
   const start = new Date(occ.start)
   const end = new Date(occ.end)
-  const first = midnight(start)
-  const last = end > start ? midnight(new Date(end.getTime() - 1)) : first
+  const first = startOfDay(start)
+  const last = end > start ? startOfDay(new Date(end.getTime() - 1)) : first
   return [first, last]
 }
 
@@ -73,7 +59,7 @@ function compareEntries(a: AgendaEntry, b: AgendaEntry): number {
  */
 export function groupByDay(occurrences: Occurrence[], rangeStart: Date, rangeEnd: Date): AgendaDay[] {
   const days = new Map<string, AgendaDay>()
-  const firstDay = midnight(rangeStart)
+  const firstDay = startOfDay(rangeStart)
   for (const occurrence of occurrences) {
     const [first, last] = occurrenceDays(occurrence)
     const dayCount = Math.round((last.getTime() - first.getTime()) / DAY_MS) + 1

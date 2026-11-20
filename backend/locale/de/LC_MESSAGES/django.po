@@ -1,0 +1,556 @@
+# German translations of the backend's texts (emails, Django admin).
+#
+# After new or changed texts: `just messages`, translate every entry here (no empty msgstr, no
+# fuzzy), commit this file. The .mo files are built (`just compile-messages`, the Dockerfile, CI).
+msgid ""
+msgstr ""
+"Project-Id-Version: meanwhile\n"
+"Report-Msgid-Bugs-To: \n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Approval"
+msgstr "Genehmigung"
+
+msgid "Branding"
+msgstr "Erscheinungsbild"
+
+msgid "CalDAV"
+msgstr "CalDAV"
+
+msgid "Calendar defaults"
+msgstr "Kalender-Standards"
+
+msgid "Colors (dark)"
+msgstr "Farben (dunkel)"
+
+msgid "Colors (light)"
+msgstr "Farben (hell)"
+
+msgid "Comment"
+msgstr "Kommentar"
+
+msgid "Dates"
+msgstr "Daten"
+
+msgid "Important dates"
+msgstr "Wichtige Daten"
+
+msgid "Members"
+msgstr "Mitglieder"
+
+msgid "Permissions"
+msgstr "Berechtigungen"
+
+msgid "Personal info"
+msgstr "Persönliche Informationen"
+
+msgid "Preferences"
+msgstr "Einstellungen"
+
+msgid "Read"
+msgstr "Gelesen"
+
+msgid "Recurrence"
+msgstr "Wiederholung"
+
+msgid "Recurring"
+msgstr "Wiederkehrend"
+
+msgid "Sharing"
+msgstr "Freigabe"
+
+msgid "Week layout"
+msgstr "Wochenansicht"
+
+msgid "When"
+msgstr "Wann"
+
+msgid "Where"
+msgstr "Wo"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Sent to {email}."
+msgstr "Gesendet an {email}."
+
+msgctxt "email"
+msgid "Email settings"
+msgstr "E-Mail-Einstellungen"
+
+msgctxt "email"
+msgid "Unsubscribe from these emails"
+msgstr "Diese E-Mails abbestellen"
+
+msgctxt "email"
+msgid "Unsubscribe from all emails of this kind"
+msgstr "Alle E-Mails dieser Art abbestellen"
+
+msgctxt "email"
+msgid "No more emails about this event"
+msgstr "Keine E-Mails mehr zu diesem Termin"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Open {app}"
+msgstr "{app} öffnen"
+
+#, python-brace-format
+msgctxt "email"
+msgid "You get this email because {organizer} invited you to this event."
+msgstr "Sie erhalten diese E-Mail, weil {organizer} Sie zu diesem Termin eingeladen hat."
+
+msgctxt "email"
+msgid "You get this email because you organize this event."
+msgstr "Sie erhalten diese E-Mail, weil Sie diesen Termin organisieren."
+
+#, python-brace-format
+msgctxt "email"
+msgid "You get this email because you approve bookings in the calendar \"{calendar}\"."
+msgstr "Sie erhalten diese E-Mail, weil Sie Buchungen im Kalender „{calendar}“ genehmigen."
+
+msgctxt "email"
+msgid "You get this email because you asked for this booking."
+msgstr "Sie erhalten diese E-Mail, weil Sie diese Buchung angefragt haben."
+
+msgctxt "email"
+msgid "You get this email because you created or commented on this event."
+msgstr "Sie erhalten diese E-Mail, weil Sie diesen Termin erstellt oder kommentiert haben."
+
+#, python-brace-format
+msgctxt "email"
+msgid "You get this email because you were added to the calendar \"{calendar}\"."
+msgstr "Sie erhalten diese E-Mail, weil Sie zum Kalender „{calendar}“ hinzugefügt wurden."
+
+#, python-brace-format
+msgctxt "email"
+msgid "You get this email because you are a member of the calendar \"{calendar}\"."
+msgstr "Sie erhalten diese E-Mail, weil Sie Mitglied im Kalender „{calendar}“ sind."
+
+msgctxt "email"
+msgid "You get this email because you set a reminder for this event."
+msgstr "Sie erhalten diese E-Mail, weil Sie eine Erinnerung an diesen Termin eingerichtet haben."
+
+#, python-brace-format
+msgctxt "email"
+msgid "You get this email because {actor} created an account for you in {app}."
+msgstr "Sie erhalten diese E-Mail, weil {actor} für Sie ein Konto bei {app} angelegt hat."
+
+#, python-brace-format
+msgctxt "email"
+msgid "You get this email because a new password for {app} was requested for this address."
+msgstr "Sie erhalten diese E-Mail, weil für diese Adresse ein neues Passwort für {app} angefordert wurde."
+
+msgctxt "email"
+msgid "Someone"
+msgstr "Jemand"
+
+msgctxt "email"
+msgid "Untitled event"
+msgstr "Unbenannter Termin"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Open in {app}"
+msgstr "In {app} öffnen"
+
+msgctxt "email"
+msgid "When"
+msgstr "Wann"
+
+msgctxt "email"
+msgid "Where"
+msgstr "Wo"
+
+msgctxt "email"
+msgid "Calendar"
+msgstr "Kalender"
+
+msgctxt "email"
+msgid "Organizer"
+msgstr "Organisator"
+
+msgctxt "email"
+msgid "Description"
+msgstr "Beschreibung"
+
+msgctxt "email"
+msgid "Note"
+msgstr "Notiz"
+
+msgctxt "email"
+msgid "Comment"
+msgstr "Kommentar"
+
+msgctxt "email"
+msgid "Participants"
+msgstr "Teilnehmende"
+
+msgctxt "email"
+msgid "owner"
+msgstr "Eigentümer"
+
+msgctxt "email"
+msgid "manage"
+msgstr "Verwalten"
+
+msgctxt "email"
+msgid "all events"
+msgstr "Alle Termine"
+
+msgctxt "email"
+msgid "own events"
+msgstr "Eigene Termine"
+
+msgctxt "email"
+msgid "read only"
+msgstr "Lesend"
+
+msgctxt "email"
+msgid "All permissions, including deleting the calendar"
+msgstr "Alle Rechte, auch den Kalender löschen"
+
+msgctxt "email"
+msgid "Can create and edit all events, and change settings and access"
+msgstr "Kann alle Termine erstellen und bearbeiten sowie Einstellungen und Zugriff ändern"
+
+msgctxt "email"
+msgid "Can create and edit all events"
+msgstr "Kann alle Termine erstellen und bearbeiten"
+
+msgctxt "email"
+msgid "Can create events, but only edit their own"
+msgstr "Kann Termine erstellen, aber nur eigene bearbeiten"
+
+msgctxt "email"
+msgid "Can view events"
+msgstr "Kann Termine ansehen"
+
+msgctxt "email"
+msgid "Your role"
+msgstr "Ihre Rolle"
+
+msgctxt "email"
+msgid "Resource"
+msgstr "Ressource"
+
+msgctxt "email"
+msgid "Requested by"
+msgstr "Angefragt von"
+
+msgctxt "email"
+msgid "Review request"
+msgstr "Anfrage prüfen"
+
+msgctxt "email"
+msgid "Booking request"
+msgstr "Buchungsanfrage"
+
+msgctxt "email"
+msgid "Your booking"
+msgstr "Ihre Buchung"
+
+msgctxt "email"
+msgid "Cancelled booking"
+msgstr "Stornierte Buchung"
+
+msgctxt "email"
+msgid "New comment"
+msgstr "Neuer Kommentar"
+
+msgctxt "email"
+msgid "Answer to your invitation"
+msgstr "Antwort auf Ihre Einladung"
+
+msgctxt "email"
+msgid "Reminder"
+msgstr "Erinnerung"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Approval requested: {title}"
+msgstr "Genehmigung angefragt: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} requested approval for \"{title}\"."
+msgstr "{actor} bittet um Genehmigung für „{title}“."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Booking approved: {title}"
+msgstr "Buchung genehmigt: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} approved the booking \"{title}\"."
+msgstr "{actor} hat die Buchung „{title}“ genehmigt."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Booking rejected: {title}"
+msgstr "Buchung abgelehnt: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} rejected the booking \"{title}\"."
+msgstr "{actor} hat die Buchung „{title}“ abgelehnt."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Booking cancelled: {title}"
+msgstr "Buchung storniert: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} cancelled the booking \"{title}\"."
+msgstr "{actor} hat die Buchung „{title}“ storniert."
+
+#, python-brace-format
+msgctxt "email"
+msgid "New comment on {title}"
+msgstr "Neuer Kommentar zu {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} commented on \"{title}\"."
+msgstr "{actor} hat „{title}“ kommentiert."
+
+#, python-brace-format
+msgctxt "email"
+msgid "You were added to {title}"
+msgstr "Sie wurden zu {title} hinzugefügt"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} added you to the calendar \"{title}\"."
+msgstr "{actor} hat Sie zum Kalender „{title}“ hinzugefügt."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Your rights in {title} changed"
+msgstr "Ihre Rechte in {title} wurden geändert"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} changed your rights in the calendar \"{title}\"."
+msgstr "{actor} hat Ihre Rechte im Kalender „{title}“ geändert."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Reminder: {title}"
+msgstr "Erinnerung: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "\"{title}\" is coming up."
+msgstr "„{title}“ steht bevor."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Accepted: {title}"
+msgstr "Zugesagt: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} accepted your invitation to \"{title}\"."
+msgstr "{actor} hat Ihre Einladung zu „{title}“ angenommen."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Tentatively accepted: {title}"
+msgstr "Vorläufig zugesagt: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} tentatively accepted your invitation to \"{title}\"."
+msgstr "{actor} hat Ihre Einladung zu „{title}“ vorläufig angenommen."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Declined: {title}"
+msgstr "Abgesagt: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} declined your invitation to \"{title}\"."
+msgstr "{actor} hat Ihre Einladung zu „{title}“ abgelehnt."
+
+#, python-brace-format
+msgctxt "email"
+msgid "No answer yet: {title}"
+msgstr "Noch keine Antwort: {title}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} took back their answer to \"{title}\"."
+msgstr "{actor} hat die Antwort auf „{title}“ zurückgenommen."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Invitation: {title} @ {when}"
+msgstr "Einladung: {title} @ {when}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{organizer} invited you to \"{title}\"."
+msgstr "{organizer} hat Sie zu „{title}“ eingeladen."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Updated invitation: {title} @ {when}"
+msgstr "Geänderte Einladung: {title} @ {when}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{organizer} changed \"{title}\"."
+msgstr "{organizer} hat „{title}“ geändert."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Cancelled: {title} @ {when}"
+msgstr "Abgesagt: {title} @ {when}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{organizer} cancelled \"{title}\"."
+msgstr "{organizer} hat „{title}“ abgesagt."
+
+#, python-brace-format
+msgctxt "email"
+msgid "{organizer} removed you from \"{title}\"."
+msgstr "{organizer} hat Sie von „{title}“ ausgeladen."
+
+msgctxt "email"
+msgid "Will you attend? Answer in your mail program, or with one of the links below."
+msgstr "Nehmen Sie teil? Antworten Sie in Ihrem Mailprogramm oder über einen der Links unten."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Invitation from {organizer}"
+msgstr "Einladung von {organizer}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Updated invitation from {organizer}"
+msgstr "Geänderte Einladung von {organizer}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Cancelled by {organizer}"
+msgstr "Abgesagt von {organizer}"
+
+msgctxt "email"
+msgid "Your answer"
+msgstr "Ihre Antwort"
+
+msgctxt "email"
+msgid "You can also answer in your mail program."
+msgstr "Sie können auch in Ihrem Mailprogramm antworten."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Invited as {email}"
+msgstr "Eingeladen als {email}"
+
+msgctxt "email"
+msgid "All day"
+msgstr "Ganztägig"
+
+msgctxt "email"
+msgid "Repeats"
+msgstr "Wiederholt sich"
+
+msgctxt "email"
+msgid "Daily"
+msgstr "Täglich"
+
+msgctxt "email"
+msgid "Weekly"
+msgstr "Wöchentlich"
+
+msgctxt "email"
+msgid "Monthly"
+msgstr "Monatlich"
+
+msgctxt "email"
+msgid "Yearly"
+msgstr "Jährlich"
+
+msgctxt "email"
+msgid "View event"
+msgstr "Termin ansehen"
+
+msgctxt "email"
+msgid "Accept"
+msgstr "Zusagen"
+
+msgctxt "email"
+msgid "Tentative"
+msgstr "Vorläufig"
+
+msgctxt "email"
+msgid "Decline"
+msgstr "Ablehnen"
+
+#, python-brace-format
+msgctxt "email"
+msgid "You're invited to {app}"
+msgstr "Einladung zu {app}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Hello {name}"
+msgstr "Hallo {name}"
+
+#, python-brace-format
+msgctxt "email"
+msgid "{actor} invited you to {app}."
+msgstr "{actor} hat Sie zu {app} eingeladen."
+
+msgctxt "email"
+msgid "To get started, set a password using the button below. For security, the link is only valid for a limited time; you can request a new one at any time with \"Forgot your password?\" on the sign-in page."
+msgstr "Legen Sie zuerst über den Button unten ein Passwort fest. Der Link ist aus Sicherheitsgründen nur begrenzt gültig; über „Passwort vergessen?“ auf der Anmeldeseite können Sie jederzeit einen neuen anfordern."
+
+#, python-brace-format
+msgctxt "email"
+msgid "Sign in with this email address and the password you got from {actor}."
+msgstr "Melden Sie sich mit dieser E-Mail-Adresse und dem Passwort an, das Sie von {actor} bekommen haben."
+
+msgctxt "email"
+msgid "Email"
+msgstr "E-Mail"
+
+msgctxt "email"
+msgid "Set password"
+msgstr "Passwort festlegen"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Sign in to {app}"
+msgstr "Bei {app} anmelden"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Reset your password for {app}"
+msgstr "Passwort für {app} zurücksetzen"
+
+msgctxt "email"
+msgid "Reset your password"
+msgstr "Passwort zurücksetzen"
+
+#, python-brace-format
+msgctxt "email"
+msgid "Someone asked to reset the password of your account in {app}. Choose a new one using the button below."
+msgstr "Für Ihr Konto bei {app} wurde angefordert, das Passwort zurückzusetzen. Über den Button unten legen Sie ein neues fest."
+
+msgctxt "email"
+msgid "For security, the link is only valid for a limited time and works once. If you didn't ask for this, ignore this email; your password stays as it is."
+msgstr "Der Link ist aus Sicherheitsgründen nur begrenzt gültig und funktioniert einmal. Wenn Sie das nicht angefordert haben, ignorieren Sie diese E-Mail; Ihr Passwort bleibt unverändert."
+
+msgctxt "email"
+msgid "Choose new password"
+msgstr "Neues Passwort festlegen"

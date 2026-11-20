@@ -6,7 +6,8 @@ import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import { errorMessage } from '@/services/errors'
 import { formatDate } from '@/services/datetime'
-import { loadAvailability, startOfDay, type AvailabilityCache } from '@/services/availability'
+import { loadAvailability, type AvailabilityCache } from '@/services/availability'
+import { DAY_MS, startOfDay } from '@/services/days'
 
 const props = defineProps<{
   /** The event being planned; it doesn't count as taking anyone's time. */
@@ -21,7 +22,6 @@ const props = defineProps<{
   cache: AvailabilityCache
 }>()
 
-const DAY_MS = 24 * 60 * 60 * 1000
 const HOURS = [0, 3, 6, 9, 12, 15, 18, 21]
 
 const { t } = useI18n()

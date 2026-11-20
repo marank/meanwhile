@@ -61,20 +61,30 @@ export function parseCalendarQuery(query: Record<string, QueryValue>, today = ne
     return target
   }
 
-  const month = integer(single(query.month), /^\d{1,2}$/)
   const year = integer(single(query.year), /^\d{4}$/)
-  const week = integer(single(query.week), /^\d{1,2}$/)
-  const weekStart = week === undefined ? undefined : isoWeekStart(year ?? isoYear(today), week)
+  const weekStart = weekFromQuery(query, year, today)
   if (weekStart) {
     target.date = weekStart
     target.view ??= 'week'
     return target
   }
-  const validMonth = month !== undefined && month >= 1 && month <= 12 ? month : undefined
-  if (validMonth !== undefined || year !== undefined) {
-    target.date = new Date(year ?? today.getFullYear(), (validMonth ?? today.getMonth() + 1) - 1, 1)
-  }
+  const monthStart = monthFromQuery(query, year, today)
+  if (monthStart) target.date = monthStart
   return target
+}
+
+/** The Monday of `week` (in `year`, else this ISO year), if the query names a valid week. */
+function weekFromQuery(query: Record<string, QueryValue>, year: number | undefined, today: Date): Date | undefined {
+  const week = integer(single(query.week), /^\d{1,2}$/)
+  return week === undefined ? undefined : isoWeekStart(year ?? isoYear(today), week)
+}
+
+/** The first of `month` in `year`, each this one's when left out; nothing when the query names neither. */
+function monthFromQuery(query: Record<string, QueryValue>, year: number | undefined, today: Date): Date | undefined {
+  const month = integer(single(query.month), /^\d{1,2}$/)
+  const validMonth = month !== undefined && month >= 1 && month <= 12 ? month : undefined
+  if (validMonth === undefined && year === undefined) return undefined
+  return new Date(year ?? today.getFullYear(), (validMonth ?? today.getMonth() + 1) - 1, 1)
 }
 
 /** The year the ISO week of a day belongs to (the first days of January can still be in the last week of the year before). */

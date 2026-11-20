@@ -129,40 +129,54 @@ function save() {
   )
 
   async function send() {
-    const id = props.calendar.id
-    if (
-      isPublic.value !== props.calendar.is_public ||
-      (isPublic.value && publicRole.value !== props.calendar.public_role)
-    ) {
-      const data: Partial<api.Calendar> = { is_public: isPublic.value }
-      if (isPublic.value) data.public_role = publicRole.value
-      emit('updated', await calendarStore.updateCalendar(id, data))
-    }
+    await sendPublicAccess()
+    if (await sendMembers()) membersChanged = true
+    await sendGroupLinks()
+  }
+}
 
-    for (const saved of savedMembers) {
-      if (saved.role === 'owner' || memberIds.value.has(saved.user_id)) continue
-      await api.removeMember(id, saved.user_id)
-      membersChanged = true
-    }
-    for (const member of members.value) {
-      if (member.role === 'owner') continue
-      const saved = savedMembers.find((m) => m.user_id === member.user_id)
-      if (!saved) {
-        await api.addMember(id, member.user_id, member.role as api.GrantableRole)
-        membersChanged = true
-      } else if (saved.role !== member.role) {
-        await api.updateMember(id, member.user_id, member.role as api.GrantableRole)
-      }
-    }
+async function sendPublicAccess() {
+  if (
+    isPublic.value === props.calendar.is_public &&
+    (!isPublic.value || publicRole.value === props.calendar.public_role)
+  )
+    return
+  const data: Partial<api.Calendar> = { is_public: isPublic.value }
+  if (isPublic.value) data.public_role = publicRole.value
+  emit('updated', await calendarStore.updateCalendar(props.calendar.id, data))
+}
 
-    for (const saved of savedGroupLinks) {
-      if (!groupLinks.value.some((l) => l.id === saved.id)) await api.removeCalendarGroup(id, saved.id)
+/** Sends the changed members; true when some were added or removed. */
+async function sendMembers(): Promise<boolean> {
+  const id = props.calendar.id
+  let changed = false
+  for (const saved of savedMembers) {
+    if (saved.role === 'owner' || memberIds.value.has(saved.user_id)) continue
+    await api.removeMember(id, saved.user_id)
+    changed = true
+  }
+  for (const member of members.value) {
+    if (member.role === 'owner') continue
+    const saved = savedMembers.find((m) => m.user_id === member.user_id)
+    if (!saved) {
+      await api.addMember(id, member.user_id, member.role as api.GrantableRole)
+      changed = true
+    } else if (saved.role !== member.role) {
+      await api.updateMember(id, member.user_id, member.role as api.GrantableRole)
     }
-    for (const link of groupLinks.value) {
-      const saved = savedGroupLinks.find((l) => l.id === link.id)
-      if (!saved) await api.addCalendarGroup(id, { group_id: link.group.id, role: link.role })
-      else if (saved.role !== link.role) await api.updateCalendarGroup(id, link.id, { role: link.role })
-    }
+  }
+  return changed
+}
+
+async function sendGroupLinks() {
+  const id = props.calendar.id
+  for (const saved of savedGroupLinks) {
+    if (!groupLinks.value.some((l) => l.id === saved.id)) await api.removeCalendarGroup(id, saved.id)
+  }
+  for (const link of groupLinks.value) {
+    const saved = savedGroupLinks.find((l) => l.id === link.id)
+    if (!saved) await api.addCalendarGroup(id, { group_id: link.group.id, role: link.role })
+    else if (saved.role !== link.role) await api.updateCalendarGroup(id, link.id, { role: link.role })
   }
 }
 

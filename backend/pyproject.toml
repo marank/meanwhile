@@ -1,26 +1,27 @@
 [project]
 name = "meanwhile-backend"
-version = "0.1.0"
+version = "0.0.0"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.14"
 dependencies = [
     "a2wsgi>=1.10.10",
     "channels>=4.3.2",
     "channels-redis>=4.3.0",
     "daphne>=4.2.3",
-    "django[argon2]>=6.0.9,<6.1",
-    "django-allauth>=65.20.1",
-    "django-ninja>=1.7.1",
+    "django[argon2]>=6.0.10,<6.1",
+    "django-allauth>=65.22.1",
+    "django-ninja>=1.8.0",
     "email-validator>=2.3.0",
     "icalendar>=7.3.0",
-    "procrastinate[django]>=3.10.0",
-    "psycopg[binary]>=3.3.6",
+    "procrastinate[django]>=3.11.0",
+    "psycopg[binary]>=3.3.9",
     "python-dateutil>=3.0.0",
-    "radicale>=3.9.0",
+    "radicale>=3.9.1",
     "uvicorn[standard]>=0.54.0",
     "vobject>=0.9.9",
     "defusedxml>=0.7.1",
     "asgiref>=3.13.0",
-    "pydantic>=2.14.1",
+    "pydantic>=2.14.3",
     "django-stubs-ext>=6.1.2",
 ]
 
@@ -28,16 +29,19 @@ dependencies = [
 dev = [
     "deptry>=0.25.1",
     "django-stubs>=6.1.2",
-    "mypy>=2.4.0",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+    "import-linter>=2.17",
+    "mypy>=2.4.1",
+    "polib>=1.2.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
     "pytest-cov>=7.1.0",
     "pytest-django>=4.14.0",
     "pytest-xdist>=3.8.0",
-    "ruff>=0.17.2",
+    "ruff>=0.17.5",
     "types-channels>=4.3.0.20260518",
     "types-defusedxml>=0.7.0.20260504",
-    "types-python-dateutil>=2.9.0.20261021",
+    "types-polib>=1.2.0.20261115",
+    "types-python-dateutil>=2.9.0.20261104",
 ]
 
 [tool.pytest.ini_options]
@@ -48,7 +52,7 @@ addopts = "-n auto"
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-extend-exclude = ["core/migrations"]
+extend-exclude = ["apps/core/migrations"]
 
 [tool.ruff.lint]
 select = [
@@ -59,13 +63,32 @@ select = [
     "UP",  # pyupgrade
     "B",   # bugbear
     "DJ",  # Django
+    "SIM", # simplify
+    "RET", # return
+    "C90", # complexity (max-complexity below)
+    "PLR1702",  # nesting (max-nested-blocks below); a preview rule
+    "DTZ", # timezone-aware datetimes only
+    "T20", # no print()
+    "ERA", # no commented-out code
+    "S",   # security patterns (bandit)
 ]
 ignore = [
     "DJ008",  # __str__ on every model
+    "S603", "S607",  # subprocess with fixed argument lists (pg_dump) is intended
+    "S101",  # asserts state invariants for the type checker; the image never runs with -O
 ]
+# Only the preview rules selected by name (PLR1702), not preview behaviour of the stable ones.
+preview = true
+explicit-preview-rules = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-nested-blocks = 4
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "core"]
+known-first-party = ["apps", "config"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Django Ninja declares parameters with these in defaults.
@@ -73,12 +96,16 @@ extend-immutable-calls = ["ninja.Query", "ninja.Path", "ninja.Body", "ninja.Form
 
 [tool.ruff.lint.per-file-ignores]
 # The texts of the emails, one per line.
-"core/services/mail_texts.py" = ["E501"]
+"apps/core/services/mail_texts.py" = ["E501"]
+"**/tests/**" = ["S105", "S106"]  # passwords in fixtures
+"scripts/**" = ["T201"]                   # command-line tools print their result
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]
 exclude = ["/migrations/"]
 strict = true
+# What the image and CI run on; keeps the checks the same on every developer machine.
+platform = "linux"
 
 [[tool.mypy.overrides]]
 module = ["*.migrations.*"]
@@ -93,16 +120,50 @@ ignore_missing_imports = true
 django_settings_module = "config.settings_test"
 
 [tool.coverage.run]
-source = ["config", "core"]
+source = ["apps", "config"]
 omit = ["*/migrations/*", "config/asgi.py", "config/wsgi.py", "manage.py"]
 
 [tool.coverage.report]
 skip_covered = true
 show_missing = true
+fail_under = 90
+
+# `lint-imports`: dependencies inside core point one way (AGENTS.md, "Backend rules").
+[tool.importlinter]
+root_packages = ["apps", "config"]
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "core is layered: entry points -> signals -> services -> models"
+type = "layers"
+containers = ["apps.core"]
+layers = [
+    "api | realtime.routing",
+    # Entry points: the API's views, CalDAV, the WebSocket consumers, jobs, commands, allauth hooks.
+    "views | caldav | realtime.consumers | realtime.security | tasks | management | admin | adapters | headless_adapter | forms",
+    "signals",
+    # Schemas validate with services (RRULEs, email preferences); services take schemas as input.
+    "services : schemas",
+    "jobs | realtime.broadcast",
+    "models",
+]
+ignore_imports = [
+    # A service defers its job (apps.core.jobs.defer(send_email, ...)), and the job sends through the
+    # service; the import is local to that function.
+    "apps.core.services.mail -> apps.core.tasks",
+]
+
+[[tool.importlinter.contracts]]
+name = "core reads settings through django.conf, not from config"
+type = "forbidden"
+source_modules = ["apps.core"]
+forbidden_modules = ["config.settings", "config.settings_test", "config.urls", "config.asgi", "config.wsgi"]
+# The tests may start the ASGI application as the server does.
+ignore_imports = ["apps.core.tests.** -> config.asgi"]
 
 [tool.deptry]
-# The tests may use the dev dependencies.
-extend_exclude = ["core/tests"]
+# The tests and the check scripts may use the dev dependencies.
+extend_exclude = ["apps/core/tests", "scripts"]
 
 [tool.deptry.per_rule_ignores]
 # Used, but never imported: the database driver (ENGINE), the channel layer (BACKEND), daphne

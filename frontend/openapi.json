@@ -2,13 +2,13 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Calendar API",
-    "version": "0.1.0",
+    "version": "0.0.0",
     "description": ""
   },
   "paths": {
     "/api/health": {
       "get": {
-        "operationId": "core_views_misc_health",
+        "operationId": "apps_core_views_misc_health",
         "summary": "Health",
         "parameters": [],
         "responses": {
@@ -20,7 +20,7 @@
     },
     "/api/settings": {
       "get": {
-        "operationId": "core_views_misc_public_settings",
+        "operationId": "apps_core_views_misc_public_settings",
         "summary": "Public Settings",
         "parameters": [],
         "responses": {
@@ -39,7 +39,7 @@
     },
     "/api/users/me": {
       "get": {
-        "operationId": "core_views_users_me",
+        "operationId": "apps_core_views_users_me",
         "summary": "Me",
         "parameters": [],
         "responses": {
@@ -61,7 +61,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_users_update_me",
+        "operationId": "apps_core_views_users_update_me",
         "summary": "Update Me",
         "parameters": [],
         "responses": {
@@ -95,7 +95,7 @@
     },
     "/api/users/me/settings": {
       "get": {
-        "operationId": "core_views_users_get_overview_settings",
+        "operationId": "apps_core_views_users_get_overview_settings",
         "summary": "Get Overview Settings",
         "parameters": [],
         "responses": {
@@ -117,7 +117,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_users_update_overview_settings",
+        "operationId": "apps_core_views_users_update_overview_settings",
         "summary": "Update Overview Settings",
         "parameters": [],
         "responses": {
@@ -151,7 +151,7 @@
     },
     "/api/users/me/app-passwords": {
       "get": {
-        "operationId": "core_views_users_list_app_passwords",
+        "operationId": "apps_core_views_users_list_app_passwords",
         "summary": "List App Passwords",
         "parameters": [],
         "responses": {
@@ -177,7 +177,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_users_create_app_password",
+        "operationId": "apps_core_views_users_create_app_password",
         "summary": "Create App Password",
         "parameters": [],
         "responses": {
@@ -211,7 +211,7 @@
     },
     "/api/users/me/app-passwords/{password_id}": {
       "delete": {
-        "operationId": "core_views_users_delete_app_password",
+        "operationId": "apps_core_views_users_delete_app_password",
         "summary": "Delete App Password",
         "parameters": [
           {
@@ -245,7 +245,7 @@
     },
     "/api/admin/settings": {
       "get": {
-        "operationId": "core_views_admin_admin_settings",
+        "operationId": "apps_core_views_admin_admin_settings",
         "summary": "Admin Settings",
         "parameters": [],
         "responses": {
@@ -267,7 +267,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_admin_admin_settings_update",
+        "operationId": "apps_core_views_admin_admin_settings_update",
         "summary": "Admin Settings Update",
         "parameters": [],
         "responses": {
@@ -301,7 +301,7 @@
     },
     "/api/admin/users": {
       "get": {
-        "operationId": "core_views_admin_admin_users",
+        "operationId": "apps_core_views_admin_admin_users",
         "summary": "Admin Users",
         "parameters": [],
         "responses": {
@@ -327,7 +327,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_admin_admin_create_user",
+        "operationId": "apps_core_views_admin_admin_create_user",
         "summary": "Admin Create User",
         "parameters": [],
         "responses": {
@@ -361,7 +361,7 @@
     },
     "/api/admin/users/{user_id}": {
       "get": {
-        "operationId": "core_views_admin_admin_get_user",
+        "operationId": "apps_core_views_admin_admin_get_user",
         "summary": "Admin Get User",
         "parameters": [
           {
@@ -393,7 +393,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_admin_admin_update_user",
+        "operationId": "apps_core_views_admin_admin_update_user",
         "summary": "Admin Update User",
         "parameters": [
           {
@@ -435,7 +435,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_admin_admin_delete_user",
+        "operationId": "apps_core_views_admin_admin_delete_user",
         "summary": "Admin Delete User",
         "parameters": [
           {
@@ -469,7 +469,7 @@
     },
     "/api/admin/users/{user_id}/reset-password": {
       "post": {
-        "operationId": "core_views_admin_admin_reset_password",
+        "operationId": "apps_core_views_admin_admin_reset_password",
         "summary": "Admin Reset Password",
         "parameters": [
           {
@@ -503,7 +503,7 @@
     },
     "/api/admin/users/{user_id}/invite": {
       "post": {
-        "operationId": "core_views_admin_admin_invite_user",
+        "operationId": "apps_core_views_admin_admin_invite_user",
         "summary": "Admin Invite User",
         "parameters": [
           {
@@ -538,7 +538,7 @@
     },
     "/api/groups": {
       "get": {
-        "operationId": "core_views_groups_list_groups",
+        "operationId": "apps_core_views_groups_list_groups",
         "summary": "List Groups",
         "parameters": [],
         "responses": {
@@ -564,7 +564,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_groups_create_group",
+        "operationId": "apps_core_views_groups_create_group",
         "summary": "Create Group",
         "parameters": [],
         "responses": {
@@ -598,7 +598,7 @@
     },
     "/api/groups/{group_id}": {
       "get": {
-        "operationId": "core_views_groups_get_group",
+        "operationId": "apps_core_views_groups_get_group",
         "summary": "Get Group",
         "parameters": [
           {
@@ -630,7 +630,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_groups_update_group",
+        "operationId": "apps_core_views_groups_update_group",
         "summary": "Update Group",
         "parameters": [
           {
@@ -672,7 +672,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_groups_delete_group",
+        "operationId": "apps_core_views_groups_delete_group",
         "summary": "Delete Group",
         "parameters": [
           {
@@ -706,7 +706,7 @@
     },
     "/api/groups/{group_id}/members/{user_id}": {
       "post": {
-        "operationId": "core_views_groups_add_member",
+        "operationId": "apps_core_views_groups_add_member",
         "summary": "Add Member",
         "parameters": [
           {
@@ -747,7 +747,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_groups_remove_member",
+        "operationId": "apps_core_views_groups_remove_member",
         "summary": "Remove Member",
         "parameters": [
           {
@@ -790,7 +790,7 @@
     },
     "/api/layout": {
       "get": {
-        "operationId": "core_views_layout_get_layout",
+        "operationId": "apps_core_views_layout_get_layout",
         "summary": "Get Layout",
         "parameters": [],
         "responses": {
@@ -814,7 +814,7 @@
     },
     "/api/layout/folders": {
       "post": {
-        "operationId": "core_views_layout_create_folder",
+        "operationId": "apps_core_views_layout_create_folder",
         "summary": "Create Folder",
         "parameters": [],
         "responses": {
@@ -848,7 +848,7 @@
     },
     "/api/layout/folders/{folder_id}": {
       "patch": {
-        "operationId": "core_views_layout_update_folder",
+        "operationId": "apps_core_views_layout_update_folder",
         "summary": "Update Folder",
         "parameters": [
           {
@@ -890,7 +890,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_layout_delete_folder",
+        "operationId": "apps_core_views_layout_delete_folder",
         "summary": "Delete Folder",
         "parameters": [
           {
@@ -924,7 +924,7 @@
     },
     "/api/layout/items": {
       "patch": {
-        "operationId": "core_views_layout_update_layout_items",
+        "operationId": "apps_core_views_layout_update_layout_items",
         "summary": "Update Layout Items",
         "parameters": [],
         "responses": {
@@ -959,7 +959,7 @@
     },
     "/api/search": {
       "get": {
-        "operationId": "core_views_search_search",
+        "operationId": "apps_core_views_search_search",
         "summary": "Search",
         "parameters": [
           {
@@ -1041,7 +1041,7 @@
     },
     "/api/calendars": {
       "get": {
-        "operationId": "core_views_calendars_list_calendars",
+        "operationId": "apps_core_views_calendars_list_calendars",
         "summary": "List Calendars",
         "parameters": [],
         "responses": {
@@ -1067,7 +1067,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_calendars_create_calendar",
+        "operationId": "apps_core_views_calendars_create_calendar",
         "summary": "Create Calendar",
         "parameters": [],
         "responses": {
@@ -1101,7 +1101,7 @@
     },
     "/api/calendars/public": {
       "get": {
-        "operationId": "core_views_calendars_public_calendars",
+        "operationId": "apps_core_views_calendars_public_calendars",
         "summary": "Public Calendars",
         "parameters": [],
         "responses": {
@@ -1130,7 +1130,7 @@
     },
     "/api/calendars/{calendar_id}/subscription": {
       "put": {
-        "operationId": "core_views_calendars_add_public_calendar",
+        "operationId": "apps_core_views_calendars_add_public_calendar",
         "summary": "Add Public Calendar",
         "parameters": [
           {
@@ -1163,7 +1163,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_calendars_remove_public_calendar",
+        "operationId": "apps_core_views_calendars_remove_public_calendar",
         "summary": "Remove Public Calendar",
         "parameters": [
           {
@@ -1198,7 +1198,7 @@
     },
     "/api/calendars/{calendar_id}": {
       "get": {
-        "operationId": "core_views_calendars_get_calendar",
+        "operationId": "apps_core_views_calendars_get_calendar",
         "summary": "Get Calendar",
         "parameters": [
           {
@@ -1230,7 +1230,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_calendars_update_calendar",
+        "operationId": "apps_core_views_calendars_update_calendar",
         "summary": "Update Calendar",
         "parameters": [
           {
@@ -1272,7 +1272,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_calendars_delete_calendar",
+        "operationId": "apps_core_views_calendars_delete_calendar",
         "summary": "Delete Calendar",
         "parameters": [
           {
@@ -1306,7 +1306,7 @@
     },
     "/api/calendars/{calendar_id}/members": {
       "get": {
-        "operationId": "core_views_calendars_list_members",
+        "operationId": "apps_core_views_calendars_list_members",
         "summary": "List Members",
         "parameters": [
           {
@@ -1342,7 +1342,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_calendars_add_member",
+        "operationId": "apps_core_views_calendars_add_member",
         "summary": "Add Member",
         "parameters": [
           {
@@ -1386,7 +1386,7 @@
     },
     "/api/calendars/{calendar_id}/members/{user_id}": {
       "patch": {
-        "operationId": "core_views_calendars_update_member",
+        "operationId": "apps_core_views_calendars_update_member",
         "summary": "Update Member",
         "parameters": [
           {
@@ -1437,7 +1437,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_calendars_remove_member",
+        "operationId": "apps_core_views_calendars_remove_member",
         "summary": "Remove Member",
         "parameters": [
           {
@@ -1480,7 +1480,7 @@
     },
     "/api/calendars/{calendar_id}/feed-url": {
       "get": {
-        "operationId": "core_views_calendars_get_feed_url",
+        "operationId": "apps_core_views_calendars_get_feed_url",
         "summary": "Get Feed Url",
         "parameters": [
           {
@@ -1514,7 +1514,7 @@
     },
     "/api/calendars/{calendar_id}/feed-token/rotate": {
       "post": {
-        "operationId": "core_views_calendars_rotate_feed_token",
+        "operationId": "apps_core_views_calendars_rotate_feed_token",
         "summary": "Rotate Feed Token",
         "parameters": [
           {
@@ -1549,7 +1549,7 @@
     },
     "/api/calendars/{calendar_id}/approvers": {
       "get": {
-        "operationId": "core_views_calendars_list_calendar_approvers",
+        "operationId": "apps_core_views_calendars_list_calendar_approvers",
         "summary": "List Calendar Approvers",
         "parameters": [
           {
@@ -1585,7 +1585,7 @@
         ]
       },
       "put": {
-        "operationId": "core_views_calendars_set_calendar_approvers",
+        "operationId": "apps_core_views_calendars_set_calendar_approvers",
         "summary": "Set Calendar Approvers",
         "parameters": [
           {
@@ -1634,7 +1634,7 @@
     },
     "/api/calendars/{calendar_id}/groups": {
       "get": {
-        "operationId": "core_views_calendars_list_calendar_groups",
+        "operationId": "apps_core_views_calendars_list_calendar_groups",
         "summary": "List Calendar Groups",
         "parameters": [
           {
@@ -1670,7 +1670,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_calendars_add_calendar_group",
+        "operationId": "apps_core_views_calendars_add_calendar_group",
         "summary": "Add Calendar Group",
         "parameters": [
           {
@@ -1714,7 +1714,7 @@
     },
     "/api/calendars/{calendar_id}/groups/{link_id}": {
       "patch": {
-        "operationId": "core_views_calendars_update_calendar_group",
+        "operationId": "apps_core_views_calendars_update_calendar_group",
         "summary": "Update Calendar Group",
         "parameters": [
           {
@@ -1765,7 +1765,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_calendars_delete_calendar_group",
+        "operationId": "apps_core_views_calendars_delete_calendar_group",
         "summary": "Delete Calendar Group",
         "parameters": [
           {
@@ -1808,7 +1808,7 @@
     },
     "/api/calendars/{calendar_id}/categories": {
       "get": {
-        "operationId": "core_views_categories_list_categories",
+        "operationId": "apps_core_views_categories_list_categories",
         "summary": "List Categories",
         "parameters": [
           {
@@ -1844,7 +1844,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_categories_create_category",
+        "operationId": "apps_core_views_categories_create_category",
         "summary": "Create Category",
         "parameters": [
           {
@@ -1888,7 +1888,7 @@
     },
     "/api/calendars/{calendar_id}/categories/{category_id}": {
       "patch": {
-        "operationId": "core_views_categories_update_category",
+        "operationId": "apps_core_views_categories_update_category",
         "summary": "Update Category",
         "parameters": [
           {
@@ -1939,7 +1939,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_categories_delete_category",
+        "operationId": "apps_core_views_categories_delete_category",
         "summary": "Delete Category",
         "parameters": [
           {
@@ -1982,7 +1982,7 @@
     },
     "/api/calendars/{calendar_id}/resources": {
       "get": {
-        "operationId": "core_views_resources_list_resources",
+        "operationId": "apps_core_views_resources_list_resources",
         "summary": "List Resources",
         "parameters": [
           {
@@ -2018,7 +2018,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_resources_create_resource",
+        "operationId": "apps_core_views_resources_create_resource",
         "summary": "Create Resource",
         "parameters": [
           {
@@ -2062,7 +2062,7 @@
     },
     "/api/calendars/{calendar_id}/resources/{resource_id}": {
       "patch": {
-        "operationId": "core_views_resources_update_resource",
+        "operationId": "apps_core_views_resources_update_resource",
         "summary": "Update Resource",
         "parameters": [
           {
@@ -2113,7 +2113,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_resources_delete_resource",
+        "operationId": "apps_core_views_resources_delete_resource",
         "summary": "Delete Resource",
         "parameters": [
           {
@@ -2156,7 +2156,7 @@
     },
     "/api/calendars/{calendar_id}/resources/{resource_id}/approvers": {
       "get": {
-        "operationId": "core_views_resources_list_resource_approvers",
+        "operationId": "apps_core_views_resources_list_resource_approvers",
         "summary": "List Resource Approvers",
         "parameters": [
           {
@@ -2201,7 +2201,7 @@
         ]
       },
       "put": {
-        "operationId": "core_views_resources_set_resource_approvers",
+        "operationId": "apps_core_views_resources_set_resource_approvers",
         "summary": "Set Resource Approvers",
         "parameters": [
           {
@@ -2259,7 +2259,7 @@
     },
     "/api/events": {
       "get": {
-        "operationId": "core_views_events_list_events_of_calendars",
+        "operationId": "apps_core_views_events_list_events_of_calendars",
         "summary": "List Events Of Calendars",
         "parameters": [
           {
@@ -2321,7 +2321,7 @@
     },
     "/api/calendars/{calendar_id}/events": {
       "get": {
-        "operationId": "core_views_events_list_events",
+        "operationId": "apps_core_views_events_list_events",
         "summary": "List Events",
         "parameters": [
           {
@@ -2377,7 +2377,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_events_create_event",
+        "operationId": "apps_core_views_events_create_event",
         "summary": "Create Event",
         "parameters": [
           {
@@ -2421,7 +2421,7 @@
     },
     "/api/events/{event_id}": {
       "get": {
-        "operationId": "core_views_events_get_event",
+        "operationId": "apps_core_views_events_get_event",
         "summary": "Get Event",
         "parameters": [
           {
@@ -2453,7 +2453,7 @@
         ]
       },
       "patch": {
-        "operationId": "core_views_events_update_event",
+        "operationId": "apps_core_views_events_update_event",
         "summary": "Update Event",
         "parameters": [
           {
@@ -2495,7 +2495,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_events_delete_event",
+        "operationId": "apps_core_views_events_delete_event",
         "summary": "Delete Event",
         "parameters": [
           {
@@ -2529,7 +2529,7 @@
     },
     "/api/events/{event_id}/occurrences/{recurrence_id}": {
       "patch": {
-        "operationId": "core_views_events_update_occurrence",
+        "operationId": "apps_core_views_events_update_occurrence",
         "summary": "Update Occurrence",
         "parameters": [
           {
@@ -2597,7 +2597,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_events_delete_occurrence",
+        "operationId": "apps_core_views_events_delete_occurrence",
         "summary": "Delete Occurrence",
         "parameters": [
           {
@@ -2657,7 +2657,7 @@
     },
     "/api/events/{event_id}/reminders": {
       "get": {
-        "operationId": "core_views_events_get_reminders",
+        "operationId": "apps_core_views_events_get_reminders",
         "summary": "Get Reminders",
         "parameters": [
           {
@@ -2690,7 +2690,7 @@
         ]
       },
       "put": {
-        "operationId": "core_views_events_put_reminders",
+        "operationId": "apps_core_views_events_put_reminders",
         "summary": "Put Reminders",
         "parameters": [
           {
@@ -2734,7 +2734,7 @@
     },
     "/api/events/{event_id}/participants": {
       "get": {
-        "operationId": "core_views_events_list_event_participants",
+        "operationId": "apps_core_views_events_list_event_participants",
         "summary": "List Event Participants",
         "parameters": [
           {
@@ -2770,7 +2770,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_events_add_event_participant",
+        "operationId": "apps_core_views_events_add_event_participant",
         "summary": "Add Event Participant",
         "parameters": [
           {
@@ -2814,7 +2814,7 @@
     },
     "/api/events/{event_id}/participants/me": {
       "patch": {
-        "operationId": "core_views_events_update_my_participation",
+        "operationId": "apps_core_views_events_update_my_participation",
         "summary": "Update My Participation",
         "parameters": [
           {
@@ -2859,7 +2859,7 @@
     },
     "/api/events/{event_id}/participants/{participant_id}": {
       "patch": {
-        "operationId": "core_views_events_update_event_participant",
+        "operationId": "apps_core_views_events_update_event_participant",
         "summary": "Update Event Participant",
         "parameters": [
           {
@@ -2910,7 +2910,7 @@
         ]
       },
       "delete": {
-        "operationId": "core_views_events_delete_event_participant",
+        "operationId": "apps_core_views_events_delete_event_participant",
         "summary": "Delete Event Participant",
         "parameters": [
           {
@@ -2953,7 +2953,7 @@
     },
     "/api/events/{event_id}/comments": {
       "get": {
-        "operationId": "core_views_comments_list_comments",
+        "operationId": "apps_core_views_comments_list_comments",
         "summary": "List Comments",
         "parameters": [
           {
@@ -2989,7 +2989,7 @@
         ]
       },
       "post": {
-        "operationId": "core_views_comments_create_comment",
+        "operationId": "apps_core_views_comments_create_comment",
         "summary": "Create Comment",
         "parameters": [
           {
@@ -3033,7 +3033,7 @@
     },
     "/api/events/{event_id}/comments/{comment_id}": {
       "delete": {
-        "operationId": "core_views_comments_delete_comment",
+        "operationId": "apps_core_views_comments_delete_comment",
         "summary": "Delete Comment",
         "parameters": [
           {
@@ -3076,7 +3076,7 @@
     },
     "/api/events/{event_id}/activity": {
       "get": {
-        "operationId": "core_views_comments_list_activity",
+        "operationId": "apps_core_views_comments_list_activity",
         "summary": "List Activity",
         "parameters": [
           {
@@ -3114,7 +3114,7 @@
     },
     "/api/notifications": {
       "get": {
-        "operationId": "core_views_notifications_list_notifications",
+        "operationId": "apps_core_views_notifications_list_notifications",
         "summary": "List Notifications",
         "parameters": [
           {
@@ -3173,7 +3173,7 @@
     },
     "/api/notifications/counts": {
       "get": {
-        "operationId": "core_views_notifications_counts",
+        "operationId": "apps_core_views_notifications_counts",
         "summary": "Counts",
         "parameters": [],
         "responses": {
@@ -3198,7 +3198,7 @@
     },
     "/api/notifications/read-all": {
       "post": {
-        "operationId": "core_views_notifications_mark_all_read",
+        "operationId": "apps_core_views_notifications_mark_all_read",
         "summary": "Mark All Read",
         "parameters": [],
         "responses": {
@@ -3222,7 +3222,7 @@
     },
     "/api/notifications/{notification_id}/read": {
       "post": {
-        "operationId": "core_views_notifications_mark_read",
+        "operationId": "apps_core_views_notifications_mark_read",
         "summary": "Mark Read",
         "parameters": [
           {
@@ -3256,7 +3256,7 @@
     },
     "/api/notifications/{notification_id}": {
       "delete": {
-        "operationId": "core_views_notifications_delete_notification",
+        "operationId": "apps_core_views_notifications_delete_notification",
         "summary": "Delete Notification",
         "parameters": [
           {
@@ -3290,7 +3290,7 @@
     },
     "/api/approvals": {
       "get": {
-        "operationId": "core_views_approvals_list_pending_approvals",
+        "operationId": "apps_core_views_approvals_list_pending_approvals",
         "summary": "List Pending Approvals",
         "parameters": [],
         "responses": {
@@ -3318,7 +3318,7 @@
     },
     "/api/events/{event_id}/approve": {
       "post": {
-        "operationId": "core_views_approvals_approve_event",
+        "operationId": "apps_core_views_approvals_approve_event",
         "summary": "Approve Event",
         "parameters": [
           {
@@ -3362,7 +3362,7 @@
     },
     "/api/events/{event_id}/reject": {
       "post": {
-        "operationId": "core_views_approvals_reject_event",
+        "operationId": "apps_core_views_approvals_reject_event",
         "summary": "Reject Event",
         "parameters": [
           {
@@ -3406,7 +3406,7 @@
     },
     "/api/events/{event_id}/cancel": {
       "post": {
-        "operationId": "core_views_approvals_cancel_event",
+        "operationId": "apps_core_views_approvals_cancel_event",
         "summary": "Cancel Event",
         "parameters": [
           {
@@ -3440,7 +3440,7 @@
     },
     "/api/availability": {
       "post": {
-        "operationId": "core_views_availability_availability",
+        "operationId": "apps_core_views_availability_availability",
         "summary": "Availability",
         "parameters": [],
         "responses": {
@@ -3475,7 +3475,7 @@
     },
     "/api/rsvp/{token}": {
       "get": {
-        "operationId": "core_views_rsvp_get_invitation",
+        "operationId": "apps_core_views_rsvp_get_invitation",
         "summary": "Get Invitation",
         "parameters": [
           {
@@ -3502,7 +3502,7 @@
         }
       },
       "post": {
-        "operationId": "core_views_rsvp_answer_invitation",
+        "operationId": "apps_core_views_rsvp_answer_invitation",
         "summary": "Answer Invitation",
         "parameters": [
           {
@@ -3541,7 +3541,7 @@
     },
     "/api/rsvp/{token}/ics": {
       "get": {
-        "operationId": "core_views_rsvp_invitation_ics",
+        "operationId": "apps_core_views_rsvp_invitation_ics",
         "summary": "Invitation Ics",
         "parameters": [
           {
@@ -3564,7 +3564,7 @@
     },
     "/api/unsubscribe/{token}": {
       "get": {
-        "operationId": "core_views_unsubscribe_get_subscription",
+        "operationId": "apps_core_views_unsubscribe_get_subscription",
         "summary": "Get Subscription",
         "parameters": [
           {
@@ -3591,7 +3591,7 @@
         }
       },
       "post": {
-        "operationId": "core_views_unsubscribe_unsubscribe_by_link",
+        "operationId": "apps_core_views_unsubscribe_unsubscribe_by_link",
         "summary": "Unsubscribe By Link",
         "parameters": [
           {
@@ -3618,7 +3618,7 @@
         }
       },
       "delete": {
-        "operationId": "core_views_unsubscribe_resubscribe_by_link",
+        "operationId": "apps_core_views_unsubscribe_resubscribe_by_link",
         "summary": "Resubscribe By Link",
         "parameters": [
           {
@@ -3752,7 +3752,7 @@
         "type": "object"
       },
       "ProfileOut": {
-        "description": "The signed-in user, as /users/me and the login and signup answers (core.headless_adapter) show them.",
+        "description": "The signed-in user, as /users/me and the login and signup answers (apps.core.headless_adapter) show them.",
         "properties": {
           "id": {
             "format": "uuid",
@@ -6017,16 +6017,12 @@
       "CalendarMemberUpdate": {
         "properties": {
           "role": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Role"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Role"
           }
         },
+        "required": [
+          "role"
+        ],
         "title": "CalendarMemberUpdate",
         "type": "object"
       },
@@ -7194,7 +7190,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/EventParticipantInvite"
+                  "$ref": "#/components/schemas/EventParticipantCreate"
                 },
                 "type": "array"
               },
@@ -7212,7 +7208,7 @@
         "title": "EventCreate",
         "type": "object"
       },
-      "EventParticipantInvite": {
+      "EventParticipantCreate": {
         "properties": {
           "user_id": {
             "anyOf": [
@@ -7250,7 +7246,7 @@
             "default": "needs_action"
           }
         },
-        "title": "EventParticipantInvite",
+        "title": "EventParticipantCreate",
         "type": "object"
       },
       "ParticipantStatus": {
@@ -7505,47 +7501,6 @@
           "updated_at"
         ],
         "title": "EventParticipantOut",
-        "type": "object"
-      },
-      "EventParticipantCreate": {
-        "properties": {
-          "user_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "maxLength": 254,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ParticipantStatus"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": "needs_action"
-          }
-        },
-        "title": "EventParticipantCreate",
         "type": "object"
       },
       "EventParticipantUpdate": {

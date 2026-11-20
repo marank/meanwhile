@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { ChevronDown, X } from '@lucide/vue'
 import * as api from '@/api'
 import OptionMark from '@/components/OptionMark.vue'
+import { useFloatingList } from '@/composables/useFloatingList'
 import { optionMark } from '@/services/optionMark'
 
 const props = withDefaults(
@@ -61,7 +62,7 @@ const selectedMark = computed(() => {
   }
   return option && optionMark(option) ? option : null
 })
-const dropdownStyle = ref<Record<string, string>>({})
+const { style: dropdownStyle, place: updatePosition } = useFloatingList(inputRef, listRef, { width: 'exact' })
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let fetchSeq = 0
@@ -121,28 +122,6 @@ async function fetchResults(q: string) {
     if (seq === fetchSeq && q) results.value = []
   } finally {
     if (seq === fetchSeq) loading.value = false
-  }
-}
-
-const LIST_GAP = 4
-
-async function updatePosition() {
-  const input = inputRef.value
-  if (!input) return
-  // The list lives in <body> and is position: fixed, so viewport coordinates apply as they are.
-  const field = input.getBoundingClientRect()
-  dropdownStyle.value = {
-    top: `${field.bottom + LIST_GAP}px`,
-    left: `${field.left}px`,
-    width: `${field.width}px`,
-  }
-  await nextTick()
-  const list = listRef.value?.getBoundingClientRect()
-  if (!list) return
-  const below = window.innerHeight - field.bottom - LIST_GAP
-  // Open upwards where the list doesn't fit below the field but does better above it.
-  if (list.height > below && field.top > below) {
-    dropdownStyle.value = { ...dropdownStyle.value, top: `${Math.max(LIST_GAP, field.top - LIST_GAP - list.height)}px` }
   }
 }
 

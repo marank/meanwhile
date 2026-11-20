@@ -1,5 +1,5 @@
-# Fast checks before each commit; the full set is the VS Code `check` task (and CI).
-# Install once: uv tool run pre-commit install   (versions are kept current by Renovate)
+# Fast checks before each commit; the full set is `just check` (= CI).
+# Install once: uv tool run pre-commit install   (update the hooks by hand: uv tool run pre-commit autoupdate)
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -14,7 +14,7 @@ repos:
       - id: check-added-large-files
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.2
+    rev: v0.17.5
     hooks:
       - id: ruff-check
         args: [--fix]

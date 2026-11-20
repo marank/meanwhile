@@ -17,10 +17,6 @@ export function createAvailabilityCache(): AvailabilityCache {
   return new Map()
 }
 
-export function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
 function cacheKey(day: Date, userIds: string[], resourceIds: string[], excludeEventId?: string | null) {
   return [day.getTime(), [...userIds].sort().join(','), [...resourceIds].sort().join(','), excludeEventId ?? ''].join(
     '|',

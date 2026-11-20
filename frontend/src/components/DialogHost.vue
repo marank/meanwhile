@@ -1,18 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
 import AppModal from './AppModal.vue'
 import { dialog, inputValue, submitDialog } from '@/services/dialog'
-
-const inputRef = ref<HTMLInputElement | null>(null)
-
-watch(
-  () => dialog.open,
-  (open) => {
-    if (open && dialog.kind === 'prompt') {
-      nextTick(() => inputRef.value?.focus())
-    }
-  },
-)
 
 function cancel() {
   submitDialog(dialog.kind === 'confirm' ? false : null)
@@ -47,13 +35,8 @@ function ok() {
     </div>
 
     <div v-if="dialog.kind === 'prompt'" class="mt-4">
-      <input
-        ref="inputRef"
-        v-model="inputValue"
-        type="text"
-        class="w-full rounded-lg border px-3 py-2"
-        @keydown.enter="ok"
-      />
+      <!-- AppModal focuses it when the dialog opens. -->
+      <input v-model="inputValue" type="text" class="w-full rounded-lg border px-3 py-2" @keydown.enter="ok" />
     </div>
 
     <template #footer>

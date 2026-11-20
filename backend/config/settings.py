@@ -2,6 +2,7 @@
 Django settings for the Calendar backend.
 """
 
+from datetime import time
 from pathlib import Path
 
 import django_stubs_ext
@@ -48,12 +49,9 @@ if _ALL_HTTPS:
     # nginx sets X-Forwarded-Proto itself and takes it over only from TRUSTED_PROXIES; the
     # backend is reachable only through nginx.
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = True
-    # The container's own healthcheck talks plain http to 127.0.0.1.
-    SECURE_REDIRECT_EXEMPT = [r"^api/health$"]
-# No HSTS from the app: the proxy in front decides that for its domains (the app may be served
-# under domains that aren't ours).
-SILENCED_SYSTEM_CHECKS = ["security.W004"]
+# No HSTS and no http -> https redirect from the app: the proxy in front decides that for its
+# domains (the app may be served under domains that aren't ours).
+SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008"]
 
 CSRF_COOKIE_HTTPONLY = False  # the SPA reads csrftoken to send X-CSRFToken
 X_FRAME_OPTIONS = "DENY"
@@ -101,12 +99,12 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.headless",
     "channels",
-    # The task queue: emails, reminders and other regular jobs (core.tasks), run by
+    # The task queue: emails, reminders and other regular jobs (apps.core.tasks), run by
     # `manage.py procrastinate worker`.
     "procrastinate.contrib.django",
     # For `manage.py export_openapi_schema` (the frontend's API types) and the docs' static files.
     "ninja",
-    "core",
+    "apps.core",
 ]
 
 SITE_ID = 1
@@ -121,7 +119,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "core.middleware.permissions_policy",
+    "apps.core.middleware.permissions_policy",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -151,19 +149,45 @@ ASGI_APPLICATION = "config.asgi.application"
 # Database
 # ---------------------------------------------------------------------------
 
-# PostgreSQL only: the task queue (procrastinate) lives in it. By default the one of compose.dev.yml.
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env_str("DB_NAME", "meanwhile"),
-        "USER": env_str("DB_USER", "meanwhile"),
-        "PASSWORD": env_str("DB_PASSWORD", "meanwhile" if DEBUG else None),
-        "HOST": env_str("DB_HOST", "localhost"),
-        "PORT": env_str("DB_PORT", "5432"),
-        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 600),
-        "CONN_HEALTH_CHECKS": True,
+# The only writable location in the container (read-only root filesystem). Without Docker: backend/data.
+DATA_DIR = Path(env_str("DATA_DIR", str(BASE_DIR / "data")))
+
+# PostgreSQL when DB_HOST is set: in Docker (compose.yml sets it), in CI and in production. Natively
+# without it, a SQLite file in DATA_DIR: no database server to start, and no task queue (below).
+if env_str("DB_HOST", ""):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env_str("DB_NAME", "meanwhile"),
+            "USER": env_str("DB_USER", "meanwhile"),
+            "PASSWORD": env_str("DB_PASSWORD", "meanwhile" if DEBUG else None),
+            "HOST": env_str("DB_HOST"),
+            "PORT": env_str("DB_PORT", "5432"),
+            "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 600),
+            "CONN_HEALTH_CHECKS": True,
+        }
     }
-}
+else:
+    # Only development ends up here: production always runs with DB_HOST (compose.yml sets it).
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": DATA_DIR / "db.sqlite3"}}
+
+# Background jobs (apps/core/tasks.py, deferred through apps.core.jobs.defer): with PostgreSQL a procrastinate
+# queue in the database, worked off by the worker. SQLite has no queue: jobs run in-process right
+# after the transaction commits, and periodic jobs (reminders, the iMIP mailbox, backups) don't run.
+JOB_QUEUE = DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql"
+if not JOB_QUEUE:
+    # The app stays installed so that apps.core.tasks can be imported (and tested with procrastinate's
+    # in-memory connector); its migrations are PostgreSQL functions and are left out.
+    MIGRATION_MODULES = {"procrastinate": None}
+
+# Nightly pg_dump by the worker (apps/core/services/backups.py) into BACKUP_DIR, the "backups" volume in
+# the image (/backups). Empty switches the nightly dump off.
+BACKUP_DIR = env_str("BACKUP_DIR", "")
+# Time of day in TIME_ZONE. Not between 02:00 and 03:00: daylight saving time skips that hour once a
+# year (no backup) and repeats it once (two backups).
+BACKUP_TIME = time.fromisoformat(env_str("BACKUP_TIME", "01:30"))
+BACKUP_KEEP_DAYS = env_int("BACKUP_KEEP_DAYS", 14)
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +197,7 @@ DATABASES = {
 AUTH_USER_MODEL = "core.User"
 
 AUTHENTICATION_BACKENDS = [
-    "core.auth_backends.AppModelBackend",
+    "apps.core.auth_backends.AppModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
@@ -202,10 +226,10 @@ PASSWORD_HASHERS = [
 # allauth / headless
 # ---------------------------------------------------------------------------
 
-ACCOUNT_ADAPTER = "core.adapters.AccountAdapter"
+ACCOUNT_ADAPTER = "apps.core.adapters.AccountAdapter"
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
-ACCOUNT_SIGNUP_FORM_CLASS = "core.forms.SignupForm"
+ACCOUNT_SIGNUP_FORM_CLASS = "apps.core.forms.SignupForm"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
@@ -213,7 +237,7 @@ ACCOUNT_RATE_LIMITS = {
     "login_failed": "10/5m",
 }
 
-HEADLESS_ADAPTER = "core.headless_adapter.HeadlessAdapter"
+HEADLESS_ADAPTER = "apps.core.headless_adapter.HeadlessAdapter"
 HEADLESS_ONLY = True
 HEADLESS_CLIENTS = ("browser",)
 
@@ -236,6 +260,11 @@ SESSION_SAVE_EVERY_REQUEST = True
 LANGUAGE_CODE = env_str("LANGUAGE_CODE", "en-us")
 TIME_ZONE = env_str("TIME_ZONE", "UTC")
 USE_I18N = True
+# The languages emails are written in (each in its recipient's, apps.core.services.mail_texts); German in
+# locale/de. No LocaleMiddleware: the app's language is a user setting the SPA applies itself, and
+# the browser's Accept-Language must not turn the API's and allauth's messages into another one.
+LANGUAGES = [("en", "English"), ("de", "Deutsch")]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 USE_TZ = True
 
 # Admin assets only; nginx and Vite serve the frontend. Not "/static/", so it can't collide with
@@ -243,8 +272,6 @@ USE_TZ = True
 STATIC_URL = "/django-static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# The only writable location in the container (read-only root filesystem). Without Docker: backend/data.
-DATA_DIR = Path(env_str("DATA_DIR", str(BASE_DIR / "data")))
 MEDIA_ROOT = DATA_DIR / "media"
 MEDIA_URL = "/media/"
 
@@ -253,7 +280,7 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {"default": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"}},
-    "filters": {"hide_job_arguments": {"()": "core.log_filters.HideJobArguments"}},
+    "filters": {"hide_job_arguments": {"()": "apps.core.log_filters.HideJobArguments"}},
     "handlers": {
         "console": {"class": "logging.StreamHandler", "formatter": "default", "filters": ["hide_job_arguments"]}
     },
@@ -311,7 +338,7 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Email (notifications and invitations)
+# Email for notifications and invitations
 # ---------------------------------------------------------------------------
 
 # Without EMAIL_HOST, emails are printed to the console in development and not sent otherwise.
@@ -331,7 +358,7 @@ elif DEBUG:
 else:
     EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
 DEFAULT_FROM_EMAIL = env_str("DEFAULT_FROM_EMAIL", "meanwhile@localhost")
-# Emails go out as jobs of the task queue (core.tasks), retried while the mail server fails;
+# Emails go out as jobs of the task queue (apps.core.tasks), retried while the mail server fails;
 # without, right after the request (tests do so).
 EMAIL_SEND_IN_BACKGROUND = env_bool("EMAIL_SEND_IN_BACKGROUND", True)
 

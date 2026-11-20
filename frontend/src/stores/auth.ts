@@ -66,7 +66,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   })
 
-  /** Restores the session once; later calls wait for the same request. */
   /** The CSRF cookie, which forms that post need, also without a session. Fetched once per session. */
   function prepareCsrf(): Promise<unknown> {
     csrfPromise ??= api.getCsrf().catch((error: unknown) => {
@@ -76,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
     return csrfPromise
   }
 
+  /** Restores the session once; later calls wait for the same request. */
   function init(): Promise<void> {
     initPromise ??= (async () => {
       try {

@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId } from 'vue'
 import { Check, ChevronDown } from '@lucide/vue'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
+import { useFloatingList } from '@/composables/useFloatingList'
 
 export interface SelectOption<V> {
   value: V
@@ -51,7 +52,6 @@ const EDGE = 20
 const OVERSCAN = 3
 /** Typed characters are forgotten after this pause, like the type-ahead of native selects. */
 const TYPING_PAUSE_MS = 1000
-const PANEL_GAP = 4
 
 const listboxId = useId()
 const trigger = ref<HTMLButtonElement | null>(null)
@@ -59,7 +59,6 @@ const panel = ref<HTMLElement | null>(null)
 const open = ref(false)
 const active = shallowRef<T | null>(null)
 const typed = ref('')
-const panelStyle = ref<Record<string, string>>({})
 const firstValue = shallowRef<T | null>(null)
 const scrollTop = ref(0)
 let typingTimer: ReturnType<typeof setTimeout> | undefined
@@ -109,31 +108,12 @@ function onOutsideScroll(event: Event) {
   if (!panel.value?.contains(event.target as Node)) close()
 }
 
-async function position() {
-  const field = trigger.value?.getBoundingClientRect()
-  if (!field) return
+const { style: panelStyle, place } = useFloatingList(trigger, panel, { width: 'min', align: () => props.align })
+
+function position() {
   // The list lives in <body>, so it takes the field's accent color along explicitly.
-  const accent = getComputedStyle(trigger.value!).getPropertyValue('--select-accent').trim()
-  const base: Record<string, string> = accent ? { '--select-accent': accent } : {}
-  panelStyle.value = {
-    ...base,
-    minWidth: `${field.width}px`,
-    left: `${field.left}px`,
-    top: `${field.bottom + PANEL_GAP}px`,
-  }
-  await nextTick()
-  const list = panel.value?.getBoundingClientRect()
-  if (!list) return
-  const below = window.innerHeight - field.bottom - PANEL_GAP
-  // Open upwards where the list doesn't fit below the field but does better above it.
-  const top = list.height > below && field.top > below ? field.top - PANEL_GAP - list.height : field.bottom + PANEL_GAP
-  const left = props.align === 'end' ? field.right - list.width : field.left
-  panelStyle.value = {
-    ...base,
-    minWidth: `${field.width}px`,
-    left: `${Math.max(PANEL_GAP, Math.min(left, window.innerWidth - list.width - PANEL_GAP))}px`,
-    top: `${Math.max(PANEL_GAP, top)}px`,
-  }
+  const accent = trigger.value ? getComputedStyle(trigger.value).getPropertyValue('--select-accent').trim() : ''
+  return place(accent ? { '--select-accent': accent } : {})
 }
 
 async function openList(highlight: T | null = model.value) {
@@ -265,26 +245,35 @@ function typeAhead(char: string) {
   else model.value = match.value
 }
 
+const STEPS: Record<string, number | 'first' | 'last'> = {
+  ArrowDown: 1,
+  ArrowUp: -1,
+  PageDown: 10,
+  PageUp: -10,
+  Home: 'first',
+  End: 'last',
+}
+
+// Enter and Space take the digits typed into a sequence, else the highlighted option, else open the list.
+function confirm() {
+  const typedValue = props.sequence ? props.sequence.fromDigits(typed.value) : null
+  if (typedValue !== null) choose(typedValue)
+  else if (open.value && active.value !== null) choose(active.value)
+  else void openList()
+}
+
+const isCharacter = (event: KeyboardEvent) =>
+  event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey
+
 function onKeydown(event: KeyboardEvent) {
-  const steps: Record<string, number | 'first' | 'last'> = {
-    ArrowDown: 1,
-    ArrowUp: -1,
-    PageDown: 10,
-    PageUp: -10,
-    Home: 'first',
-    End: 'last',
-  }
-  if (event.key in steps) {
+  if (event.key in STEPS) {
     event.preventDefault()
     clearTyped()
-    if (open.value) move(steps[event.key]!)
+    if (open.value) move(STEPS[event.key]!)
     else void openList()
   } else if (event.key === 'Enter' || (event.key === ' ' && !typed.value)) {
     event.preventDefault()
-    const typedValue = props.sequence ? props.sequence.fromDigits(typed.value) : null
-    if (typedValue !== null) choose(typedValue)
-    else if (open.value && active.value !== null) choose(active.value)
-    else void openList()
+    confirm()
   } else if (event.key === 'Escape' && (open.value || typed.value)) {
     // Handled here, so a surrounding dialog stays open.
     event.preventDefault()
@@ -292,7 +281,7 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'Backspace' && props.sequence && typed.value) {
     event.preventDefault()
     typed.value = typed.value.slice(0, -1)
-  } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+  } else if (isCharacter(event)) {
     event.preventDefault()
     typeAhead(event.key)
   }

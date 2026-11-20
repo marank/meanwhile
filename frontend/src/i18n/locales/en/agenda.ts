@@ -1,0 +1,16 @@
+export default {
+  search: 'Search events…',
+  clearSearch: 'Clear search',
+  upcomingOnly: 'Upcoming only',
+  count: 'No events | 1 event | {count} events',
+  empty: 'No events in {period}',
+  noMatches: 'No matches for “{query}”',
+  noUpcoming: 'No more upcoming events in {period}',
+  showAll: 'Show all',
+  from: 'from {time}',
+  until: 'until {time}',
+  dayOf: 'Day {index}/{count}',
+  now: 'Now',
+  recurring: 'Recurring',
+  newEvent: 'New event',
+}

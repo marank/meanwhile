@@ -1,7 +1,7 @@
 # The whole development stack: `docker compose -f compose.dev.yml up --build`
 # App at http://localhost:6326 (Vite), API at http://localhost:8000, emails at http://localhost:8025.
 # The source is mounted into the containers: the backend, the worker and Vite reload on changes.
-# Only the services next to the app (`... up -d postgres redis mailpit`) for running it outside Docker.
+# Only the services next to the app (`just services`) to run natively against PostgreSQL like CI.
 name: meanwhile-dev
 
 x-backend: &backend
@@ -32,9 +32,9 @@ x-backend: &backend
     IMIP_ADDRESS: meanwhile@localhost
 
 services:
-  # The development database (the backend's default in DEBUG); the task queue needs PostgreSQL.
+  # PostgreSQL like production and CI (natively the default is SQLite: no queue, no worker).
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
     environment:
       POSTGRES_USER: meanwhile
       POSTGRES_PASSWORD: meanwhile
@@ -51,14 +51,14 @@ services:
 
   # Passes live updates between the backend and the task queue's worker.
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "127.0.0.1:6379:6379"
 
   # Catches every email the backend sends (SMTP on 1025) and shows it at http://localhost:8025.
   mailpit:
-    image: axllent/mailpit:v1.32@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    image: axllent/mailpit:v1.33@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
@@ -89,7 +89,7 @@ services:
       mailpit:
         condition: service_started
 
-  # The task queue's worker (core/tasks.py); watchfiles restarts it on changes to Python files.
+  # The task queue's worker (apps/core/tasks.py); watchfiles restarts it on changes to Python files.
   worker:
     <<: *backend
     command: ["watchfiles", "--filter", "python", "python manage.py procrastinate worker", "/app"]

@@ -22,9 +22,9 @@ from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from django.conf import settings  # noqa: E402
 
-from core.caldav.app import create_application  # noqa: E402
-from core.realtime.routing import websocket_urlpatterns  # noqa: E402
-from core.realtime.security import OriginCheck  # noqa: E402
+from apps.core.caldav.app import create_application  # noqa: E402
+from apps.core.realtime.routing import websocket_urlpatterns  # noqa: E402
+from apps.core.realtime.security import OriginCheck  # noqa: E402
 
 _caldav_prefix = settings.CALDAV_PATH.rstrip("/") or "/caldav"
 # Radicale is a WSGI application; its requests run in a thread pool, so a slow one (e.g. the

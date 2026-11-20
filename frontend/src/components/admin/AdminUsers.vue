@@ -24,10 +24,6 @@ interface UserForm {
   groups: Array<{ id: string; name: string }>
 }
 
-const roleBadges = [
-  { flag: 'is_admin', label: 'app.admin', classes: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-] as const
-
 const { t } = useI18n()
 const auth = useAuthStore()
 const { busy, run } = useAction()
@@ -185,18 +181,13 @@ async function resetPassword(user: api.AdminUser) {
             <td class="px-4 py-2 font-medium text-gray-800">{{ user.display_name }}</td>
             <td class="px-4 py-2 text-gray-600">{{ user.email }}</td>
             <td class="px-4 py-2">
-              <div class="flex flex-wrap gap-1">
-                <template v-for="badge in roleBadges" :key="badge.flag">
-                  <span
-                    v-if="user[badge.flag]"
-                    class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
-                    :class="badge.classes"
-                  >
-                    {{ $t(badge.label) }}
-                  </span>
-                </template>
-                <span v-if="!roleBadges.some((badge) => user[badge.flag])" class="text-gray-500">—</span>
-              </div>
+              <span
+                v-if="user.is_admin"
+                class="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+              >
+                {{ $t('app.admin') }}
+              </span>
+              <span v-else class="text-gray-500">—</span>
             </td>
             <td class="px-4 py-2">
               <span

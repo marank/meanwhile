@@ -94,7 +94,7 @@ describe('calendar store changes', () => {
       { type: 'folder', id: 'gone', parent_id: null, position: 0 },
       { type: 'calendar', id: 'gone', parent_id: null, position: 0 },
     ])
-    expect(store.calendarsIn('f').map((i) => i.calendar.id)).toEqual(['b', 'a'])
+    expect(store.childrenOf('f').map((c) => c.id)).toEqual(['b', 'a'])
     expect(backend.calls('GET /api/layout')).toHaveLength(0)
   })
 
@@ -104,6 +104,6 @@ describe('calendar store changes', () => {
     await expect(store.reorder([{ type: 'calendar', id: 'a', parent_id: 'f', position: 0 }])).rejects.toMatchObject({
       status: 403,
     })
-    expect(store.calendarsIn('f')).toEqual([])
+    expect(store.childrenOf('f')).toEqual([])
   })
 })

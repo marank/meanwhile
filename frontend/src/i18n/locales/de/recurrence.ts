@@ -1,0 +1,48 @@
+import type { MessageSchema } from '../en'
+
+const recurrence: MessageSchema['recurrence'] = {
+  repeat: 'Wiederholen',
+  none: 'Nicht wiederholen',
+  daily: 'Täglich',
+  weekdays: 'An Werktagen (Mo–Fr)',
+  weekly: 'Wöchentlich am {weekday}',
+  biweekly: 'Alle zwei Wochen am {weekday}',
+  monthlyDate: 'Monatlich am {day}.',
+  monthlyWeekday: 'Monatlich am {ordinal} {weekday}',
+  yearly: 'Jährlich am {date}',
+  custom: 'Benutzerdefiniert…',
+  keep: 'Wie bisher',
+  every: 'Alle',
+  unit: {
+    DAILY: 'Tag | Tage',
+    WEEKLY: 'Woche | Wochen',
+    MONTHLY: 'Monat | Monate',
+    YEARLY: 'Jahr | Jahre',
+  },
+  onWeekdays: 'an',
+  inMonths: 'in den Monaten {months}',
+  onDays: 'an den Tagen {days}',
+  onPositions: 'am {positions}. {weekday}',
+  listHint: 'Mehrere Werte mit Komma trennen, + steht für den letzten.',
+  weekdaysLabel: 'Wochentage',
+  monthsLabel: 'Monate',
+  dayMode: 'Wiederholen nach',
+  byDate: 'Datum',
+  byWeekday: 'Wochentag',
+  monthDaysLabel: 'Tage im Monat',
+  ordinalsLabel: 'Positionen im Monat',
+  ordinal: {
+    first: 'ersten',
+    second: 'zweiten',
+    third: 'dritten',
+    fourth: 'vierten',
+    last: 'letzten',
+  },
+  ends: 'Endet',
+  never: 'Nie',
+  onDate: 'Am Datum',
+  afterCount: 'Nach',
+  occurrences: 'Termin | Terminen',
+}
+
+export default recurrence

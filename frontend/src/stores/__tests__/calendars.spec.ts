@@ -32,9 +32,11 @@ describe('calendar store', () => {
     const store = useCalendarStore()
     store.folders = [folder('a'), folder('b', 'a'), folder('c', 'b')]
     store.items = [calendarItem('x'), calendarItem('y', 'a'), calendarItem('z', 'c')]
-    expect(store.childFolders(null).map((f) => f.id)).toEqual(['a'])
-    expect(store.calendarsIn(null).map((i) => i.calendar.id)).toEqual(['x'])
-    expect(store.descendantFolderIds('a').sort()).toEqual(['b', 'c'])
+    expect(store.childrenOf(null).map((c) => [c.type, c.id])).toEqual([
+      ['folder', 'a'],
+      ['calendar', 'x'],
+    ])
+    expect(store.childrenOf('b').map((c) => c.id)).toEqual(['c'])
   })
 
   it('selects all calendars of a folder and its subfolders', () => {
@@ -50,7 +52,9 @@ describe('calendar store', () => {
   it('survives cyclic folder data', () => {
     const store = useCalendarStore()
     store.folders = [folder('a', 'b'), folder('b', 'a')]
-    expect(store.descendantFolderIds('a')).toEqual(['b'])
+    store.items = [calendarItem('x', 'a'), calendarItem('y', 'b')]
+    store.select('a')
+    expect(store.selectedCalendarIds.sort()).toEqual(['x', 'y'])
   })
 
   it('applies only the latest of overlapping loads', async () => {
