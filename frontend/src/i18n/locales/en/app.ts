@@ -140,7 +140,8 @@ export default {
   feedUrlHelp:
     'Subscribe to a read-only version of this calendar. This URL is yours alone and stops working when you lose access to the calendar; keep it private.',
   caldavUrl: 'CalDAV URL',
-  caldavUrlHelp: 'Use this address to connect and sync the calendar with a CalDAV-compatible app.',
+  caldavUrlHelp:
+    'Use this address to connect and sync the calendar with a CalDAV-compatible app. Sign in there with your email and an app password.',
   appPasswords: 'App passwords',
   language: 'Language',
   administration: 'Administration',
@@ -211,7 +212,8 @@ export default {
   categoriesDescription: 'Organize events with reusable categories.',
   resourcesDescription: 'Manage bookable resources and who approves their bookings.',
   shareDescription: 'Connect external clients and subscribe to this calendar.',
-  appPasswordsDescription: 'Create separate credentials for CalDAV clients.',
+  appPasswordsDescription:
+    'CalDAV clients (Thunderbird, iPhone, …) sign in with your email and an app password; your account password only works here in the web app.',
   adminGeneralDescription: 'Configure application branding and calendar defaults.',
   usersDescription: 'Create users and manage their roles and account status.',
   groupsDescription: 'Organize users into reusable access groups.',

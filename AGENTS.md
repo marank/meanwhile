@@ -2,8 +2,27 @@
 
 A self-hosted group calendar: Django backend (`backend/`, API via Django Ninja, CalDAV via an
 embedded Radicale), Vue 3 + TypeScript SPA (`frontend/`), one hardened Docker image for the app
-and the worker. Read this before changing structure; `README.md` has setup and commands,
-`BACKLOG.md` what's planned.
+and the worker. Read this before changing structure; `CONTRIBUTING.md` has setup and commands,
+`docs/operations.md` how it runs in production, `BACKLOG.md` what's planned.
+
+## Stack and layout
+
+- Backend: Python 3.14, Django 6.1, Django Ninja, django-allauth headless (browser endpoints under
+  `/api/auth/v1/auth/`; the SPA fetches a CSRF cookie from `/api/auth/csrf` first), Radicale,
+  Django Channels for WebSockets, all served over ASGI by uvicorn; procrastinate as task queue.
+- Frontend: Vue 3, Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS.
+- `backend/` (config/, apps/core/, locale/de, scripts/ with the CI checks), `frontend/`,
+  `docker/` (nginx, supervisord, entrypoint, worker, healthcheck, smoke test), `branding/` (logo
+  and `build.sh`, which renders the favicons into `frontend/public/` and the email logo into
+  `backend/apps/core/assets/`), `scripts/sync_env.py`, `docs/` (operations, review decisions).
+
+## Documentation
+
+- `README.md` is for people deciding to use Meanwhile and starting it: features, quick start,
+  a short operations list, contributing, license; at most 200 lines, no tech stack, development
+  or configuration details.
+- Development setup and the release process live in `CONTRIBUTING.md`, how it runs in production
+  in `docs/operations.md`, every setting in `.env.example`, conventions here.
 
 ## Commands
 
@@ -46,11 +65,15 @@ only call its recipes, so a check is changed in one place.
 - Backend texts are English source strings marked for gettext (emails: `apps/core/services/mail_texts.py`,
   context "email"), German in `backend/locale/de`; `just check` fails on untranslated or fuzzy entries.
 - Configuration only via environment variables read through `config/env.py`; every new variable
-  gets a commented entry in `.env.example` and a row in the README's configuration table. No
-  secrets with placeholder values in production.
-- ruff with complexity ≤ 15 and nesting ≤ 4; split by responsibility, never to meet a size.
-- mypy runs in strict mode (django-stubs), tests included; `# type: ignore[code]` only with the
-  reason next to it. Coverage stays ≥ 90 %. Tests run in parallel (`-n auto`), natively on SQLite,
+  gets a commented entry in `.env.example` (its only documentation; behaviour operators need to
+  know beyond it goes into `docs/operations.md`). No secrets with placeholder values in production.
+- ruff with complexity ≤ 15 and nesting ≤ 4, complexipy with cognitive complexity ≤ 15; split by
+  responsibility, never to meet a size. ruff also reports blind `except Exception` (`BLE`, `TRY`; with the reason in a
+  comment where it is a deliberate boundary), slow patterns (`PERF`) and longer spellings (`FURB`).
+- mypy runs in strict mode (django-stubs), tests included, and also reports checks the types
+  rule out (`warn_unreachable`, `redundant-expr`, `truthy-bool`, …): delete such a check; where
+  the stubs are narrower than the data, widen the annotation with the reason in a comment.
+  `# type: ignore[code]` only with the reason next to it. Coverage stays ≥ 90 %. Tests run in parallel (`-n auto`), natively on SQLite,
   in CI on PostgreSQL.
 - No GPL/AGPL/SSPL dependencies (license gate in `just check`). Radicale (GPL-3.0) is the one
   deliberate exception, compatible with the project's AGPL-3.0.
@@ -92,7 +115,9 @@ only call its recipes, so a check is changed in one place.
   `pg_dump` into `/backups`). If a program in `app` keeps failing, the container stops.
 - Both run read-only, without capabilities, as the unprivileged user `app`. Only `/data`
   (`DATA_DIR`), `/backups` (worker) and `/tmp` are writable; new features write there instead of
-  loosening `compose.yml`. The dev images (`*/Dockerfile.dev`) run as root on purpose (rootless Docker).
+  loosening `compose.yml`.
+- Development is native (`just dev-backend`, `just dev-frontend`); `compose.dev.yml` holds only
+  the services next to it (PostgreSQL, Redis, Mailpit), no images of the app.
 - `compose.yml` works with `.env` alone: no file of the repository is mounted.
 - New runtime probes go into `docker/smoke-test`, which CI runs in both containers.
 - nginx believes `X-Forwarded-*` only from `TRUSTED_PROXIES`. It sends no HSTS: the proxy in front
@@ -112,7 +137,7 @@ moves them weekly. It does **not** see, so bump by hand now and then:
 
 ## House defaults
 
-Checked against checklist 1.8 (2026-11-21).
+Checked against django-spa-defaults 1.6.0 (2026-11-21).
 
 - Releases: release-please
 - Contributions: team only

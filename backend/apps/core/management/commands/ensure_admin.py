@@ -41,23 +41,22 @@ class Command(BaseCommand):
 
         user = User.objects.filter(email__iexact=email).first()
         if user is None:
-            if not password:
-                raise CommandError(f"ADMIN_PASSWORD is needed to create the admin user {email}.")
-            user = User.objects.create_superuser(email=email, password=password, display_name=name or email)
-            EmailAddress.objects.create(user=user, email=email, primary=True, verified=True)
-            self.stdout.write(f"Admin user {email} created.")
-            return
+            self._create(email, password, name)
+        else:
+            self._update(user, email, password, name)
 
+    def _create(self, email: str, password: str, name: str) -> None:
+        if not password:
+            raise CommandError(f"ADMIN_PASSWORD is needed to create the admin user {email}.")
+        user = User.objects.create_superuser(email=email, password=password, display_name=name or email)
+        EmailAddress.objects.create(user=user, email=email, primary=True, verified=True)
+        self.stdout.write(f"Admin user {email} created.")
+
+    def _update(self, user: User, email: str, password: str, name: str) -> None:
+        """Brings an existing user in line with the settings, saving and saying only what changed."""
         changed = []
         if not (user.is_admin and user.is_superuser and user.is_active):
-            if not password:
-                raise CommandError(f"ADMIN_PASSWORD is needed to make the existing user {email} admin.")
-            # The new password signs out every session (Django checks the password hash with each).
-            AppPassword.objects.filter(user=user).delete()
-            EmailAddress.objects.update_or_create(
-                user=user, email__iexact=email, defaults={"email": email, "primary": True, "verified": True}
-            )
-            user.is_admin = user.is_superuser = user.is_active = True
+            self._make_admin(user, email, password)
             changed.append("admin rights")
         if password and not user.check_password(password):
             user.set_password(password)
@@ -70,6 +69,19 @@ class Command(BaseCommand):
             self.stdout.write(f"Admin user {email} updated: {', '.join(changed)}.")
         else:
             self.stdout.write(f"Admin user {email} is up to date.")
+
+    @staticmethod
+    def _make_admin(user: User, email: str, password: str) -> None:
+        """Takes the account over for ADMIN_PASSWORD: whoever signed up with the address may not be the
+        admin, so their app passwords go and the address counts as verified for the admin."""
+        if not password:
+            raise CommandError(f"ADMIN_PASSWORD is needed to make the existing user {email} admin.")
+        # The new password signs out every session (Django checks the password hash with each).
+        AppPassword.objects.filter(user=user).delete()
+        EmailAddress.objects.update_or_create(
+            user=user, email__iexact=email, defaults={"email": email, "primary": True, "verified": True}
+        )
+        user.is_admin = user.is_superuser = user.is_active = True
 
     def _check_password(self, password: str) -> None:
         if password.strip().lower() in INSECURE_SECRET_VALUES:

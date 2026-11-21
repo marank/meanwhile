@@ -1,0 +1,10 @@
+# pnpm's settings for the frontend (no workspace packages); the Dockerfile copies it with the lock file.
+# Each override lifts a dependency of development tools past a security advisory while the tools
+# themselves still ask for the older major; remove it once they depend on the fixed version.
+overrides:
+  # minimatch before 11.0.1 can be made to use excessive CPU (GHSA-g3hv-75wg-m249); from
+  # typescript-eslint, js-beautify and openapi-typescript.
+  'minimatch@>=7.0.0 <11.0.1': '^11.0.1'
+  # glob before 14.0.2 keeps walking the file system after a timeout (GHSA-3g3m-2fjr-6pw4); from
+  # js-beautify (@vue/test-utils).
+  'glob@>=9.0.0 <14.0.2': '^14.0.2'

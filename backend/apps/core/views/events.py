@@ -60,55 +60,78 @@ def _occurrences(
     user_id = str(user.id)
     invited_to = participant_event_ids(user)
     can_decide: dict[tuple[object, ...], bool] = {}
-    out: list[OccurrenceOut] = []
-    for event, occ_start, occ_end in expand_events(events, range_start, range_end):
-        if event.status in occurrences.GONE and str(event.creator_id) != str(user_id):
-            continue
-        if event.status == EventStatus.PENDING and str(event.creator_id) != str(user_id) and event.id not in invited_to:
-            # Pending bookings are only shown to the requester, participants and approvers.
-            # The pool is the same for the same bookings of a calendar (its owner always decides).
-            key = (event.calendar_id, *sorted(str(i) for i in event.awaiting_approval or []))
-            if key not in can_decide:
-                can_decide[key] = is_in_approver_pool(event, user_id)
-            if not can_decide[key]:
-                continue
-        out.append(
-            OccurrenceOut(
-                event_id=str(event.id),
-                calendar_id=str(event.calendar_id),
-                title=event.title,
-                description=event.description,
-                start=occ_start,
-                end=occ_end,
-                all_day=event.all_day,
-                recurrence_count=(
-                    recurrence_count(event, occ_start) if event.show_recurrence_count and is_series(event) else None
-                ),
-                status=EventStatus(event.status),
-                category_id=str(event.category_id) if event.category_id else None,
-                category_name=event.category.name if event.category else None,
-                category_color=event.category.color if event.category else None,
-                resource_id=str(event.resource_id) if event.resource_id else None,
-                resource_name=event.resource.name if event.resource else None,
-                resource_icon=event.resource.icon if event.resource else "",
-                location=event.location,
-                location_resource_id=str(event.location_resource_id) if event.location_resource_id else None,
-                location_resource_icon=event.location_resource.icon if event.location_resource else "",
-                creator_id=str(event.creator_id),
-                can_edit=can_modify_event(event, user_id, memberships[event.calendar_id].role),
-                is_recurring=is_series(event) or bool(event.parent_id),
-                series_id=str(event.parent_id or event.id) if is_series(event) or event.parent_id else None,
-                recurrence_id=(
-                    as_utc(event.recurrence_id)
-                    if event.parent_id and event.recurrence_id
-                    else occ_start
-                    if is_series(event)
-                    else None
-                ),
-            )
+    out = [
+        OccurrenceOut(
+            event_id=str(event.id),
+            calendar_id=str(event.calendar_id),
+            title=event.title,
+            description=event.description,
+            start=occ_start,
+            end=occ_end,
+            all_day=event.all_day,
+            status=EventStatus(event.status),
+            location=event.location,
+            creator_id=str(event.creator_id),
+            can_edit=can_modify_event(event, user_id, memberships[event.calendar_id].role),
+            **_booking_fields(event),
+            **_series_fields(event, occ_start),
         )
+        for event, occ_start, occ_end in expand_events(events, range_start, range_end)
+        if _is_listed(event, user_id, invited_to, can_decide)
+    ]
     out.sort(key=lambda o: o.start)
     return out
+
+
+def _is_listed(event: Event, user_id: str, invited_to: set[UUID], can_decide: dict[tuple[object, ...], bool]) -> bool:
+    """Whether the user sees the event in the calendar; `can_decide` caches the approver checks
+    across the events of one listing."""
+    if str(event.creator_id) == user_id:
+        return True
+    if event.status in occurrences.GONE:
+        return False
+    if event.status != EventStatus.PENDING or event.id in invited_to:
+        return True
+    # Pending bookings are only shown to the requester, participants and approvers.
+    # The pool is the same for the same bookings of a calendar (its owner always decides).
+    key = (event.calendar_id, *sorted(str(i) for i in event.awaiting_approval or []))
+    if key not in can_decide:
+        can_decide[key] = is_in_approver_pool(event, user_id)
+    return can_decide[key]
+
+
+def _booking_fields(event: Event) -> dict[str, Any]:
+    """The category, resource and location resource of an occurrence, by id with what the calendar
+    shows of them; the related objects come with the listing's select_related."""
+    category, resource, location_resource = event.category, event.resource, event.location_resource
+    return {
+        "category_id": str(event.category_id) if event.category_id else None,
+        "category_name": category.name if category else None,
+        "category_color": category.color if category else None,
+        "resource_id": str(event.resource_id) if event.resource_id else None,
+        "resource_name": resource.name if resource else None,
+        "resource_icon": resource.icon if resource else "",
+        "location_resource_id": str(event.location_resource_id) if event.location_resource_id else None,
+        "location_resource_icon": location_resource.icon if location_resource else "",
+    }
+
+
+def _series_fields(event: Event, occ_start: datetime) -> dict[str, Any]:
+    """How an occurrence belongs to a series: the series' id and the occurrence's original start,
+    which a client sends back to change just this one."""
+    series = is_series(event)
+    belongs = series or bool(event.parent_id)
+    if event.parent_id and event.recurrence_id:
+        # A changed occurrence keeps the start it replaces, wherever it was moved to.
+        recurrence_id: datetime | None = as_utc(event.recurrence_id)
+    else:
+        recurrence_id = occ_start if series else None
+    return {
+        "recurrence_count": recurrence_count(event, occ_start) if event.show_recurrence_count and series else None,
+        "is_recurring": belongs,
+        "series_id": str(event.parent_id or event.id) if belongs else None,
+        "recurrence_id": recurrence_id,
+    }
 
 
 def _parse_range(start: datetime, end: datetime) -> tuple[datetime, datetime]:

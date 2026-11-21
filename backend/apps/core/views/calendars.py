@@ -209,7 +209,12 @@ def delete_calendar(request: AuthedRequest, calendar_id: str) -> dict[str, bool]
 def list_members(request: AuthedRequest, calendar_id: str) -> list[dict[str, Any]]:
     calendar, _ = get_member_calendar(calendar_id, request.user)
     # Granted ones: memberships from a group show under the group, added public calendars nowhere.
-    members = CalendarMember.objects.filter(calendar=calendar, source=MembershipSource.DIRECT).select_related("user")
+    # In the order they were granted (UUIDv7); without an order PostgreSQL returns them as stored.
+    members = (
+        CalendarMember.objects.filter(calendar=calendar, source=MembershipSource.DIRECT)
+        .select_related("user")
+        .order_by("id")
+    )
     return [_serialize_membership(m) for m in members]
 
 

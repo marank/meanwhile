@@ -152,24 +152,11 @@ def _message(
 
     subject_kind = "cancel" if kind == "removed" else kind
     paragraphs = [text(language, f"{kind}_body", organizer=name, title=title)]
-    place_and_organizer = [(text(language, "location"), shown.location)] if shown.location else []
-    place_and_organizer.append((text(language, "organizer"), f"{name} <{organizer.email}>"))
     description = shown.description if method == "REQUEST" else ""
-    previous: dict[str, str] = {}
-    if kind == "update" and before is not None and before.get("id") == shown.id:
-        location_label = text(language, "location")
-        if before["title"] != shown.title:
-            previous["title"] = before["title"] or text(language, "untitled")
-        if (before["start"], before["end"], before["all_day"]) != (shown.start, shown.end, shown.all_day):
-            previous["when"] = mail.format_when(before["start"], before["end"], before["all_day"], reader)
-        if (before["location"] or "") != shown.location:
-            previous[location_label] = before["location"] or ""
-            if not shown.location:
-                # Taken out: the row stays, empty, with what it said before.
-                place_and_organizer.insert(0, (location_label, "—"))
-        if (before["description"] or "") != shown.description:
-            previous["description"] = before["description"] or ""
-            description = description or "—"
+    previous = _previous(shown, before, language, reader) if kind == "update" else {}
+    place_and_organizer = _rows(shown, f"{name} <{organizer.email}>", previous, language)
+    if "description" in previous:
+        description = description or "—"
     details = [(text(language, "when"), when), *place_and_organizer]
     if description:
         details.append((text(language, "description"), description))
@@ -178,18 +165,7 @@ def _message(
     view: mail.Link | None = None
     if method == "REQUEST":
         paragraphs.append(text(language, "rsvp_prompt"))
-        # The answer page shows the whole event, also to guests without an account.
-        url = mail.app_link(f"/invitation/{participant.rsvp_token}")
-        view = mail.Link(text(language, "view_event"), url)
-        links.append(mail.Link(view.label, url, primary=True))
-        answers: list[tuple[str, Literal["accept", "tentative", "decline"]]] = [
-            ("accepted", "accept"),
-            ("tentative", "tentative"),
-            ("declined", "decline"),
-        ]
-        for answer, label in answers:
-            url = mail.app_link(f"/invitation/{participant.rsvp_token}?answer={answer}")
-            links.append(mail.Link(text(language, label), url, tone=label))
+        view, links = _rsvp_links(participant, language)
 
     answer_links = [link for link in links if link.tone]
     card = mail.EventCard(
@@ -230,6 +206,54 @@ def _message(
     message.attach_alternative(ical_text, f"text/calendar; method={method}")
     message.attach("invite.ics", ical_text, f"text/calendar; method={method}")
     return message
+
+
+def _previous(shown: Event, before: Mapping[str, Any] | None, language: str, reader: mail.Reader) -> dict[str, str]:
+    """What an update changed, as it was before, by row label; empty without the event's old values
+    (`before` belongs to the event the mail shows, not to another one of the series)."""
+    if before is None or before.get("id") != shown.id:
+        return {}
+    previous: dict[str, str] = {}
+    if before["title"] != shown.title:
+        previous["title"] = before["title"] or text(language, "untitled")
+    if (before["start"], before["end"], before["all_day"]) != (shown.start, shown.end, shown.all_day):
+        previous["when"] = mail.format_when(before["start"], before["end"], before["all_day"], reader)
+    if (before["location"] or "") != shown.location:
+        previous[text(language, "location")] = before["location"] or ""
+    if (before["description"] or "") != shown.description:
+        previous["description"] = before["description"] or ""
+    return previous
+
+
+def _rows(shown: Event, organizer: str, previous: Mapping[str, str], language: str) -> list[tuple[str, str]]:
+    """The card's rows under its time: where (if anywhere) and who organizes it."""
+    location_label = text(language, "location")
+    rows: list[tuple[str, str]] = []
+    if shown.location:
+        rows.append((location_label, shown.location))
+    elif location_label in previous:
+        # Taken out by an update: the row stays, empty, with what it said before.
+        rows.append((location_label, "—"))
+    rows.append((text(language, "organizer"), organizer))
+    return rows
+
+
+def _rsvp_links(participant: EventParticipant, language: str) -> tuple[mail.Link, list[mail.Link]]:
+    """The link to the invitation's answer page and the links that answer right away, for the
+    participant's own invitation (by its token)."""
+    # The answer page shows the whole event, also to guests without an account.
+    url = mail.app_link(f"/invitation/{participant.rsvp_token}")
+    view = mail.Link(text(language, "view_event"), url)
+    links = [mail.Link(view.label, url, primary=True)]
+    answers: list[tuple[str, Literal["accept", "tentative", "decline"]]] = [
+        ("accepted", "accept"),
+        ("tentative", "tentative"),
+        ("declined", "decline"),
+    ]
+    for answer, label in answers:
+        url = mail.app_link(f"/invitation/{participant.rsvp_token}?answer={answer}")
+        links.append(mail.Link(text(language, label), url, tone=label))
+    return view, links
 
 
 def _repeats(rrule: str | None, language: str) -> str:
@@ -343,44 +367,52 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def _reply(vevent: icalendar.Component, sender: str | None) -> list[str]:
+    """Records the answers of a REPLY, one per ATTENDEE."""
     uid = str(vevent.get("UID", ""))
     occurrence = recurrence_id_of(vevent)
     results: list[str] = []
     for attendee in _as_list(vevent.get("ATTENDEE")):
-        address = _address(attendee)
-        params = getattr(attendee, "params", {})
-        status = _ANSWERS.get(str(params.get("PARTSTAT", "")).upper())
-        if status is None:
-            results.append(f"{uid}: {address}: unsupported answer {params.get('PARTSTAT')!r}")
-            continue
-        # Only the participant answers for themselves. SENT-BY is written by whoever sends the mail,
-        # so it proves nothing; someone answering for them uses the link in the invitation.
-        if sender is not None and sender != address:
-            results.append(f"{uid}: {address}: ignored, sent by {sender}")
-            continue
-        participants = EventParticipant.objects.select_related("event", "event__parent", "user").filter(
-            event__uid=uid, email__iexact=address
-        )
-        found = list(
-            participants.filter(event__parent__isnull=True)
-            if occurrence is None
-            else participants.filter(event__recurrence_id=occurrence)
-        )
-        if not found and occurrence is not None:
-            # An answer for one occurrence that hasn't been changed yet (mail programs send these
-            # when someone accepts or declines one meeting of a series): it becomes a changed one.
-            found = _occurrence_participants(participants.filter(event__parent__isnull=True), occurrence)
-        if not found:
-            results.append(f"{uid}: {address}: no such invitation")
-            continue
-        series = series_of(found[0].event)
-        if series.status in _GONE or any(p.event.status in _GONE for p in found):
-            results.append(f"{uid}: {address}: ignored, the event was cancelled")
-            continue
-        for participant in found:
-            changed = record_answer(participant, status, params.get("CN"))
-            results.append(f"{uid}: {address}: {status}" + ("" if changed else " (unchanged)"))
+        results += _answer(attendee, uid, occurrence, sender)
     return results
+
+
+def _answer(attendee: Any, uid: str, occurrence: datetime | None, sender: str | None) -> list[str]:
+    """Records one attendee's answer to the event `uid` (or to its `occurrence`), if it may count."""
+    address = _address(attendee)
+    params = getattr(attendee, "params", {})
+    status = _ANSWERS.get(str(params.get("PARTSTAT", "")).upper())
+    if status is None:
+        return [f"{uid}: {address}: unsupported answer {params.get('PARTSTAT')!r}"]
+    # Only the participant answers for themselves. SENT-BY is written by whoever sends the mail,
+    # so it proves nothing; someone answering for them uses the link in the invitation.
+    if sender is not None and sender != address:
+        return [f"{uid}: {address}: ignored, sent by {sender}"]
+    found = _invited(uid, address, occurrence)
+    if not found:
+        return [f"{uid}: {address}: no such invitation"]
+    series = series_of(found[0].event)
+    if series.status in _GONE or any(p.event.status in _GONE for p in found):
+        return [f"{uid}: {address}: ignored, the event was cancelled"]
+    results: list[str] = []
+    for participant in found:
+        changed = record_answer(participant, status, params.get("CN"))
+        results.append(f"{uid}: {address}: {status}" + ("" if changed else " (unchanged)"))
+    return results
+
+
+def _invited(uid: str, address: str, occurrence: datetime | None) -> list[EventParticipant]:
+    """The invitations of `address` that an answer to the event `uid` (or to its `occurrence`) is for."""
+    participants = EventParticipant.objects.select_related("event", "event__parent", "user").filter(
+        event__uid=uid, email__iexact=address
+    )
+    if occurrence is None:
+        return list(participants.filter(event__parent__isnull=True))
+    found = list(participants.filter(event__recurrence_id=occurrence))
+    if not found:
+        # An answer for one occurrence that hasn't been changed yet (mail programs send these
+        # when someone accepts or declines one meeting of a series): it becomes a changed one.
+        found = _occurrence_participants(participants.filter(event__parent__isnull=True), occurrence)
+    return found
 
 
 def _occurrence_participants(
@@ -416,7 +448,7 @@ def process_itip(data: bytes | str, sender: str | None = None) -> list[str]:
     """Applies an iTIP message from `sender` (None: trusted, e.g. a file given by an admin)."""
     try:
         cal = icalendar.Calendar.from_ical(data)
-    except Exception as exc:
+    except ValueError as exc:  # icalendar's InvalidCalendar and friends
         return [f"unreadable iCalendar: {exc}"]
     method = str(cal.get("METHOD", "")).upper()
     handlers: dict[str, Callable[[icalendar.Component, str | None], list[str]]] = {"REPLY": _reply, "REFRESH": _refresh}
@@ -440,15 +472,23 @@ def sender_verified(message: Message, sender: str) -> bool:
         authserv_id, _, results = str(header).partition(";")
         if authserv_id.strip().split()[0].lower() != settings.IMIP_TRUSTED_AUTHSERV_ID:
             continue
-        for result in results.split(";"):
-            words = result.lower().split()
-            if not words:
-                continue
-            props = dict(word.partition("=")[::2] for word in words[1:])
-            if words[0] == "dmarc=pass" and props.get("header.from") == domain:
-                return True
-            if words[0] == "dkim=pass" and props.get("header.d") == domain:
-                return True
+        if _domain_passed(results, domain):
+            return True
+    return False
+
+
+def _domain_passed(results: str, domain: str) -> bool:
+    """Whether the results of one Authentication-Results header ("dmarc=pass header.from=...;
+    dkim=pass header.d=...") say that `domain` passed DMARC or was signed with DKIM."""
+    for result in results.split(";"):
+        words = result.lower().split()
+        if not words:
+            continue
+        props = dict(word.partition("=")[::2] for word in words[1:])
+        if words[0] == "dmarc=pass" and props.get("header.from") == domain:
+            return True
+        if words[0] == "dkim=pass" and props.get("header.d") == domain:
+            return True
     return False
 
 

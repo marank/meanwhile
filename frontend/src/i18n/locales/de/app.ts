@@ -144,7 +144,7 @@ const app: MessageSchema['app'] = {
     'Abonniere eine schreibgeschützte Version dieses Kalenders. Diese URL gehört nur dir und funktioniert nicht mehr, sobald du keinen Zugriff auf den Kalender mehr hast; behandle sie vertraulich.',
   caldavUrl: 'CalDAV-URL',
   caldavUrlHelp:
-    'Verwende diese Adresse, um den Kalender mit einer CalDAV-kompatiblen App zu verbinden und zu synchronisieren.',
+    'Verwenden Sie diese Adresse, um den Kalender mit einer CalDAV-kompatiblen App zu verbinden und zu synchronisieren. Melden Sie sich dort mit Ihrer E-Mail-Adresse und einem App-Passwort an.',
   appPasswords: 'App-Passwörter',
   language: 'Sprache',
   administration: 'Verwaltung',
@@ -216,7 +216,8 @@ const app: MessageSchema['app'] = {
   categoriesDescription: 'Termine mit wiederverwendbaren Kategorien organisieren.',
   resourcesDescription: 'Buchbare Ressourcen verwalten und festlegen, wer ihre Buchungen genehmigt.',
   shareDescription: 'Externe Clients verbinden und diesen Kalender abonnieren.',
-  appPasswordsDescription: 'Separate Zugangsdaten für CalDAV-Clients erstellen.',
+  appPasswordsDescription:
+    'CalDAV-Clients (Thunderbird, iPhone, …) melden sich mit Ihrer E-Mail-Adresse und einem App-Passwort an; Ihr Kontopasswort gilt nur hier in der Web-App.',
   adminGeneralDescription: 'Anwendungsdarstellung und Kalenderstandards konfigurieren.',
   usersDescription: 'Benutzer erstellen sowie Rollen und Kontostatus verwalten.',
   groupsDescription: 'Benutzer in wiederverwendbaren Zugriffsgruppen organisieren.',

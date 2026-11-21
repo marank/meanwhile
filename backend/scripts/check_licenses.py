@@ -15,8 +15,8 @@ import tempfile
 from pathlib import Path
 
 # Whole tokens only, so "LGPL" doesn't count as "GPL".
-FORBIDDEN = re.compile(r"(?<![A-Za-z])(A?GPL|SSPL)(?=$|[^A-Za-z]|v\d)|GNU (Affero )?General Public", re.I)
-LESSER = re.compile(r"LGPL|Lesser General Public|Library General Public", re.I)
+FORBIDDEN = re.compile(r"(?<![A-Za-z])(A?GPL|SSPL)(?=$|[^A-Za-z]|v\d)|GNU (Affero )?General Public", re.IGNORECASE)
+LESSER = re.compile(r"LGPL|Lesser General Public|Library General Public", re.IGNORECASE)
 
 # Packages whose metadata is wrong or ambiguous, after checking them by hand: the package
 # name as key, the reason as value.

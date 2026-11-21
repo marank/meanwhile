@@ -14,8 +14,8 @@ from apps.core.schemas import FolderCreate, LayoutItemsUpdate
 
 def _folder_parents(user: User) -> dict[str, str | None]:
     """Each of the user's folders' parent, by id; ids as strings, as requests name them."""
-    rows = Folder.objects.filter(user=user).values_list("id", "parent_id")
-    return {str(id): str(parent) if parent else None for id, parent in rows}
+    folders = Folder.objects.filter(user=user).only("id", "parent_id")
+    return {str(folder.id): str(folder.parent_id) if folder.parent_id else None for folder in folders}
 
 
 def _require_own_folder(parents: dict[str, str | None], folder_id: str | None) -> None:

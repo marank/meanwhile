@@ -6,6 +6,7 @@ its own with the series as parent and the original start as recurrence_id.
 """
 
 import copy
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from apps.core.models import Event, EventParticipant
@@ -176,19 +177,31 @@ def remap_exceptions(series: Event, before: Event) -> None:
     )
     if unchanged:
         return
+    moved = _occurrence_mover(series, before)
+    series.exdates = sorted(format_exdate(new) for d in parse_exdates(series.exdates) if (new := moved(d)) is not None)
+    _move_overrides(series, moved)
+
+
+def _occurrence_mover(series: Event, before: Event) -> Callable[[datetime], datetime | None]:
+    """Where an occurrence of the series as it was `before` is now (None: it's gone)."""
     same_rule = (
         before.rrule == series.rrule
         and len(before.rdates or []) == len(series.rdates or [])
         and before.all_day == series.all_day
     )
 
-    def moved(start: datetime) -> datetime | None:
-        if same_rule and is_series(before):
-            index = occurrence_index(before, start)
-            return nth_occurrence(series, index) if index is not None else None
+    def by_position(start: datetime) -> datetime | None:
+        index = occurrence_index(before, start)
+        return nth_occurrence(series, index) if index is not None else None
+
+    def if_still_there(start: datetime) -> datetime | None:
         return start if occurrence_index(series, start) is not None else None
 
-    series.exdates = sorted(format_exdate(new) for d in parse_exdates(series.exdates) if (new := moved(d)) is not None)
+    return by_position if same_rule and is_series(before) else if_still_there
+
+
+def _move_overrides(series: Event, moved: Callable[[datetime], datetime | None]) -> None:
+    """Gives the changed occurrences their new start; those whose occurrence is gone are deleted."""
     overrides = list(series.overrides.all())
     targets = {}
     for override in overrides:

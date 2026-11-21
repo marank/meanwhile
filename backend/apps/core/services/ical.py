@@ -8,7 +8,6 @@ from datetime import UTC, date, datetime, timedelta
 
 import icalendar
 from django.conf import settings
-from django.utils import timezone
 from icalendar import Calendar as ICalCalendar
 from icalendar import Event as ICalEvent
 
@@ -90,7 +89,7 @@ def _raw_components(event: Event) -> dict[datetime | None, ICalEvent]:
         return components
     try:
         parsed = icalendar.Calendar.from_ical(event.raw_ical)
-    except Exception:
+    except ValueError:  # icalendar's InvalidCalendar and friends
         return components
     for component in parsed.walk("VEVENT"):
         if not isinstance(component, ICalEvent):
@@ -205,7 +204,7 @@ def build_event_ical(
     if event.description:
         vevent.add("description", event.description)
     _add_times(vevent, event)
-    vevent.add("dtstamp", event.updated_at or timezone.now())
+    vevent.add("dtstamp", event.updated_at)
     # Changes sent to participants count up; a client's own count is kept if it is higher.
     sequence = max((event.parent or event).sequence, _raw_sequence(raw))
     if sequence or (raw is not None and "SEQUENCE" in raw):
