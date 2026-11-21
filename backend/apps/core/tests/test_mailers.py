@@ -28,7 +28,14 @@ def mailer_with(**variables: str) -> dict[str, object]:
         **os.environ,
         "DJANGO_SETTINGS_MODULE": "config.settings",
         "DEBUG": "true",
+        # The settings' own defaults, so that a developer's .env (read for whatever is unset) can't
+        # mix in its mail server, e.g. EMAIL_USE_TLS next to a test's EMAIL_USE_SSL.
         "EMAIL_HOST": "",
+        "EMAIL_PORT": "587",
+        "EMAIL_USE_TLS": "false",
+        "EMAIL_USE_SSL": "false",
+        "EMAIL_HOST_USER": "",
+        "EMAIL_HOST_PASSWORD": "",
         **variables,
     }
     result = subprocess.run(
