@@ -17,7 +17,6 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def admin_api(settings: Settings) -> Api:
-    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     admin = make_user("admin")
     admin.is_admin = True
     admin.display_name = "Ada Admin"

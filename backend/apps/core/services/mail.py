@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives, get_connection
+from django.core.mail import EmailMultiAlternatives, mailers
 from django.db import transaction
 
 from apps.core import jobs
@@ -696,7 +696,7 @@ class Message(EmailMultiAlternatives):
 
 def deliver(messages: list[EmailMultiAlternatives]) -> None:
     """Hands the messages to the mail server; raises if that fails."""
-    get_connection().send_messages(messages)
+    mailers.default.send_messages(messages)
 
 
 def _deliver_logging_failures(messages: list[EmailMultiAlternatives]) -> None:

@@ -258,7 +258,7 @@ describe('SettingsPage', () => {
     expect(shown(wrapper)).toEqual(['content one', 'content two'])
     const panes = wrapper.findAll('[data-tab-panels] .grid > div')
     // Nudged aside by a little, not by their whole width.
-    expect(panes[0]!.attributes('style')).toMatch(/translate: -?[\d.]+rem 0px; opacity: [\d.]+/)
+    expect(panes[0]!.attributes('style')).toMatch(/translate: -?[\d.]+rem( 0px)?; opacity: [\d.]+/)
     vi.advanceTimersByTime(500)
     await wrapper.vm.$nextTick()
     expect(shown(wrapper)).toEqual(['content two'])

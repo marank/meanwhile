@@ -6,6 +6,7 @@ import base64
 import io
 import re
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict
 from urllib.parse import unquote
@@ -16,6 +17,7 @@ import pytest
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from icalendar.error import GloballyUniqueTZIDGuessed
 
 from apps.core.caldav import auth
 from apps.core.caldav.app import create_application
@@ -698,13 +700,21 @@ def test_floating_times_are_read_in_the_writers_zone(team: Team) -> None:
     assert event.timezone == "Europe/Berlin"
 
 
-@pytest.mark.parametrize("tzid", ["W. Europe Standard Time", "/mozilla.org/20070129_1/Europe/Berlin"])
-def test_zones_by_other_names(team: Team, tzid: str) -> None:
+@pytest.mark.parametrize(
+    ("tzid", "guessed"),
+    [
+        ("W. Europe Standard Time", False),
+        # A vendor-prefixed TZID (older Mozilla clients): icalendar warns that it guesses the zone.
+        ("/mozilla.org/20070129_1/Europe/Berlin", True),
+    ],
+)
+def test_zones_by_other_names(team: Team, tzid: str, guessed: bool) -> None:
     text = vevent_ics(
         "weekly",
         f"DTSTART;TZID={tzid}:20300107T090000\r\nDTEND;TZID={tzid}:20300107T100000\r\nRRULE:FREQ=WEEKLY;COUNT=30\r\nSUMMARY:Weekly\r\n",
     )
-    assert put(team, "weekly.ics", text=text) == 201
+    with pytest.warns(GloballyUniqueTZIDGuessed) if guessed else nullcontext():
+        assert put(team, "weekly.ics", text=text) == 201
     event = Event.objects.get(uid="weekly")
     assert event.timezone == "Europe/Berlin"
     starts = [s for s, _ in occurrences_in_app(team, "2030-01-01T00:00:00Z", "2030-08-01T00:00:00Z")]

@@ -4,6 +4,7 @@ Django settings for the Calendar backend.
 
 from datetime import time
 from pathlib import Path
+from typing import Any
 
 import django_stubs_ext
 from django.core.exceptions import ImproperlyConfigured
@@ -341,22 +342,34 @@ else:
 # Email for notifications and invitations
 # ---------------------------------------------------------------------------
 
-# Without EMAIL_HOST, emails are printed to the console in development and not sent otherwise.
-EMAIL_HOST = env_str("EMAIL_HOST", "")
-EMAIL_PORT = env_int("EMAIL_PORT", 587)
-EMAIL_HOST_USER = env_str("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = env_str("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
-EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
-if EMAIL_USE_TLS and EMAIL_USE_SSL:
+# One mailer (Django's MAILERS; the EMAIL_* settings are deprecated since Django 6.1), configured
+# from the EMAIL_* variables. Without EMAIL_HOST, emails are printed to the console in development
+# and not sent otherwise.
+_email_host = env_str("EMAIL_HOST", "")
+_email_use_tls = env_bool("EMAIL_USE_TLS", False)
+_email_use_ssl = env_bool("EMAIL_USE_SSL", False)
+if _email_use_tls and _email_use_ssl:
     raise ImproperlyConfigured("Set only one of EMAIL_USE_TLS (STARTTLS, port 587) and EMAIL_USE_SSL (port 465)")
-EMAIL_TIMEOUT = 15
-if EMAIL_HOST:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+if _email_host:
+    _mailer: dict[str, Any] = {
+        "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+        "OPTIONS": {
+            "host": _email_host,
+            "port": env_int("EMAIL_PORT", 587),
+            "username": env_str("EMAIL_HOST_USER", ""),
+            "password": env_str("EMAIL_HOST_PASSWORD", ""),
+            "use_tls": _email_use_tls,
+            "use_ssl": _email_use_ssl,
+            "timeout": 15,
+        },
+    }
 elif DEBUG:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    _mailer = {"BACKEND": "django.core.mail.backends.console.EmailBackend"}
 else:
-    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+    _mailer = {"BACKEND": "django.core.mail.backends.dummy.EmailBackend"}
+    # Running without a mail server is allowed (.env.example); the deploy check at start must not refuse it.
+    SILENCED_SYSTEM_CHECKS.append("mail.E001")
+MAILERS = {"default": _mailer}
 DEFAULT_FROM_EMAIL = env_str("DEFAULT_FROM_EMAIL", "meanwhile@localhost")
 # Emails go out as jobs of the task queue (apps.core.tasks), retried while the mail server fails;
 # without, right after the request (tests do so).

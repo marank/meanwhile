@@ -54,6 +54,8 @@ only call its recipes, so a check is changed in one place.
   in CI on PostgreSQL.
 - No GPL/AGPL/SSPL dependencies (license gate in `just check`). Radicale (GPL-3.0) is the one
   deliberate exception, compatible with the project's AGPL-3.0.
+  The services in `compose.yml` (PostgreSQL, Redis under its AGPLv3 option) are separate programs
+  the app talks to over the network, not dependencies; their licenses don't reach the app's code.
 
 ## Dates and times
 

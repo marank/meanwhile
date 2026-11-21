@@ -8,14 +8,14 @@ dependencies = [
     "channels>=4.3.2",
     "channels-redis>=4.3.0",
     "daphne>=4.2.3",
-    "django[argon2]>=6.0.10,<6.1",
+    "django[argon2]>=6.1.3,<6.2",
     "django-allauth>=65.22.1",
     "django-ninja>=1.8.0",
     "email-validator>=2.3.0",
     "icalendar>=7.3.0",
     "procrastinate[django]>=3.11.0",
     "psycopg[binary]>=3.3.9",
-    "python-dateutil>=3.0.0",
+    "python-dateutil>=4.0.0",
     "radicale>=3.9.1",
     "uvicorn[standard]>=0.54.0",
     "vobject>=0.9.9",
@@ -33,7 +33,7 @@ dev = [
     "mypy>=2.4.1",
     "polib>=1.2.0",
     "pytest>=9.2.0",
-    "pytest-asyncio>=1.4.1.post1",
+    "pytest-asyncio>=1.5.0",
     "pytest-cov>=7.1.0",
     "pytest-django>=4.14.0",
     "pytest-xdist>=3.8.0",
@@ -48,6 +48,14 @@ dev = [
 DJANGO_SETTINGS_MODULE = "config.settings_test"
 # In parallel, one process per CPU, each with its own test database; `-n 0` for one (e.g. to debug).
 addopts = "-n auto"
+# Each async test and fixture gets its own event loop (pytest-asyncio's coming default, set to keep
+# it from warning).
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # daphne (runserver's server) sets a Windows event loop policy on import, which Python 3.14
+    # deprecates; only on Windows, and daphne's to fix before Python 3.16 removes it.
+    "ignore:'asyncio\\.(set_event_loop_policy|WindowsSelectorEventLoopPolicy)' is deprecated:DeprecationWarning:daphne",
+]
 
 [tool.ruff]
 line-length = 120

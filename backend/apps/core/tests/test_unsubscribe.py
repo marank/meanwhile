@@ -88,7 +88,6 @@ def test_guests_without_an_account_get_no_settings_or_unsubscribing(world: World
 
 
 def test_account_emails_lead_into_the_app_but_cannot_be_unsubscribed(world: World, settings: Settings) -> None:
-    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     Client().post(
         "/api/auth/v1/auth/password/request", {"email": "other@example.test"}, content_type="application/json"
     )
