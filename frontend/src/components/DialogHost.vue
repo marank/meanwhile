@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { useId } from 'vue'
 import AppModal from './AppModal.vue'
 import { dialog, inputValue, submitDialog } from '@/services/dialog'
+
+// Names the prompt's field after the question it answers.
+const messageId = useId()
 
 function cancel() {
   submitDialog(dialog.kind === 'confirm' ? false : null)
@@ -20,7 +24,7 @@ function ok() {
     :title="dialog.title || (dialog.kind === 'alert' ? $t('app.notice') : $t('app.confirm'))"
     @close="cancel"
   >
-    <p class="text-gray-700">{{ dialog.message }}</p>
+    <p :id="messageId" class="text-gray-700">{{ dialog.message }}</p>
 
     <div v-if="dialog.kind === 'choice'" class="mt-4 flex flex-col gap-2">
       <button
@@ -36,7 +40,13 @@ function ok() {
 
     <div v-if="dialog.kind === 'prompt'" class="mt-4">
       <!-- AppModal focuses it when the dialog opens. -->
-      <input v-model="inputValue" type="text" class="w-full rounded-lg border px-3 py-2" @keydown.enter="ok" />
+      <input
+        v-model="inputValue"
+        type="text"
+        :aria-labelledby="messageId"
+        class="w-full rounded-lg border px-3 py-2"
+        @keydown.enter="ok"
+      />
     </div>
 
     <template #footer>

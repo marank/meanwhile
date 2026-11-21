@@ -70,6 +70,15 @@ describe('DialogHost', () => {
     await expect(answer).resolves.toBe('Home')
   })
 
+  it("names the prompt's field after its question", async () => {
+    const answer = prompt('Name of the folder?')
+    await flushPromises()
+    const id = panel()!.querySelector('input')!.getAttribute('aria-labelledby')!
+    expect(document.getElementById(id)?.textContent).toBe('Name of the folder?')
+    button('Cancel').click()
+    await expect(answer).resolves.toBeNull()
+  })
+
   it('answers a cancelled prompt with nothing', async () => {
     const answer = prompt('Name?')
     await flushPromises()

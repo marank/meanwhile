@@ -162,6 +162,7 @@ describe('EventActivityTab', () => {
     await flushPromises()
     const post = wrapper.findAll('button').find((b) => b.text() === 'Comment')!
     expect(post.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('textarea').attributes('aria-label')).toBe('Write a comment…')
     await wrapper.get('textarea').setValue('   ')
     expect(post.attributes('disabled')).toBeDefined()
 

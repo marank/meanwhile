@@ -62,18 +62,18 @@ async function submit() {
       </h2>
 
       <form class="space-y-4" @submit.prevent="submit">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.email') }}</label>
+        <label class="block">
+          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.email') }}</span>
           <input v-model="email" type="email" required class="w-full px-3 py-2 border border-line rounded-lg" />
-        </div>
+        </label>
 
-        <div v-if="isRegister">
-          <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.displayName') }}</label>
+        <label v-if="isRegister" class="block">
+          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.displayName') }}</span>
           <input v-model="displayName" type="text" required class="w-full px-3 py-2 border border-line rounded-lg" />
-        </div>
+        </label>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.password') }}</label>
+        <label class="block">
+          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.password') }}</span>
           <input
             v-model="password"
             type="password"
@@ -81,7 +81,7 @@ async function submit() {
             minlength="8"
             class="w-full px-3 py-2 border border-line rounded-lg"
           />
-        </div>
+        </label>
 
         <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded">
           {{ error }}

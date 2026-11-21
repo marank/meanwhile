@@ -48,6 +48,8 @@ describe('image upload field', () => {
 
   it('shows the image, or a note without one', async () => {
     const wrapper = render('data:image/png;base64,AAAA', 'sm')
+    const labelId = wrapper.get('input[type="file"]').attributes('aria-labelledby')!
+    expect(wrapper.get(`[id="${labelId}"]`).text()).toBe('Logo')
     expect(wrapper.get('img').attributes('src')).toBe('data:image/png;base64,AAAA')
     await buttonNamed(wrapper, 'Remove logo').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[null]])

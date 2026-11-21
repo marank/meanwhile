@@ -142,6 +142,7 @@ async function removeComment(comment: api.EventComment) {
         v-model="newComment"
         rows="2"
         :placeholder="$t('activity.commentPlaceholder')"
+        :aria-label="$t('activity.commentPlaceholder')"
         class="flex-1 rounded-lg border px-3 py-2 text-sm"
       ></textarea>
       <button

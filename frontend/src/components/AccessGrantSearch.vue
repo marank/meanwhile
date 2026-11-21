@@ -9,7 +9,7 @@ export interface AccessGrantTarget {
 </script>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { Search, User, Users } from '@lucide/vue'
 import * as api from '@/api'
 import { useFloatingList } from '@/composables/useFloatingList'
@@ -37,6 +37,7 @@ const query = ref('')
 const found = ref<Option[]>([])
 const loading = ref(false)
 const isOpen = ref(false)
+const listboxId = useId()
 const activeIndex = ref(-1)
 const { style: listStyle, place } = useFloatingList(inputRef, listRef, { width: 'exact' })
 
@@ -151,8 +152,10 @@ onBeforeUnmount(() => {
       :disabled="disabled"
       type="text"
       role="combobox"
+      :aria-label="placeholder"
       :aria-expanded="isOpen"
       aria-autocomplete="list"
+      :aria-controls="listboxId"
       class="w-full rounded-lg border py-2 pl-9 pr-3 text-sm disabled:bg-surface-muted"
       @focus="open"
       @input="onInput"
@@ -160,6 +163,7 @@ onBeforeUnmount(() => {
     />
     <ul
       v-if="isOpen"
+      :id="listboxId"
       ref="listRef"
       role="listbox"
       class="fixed z-[100] max-h-72 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg"

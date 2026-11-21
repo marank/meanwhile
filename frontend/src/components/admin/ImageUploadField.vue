@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useId } from 'vue'
+
 withDefaults(
   defineProps<{
     label: string
@@ -10,6 +12,8 @@ withDefaults(
     size: 'lg',
   },
 )
+
+const labelId = useId()
 
 // Images are stored inline as data URLs.
 const image = defineModel<string | null>({ required: true })
@@ -31,7 +35,7 @@ async function onChange(event: Event) {
 
 <template>
   <div>
-    <span class="mb-1 block text-sm font-medium text-gray-800">{{ label }}</span>
+    <span :id="labelId" class="mb-1 block text-sm font-medium text-gray-800">{{ label }}</span>
     <div class="flex items-center gap-4">
       <div
         class="flex items-center justify-center overflow-hidden border border-line"
@@ -44,7 +48,13 @@ async function onChange(event: Event) {
         <template v-else>{{ emptyLabel }}</template>
       </div>
       <div>
-        <input type="file" accept="image/*" class="block text-sm text-gray-600" @change="onChange" />
+        <input
+          type="file"
+          accept="image/*"
+          :aria-labelledby="labelId"
+          class="block text-sm text-gray-600"
+          @change="onChange"
+        />
         <button v-if="image" type="button" class="mt-2 text-sm text-red-600 hover:underline" @click="image = null">
           {{ removeLabel }}
         </button>

@@ -106,6 +106,19 @@ describe('LoginView', () => {
     ])
   })
 
+  it('names each field by its label, for screen readers', async () => {
+    await render('register')
+    const fieldOf = (text: string) =>
+      wrapper
+        .findAll('label')
+        .find((label) => label.text() === text)
+        ?.find('input')
+        .attributes('type')
+    expect(fieldOf('Email')).toBe('email')
+    expect(fieldOf('Display name')).toBe('text')
+    expect(fieldOf('Password')).toBe('password')
+  })
+
   it('registers with a display name and shows the calendar', async () => {
     backend.on('POST /api/auth/v1/auth/signup', { status: 200, data: { user: makeUser() } })
     await render('register')
