@@ -35,9 +35,11 @@ def test_feed_names_the_calendar(calendar: Calendar) -> None:
     assert response.status_code == 200
     assert response["Content-Type"] == "text/calendar; charset=utf-8"
     body = response.content.decode()
-    assert "X-WR-CALNAME:Team Ä" in body and "NAME:Team Ä" in body
+    assert "X-WR-CALNAME:Team Ä" in body
+    assert "NAME:Team Ä" in body
     assert "X-WR-CALDESC:Our dates" in body
-    assert "REFRESH-INTERVAL;VALUE=DURATION:PT1H" in body and "X-PUBLISHED-TTL:PT1H" in body
+    assert "REFRESH-INTERVAL;VALUE=DURATION:PT1H" in body
+    assert "X-PUBLISHED-TTL:PT1H" in body
     assert "X-APPLE-CALENDAR-COLOR:#3372cc" in body
 
 
@@ -53,7 +55,8 @@ def test_unchanged_feed_answers_not_modified(calendar: Calendar) -> None:
     event.title = "Moved"
     event.save()
     changed = client.get("/ics/tok.ics", HTTP_IF_NONE_MATCH=first["ETag"])
-    assert changed.status_code == 200 and changed["ETag"] != first["ETag"]
+    assert changed.status_code == 200
+    assert changed["ETag"] != first["ETag"]
 
 
 def test_renaming_a_category_changes_the_feed(calendar: Calendar) -> None:
@@ -64,7 +67,8 @@ def test_renaming_a_category_changes_the_feed(calendar: Calendar) -> None:
     category.name = "Office"
     category.save()
     changed = client.get("/ics/tok.ics", HTTP_IF_NONE_MATCH=first["ETag"])
-    assert changed.status_code == 200 and "CATEGORIES:Office" in changed.content.decode()
+    assert changed.status_code == 200
+    assert "CATEGORIES:Office" in changed.content.decode()
 
 
 def test_unknown_feed(calendar: Calendar) -> None:

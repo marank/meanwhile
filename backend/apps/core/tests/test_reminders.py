@@ -65,7 +65,7 @@ def test_due_reminders_are_delivered_once(world: World) -> None:
     assert len(reminders_of(world)) == 2
 
 
-@pytest.mark.parametrize("found_after_the_start, delivered", [(timedelta(minutes=10), 1), (timedelta(hours=1), 0)])
+@pytest.mark.parametrize(("found_after_the_start", "delivered"), [(timedelta(minutes=10), 1), (timedelta(hours=1), 0)])
 def test_missed_reminders_go_out_shortly_after_the_start_only(
     world: World, found_after_the_start: timedelta, delivered: int
 ) -> None:
@@ -114,7 +114,8 @@ def test_cancelled_and_unreachable_events_are_not_reminded_of(world: World) -> N
     world["api"]["owner"].delete(f"/calendars/{world['cal']['id']}/members/{world['users']['other'].id}")
     deliver_due_reminders(now=NOW)
     # The owner is reminded; the member who left the calendar isn't.
-    assert len(reminders_of(world)) == 1 and reminders_of(world, "other") == []
+    assert len(reminders_of(world)) == 1
+    assert reminders_of(world, "other") == []
 
 
 def test_all_day_events_are_reminded_of_in_the_users_zone(world: World) -> None:

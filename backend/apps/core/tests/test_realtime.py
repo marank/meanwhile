@@ -96,7 +96,8 @@ async def test_without_a_session_the_socket_closes(team: Team) -> None:
 async def test_pages_of_other_sites_cannot_connect(team: Team) -> None:
     communicator = socket(team["session"], origin=b"https://evil.example")
     accepted, code = await communicator.connect()
-    assert not accepted and code == 4403
+    assert not accepted
+    assert code == 4403
 
 
 async def test_only_readable_calendars_are_followed(team: Team) -> None:

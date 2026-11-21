@@ -80,7 +80,8 @@ def test_users_with_a_password_are_asked_to_sign_in(admin_api: Api) -> None:
 
     [message] = mail.outbox
     body = str(message.body)
-    assert "/login" in body and "/reset-password/" not in body
+    assert "/login" in body
+    assert "/reset-password/" not in body
     assert "given-password-1" not in body
 
 

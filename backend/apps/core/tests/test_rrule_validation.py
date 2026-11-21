@@ -47,8 +47,9 @@ def test_caldav_rejects_unusable_rules() -> None:
         "DTSTART:20300101T090000Z\r\nDTEND:20300101T100000Z\r\nRRULE:FREQ=SECONDLY\r\n"
         "END:VEVENT\r\nEND:VCALENDAR\r\n"
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Failed to parse iCalendar object") as exc:
         parse_series(ics)
+    assert "Unsupported repeat frequency" in str(exc.value.__cause__)
 
 
 def test_rules_stored_earlier_count_as_single_events(world: World) -> None:

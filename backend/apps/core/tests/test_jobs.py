@@ -44,7 +44,8 @@ def test_without_a_queue_the_job_runs_after_the_commit(
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         jobs.defer(Spy(), timestamp=7)  # type: ignore[arg-type]  # stands in for a task
         assert calls == []  # not before the commit
-    assert len(callbacks) == 1 and calls == [7]
+    assert len(callbacks) == 1
+    assert calls == [7]
     assert task_queue.jobs("") == []
 
 

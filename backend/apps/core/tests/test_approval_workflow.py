@@ -392,7 +392,8 @@ def test_approver_search_only_offers_calendar_members(world: World) -> None:
     res = world["api"]["owner"].get(f"/search?entity=members&q=&calendar_id={world['cal']['id']}")
     assert res.status_code == 200
     names = {r["label"] for r in res.json()}
-    assert "Approver" in names and "Owner" in names
+    assert "Approver" in names
+    assert "Owner" in names
     assert "Outsider" not in names
     assert (
         world["api"]["outsider"].get(f"/search?entity=members&q=&calendar_id={world['cal']['id']}").status_code == 403

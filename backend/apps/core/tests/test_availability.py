@@ -88,7 +88,8 @@ def test_resources_for_members_of_their_calendar(world: World) -> None:
     room = world["resource"]("Room", requires_approval=True)
     world["book"](world["api"]["booker"], room["id"])
     entry = availability(world, resources=[room["id"]])["resources"][0]
-    assert entry["name"] == "Room" and periods(entry) == [("09:00", "10:00", True)]
+    assert entry["name"] == "Room"
+    assert periods(entry) == [("09:00", "10:00", True)]
     assert availability(world, "outsider", resources=[room["id"]])["resources"] == []
 
 

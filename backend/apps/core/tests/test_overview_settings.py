@@ -98,4 +98,5 @@ def test_reading_the_settings_stores_nothing() -> None:
 
     assert owner.patch("/users/me/settings", {"show_weekends": False}).status_code == 200
     stored = OverviewSettings.objects.get()
-    assert stored.show_weekends is False and stored.first_weekday is None
+    assert stored.show_weekends is False
+    assert stored.first_weekday is None

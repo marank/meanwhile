@@ -62,7 +62,8 @@ def test_changing_one_occurrence(world: World, series: dict[str, Any]) -> None:
     )
     assert res.status_code == 200, res.content
     override = res.json()
-    assert override["parent_id"] == series["id"] and override["recurrence_id"].startswith("2030-01-09T09:00")
+    assert override["parent_id"] == series["id"]
+    assert override["recurrence_id"].startswith("2030-01-09T09:00")
 
     assert summary(world) == [
         ("2030-01-07T09:00", "Daily"),
@@ -72,9 +73,12 @@ def test_changing_one_occurrence(world: World, series: dict[str, Any]) -> None:
         ("2030-01-11T09:00", "Daily"),
     ]
     moved = [o for o in occurrences(world) if o["title"] == "Moved"][0]
-    assert moved["event_id"] == override["id"] and moved["series_id"] == series["id"] and moved["is_recurring"]
+    assert moved["event_id"] == override["id"]
+    assert moved["series_id"] == series["id"]
+    assert moved["is_recurring"]
     plain = occurrences(world)[0]
-    assert plain["series_id"] == series["id"] and plain["recurrence_id"].startswith("2030-01-07T09:00")
+    assert plain["series_id"] == series["id"]
+    assert plain["recurrence_id"].startswith("2030-01-07T09:00")
 
     # Changing it again edits the same occurrence.
     res = owner.patch(occurrence_url(series, third), {"title": "Moved again"})
@@ -114,7 +118,8 @@ def test_changing_this_and_following(world: World, series: dict[str, Any]) -> No
     )
     assert res.status_code == 200, res.content
     following = res.json()
-    assert following["id"] != series["id"] and following["rrule"] == "FREQ=DAILY;COUNT=3"
+    assert following["id"] != series["id"]
+    assert following["rrule"] == "FREQ=DAILY;COUNT=3"
     assert summary(world) == [
         ("2030-01-07T09:00", "Daily"),
         ("2030-01-08T09:00", "Daily"),

@@ -22,11 +22,11 @@ class Communicator(ApplicationCommunicator):
         super().__init__(application, scope)  # type: ignore[no-untyped-call]  # asgiref is untyped
 
     async def send_input(self, message: dict[str, Any]) -> None:
-        with mock.patch("channels.db.close_old_connections", lambda: None):
+        with mock.patch("channels.db.close_old_connections", return_value=None):
             await super().send_input(message)  # type: ignore[no-untyped-call]  # asgiref is untyped
 
     async def receive_output(self, timeout: float = 1) -> dict[str, Any]:
-        with mock.patch("channels.db.close_old_connections", lambda: None):
+        with mock.patch("channels.db.close_old_connections", return_value=None):
             output: dict[str, Any] = await super().receive_output(timeout)  # type: ignore[no-untyped-call]  # asgiref is untyped
             return output
 

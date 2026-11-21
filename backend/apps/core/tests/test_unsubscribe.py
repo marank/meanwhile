@@ -94,7 +94,8 @@ def test_account_emails_lead_into_the_app_but_cannot_be_unsubscribed(world: Worl
     [message] = to("other@example.test")
     footer = str(message.body).split("\n-- \n")[1]
     assert "because a new password for Meanwhile was requested for this address" in footer
-    assert "Open Meanwhile: http://app.test/" in footer and "/unsubscribe/" not in footer
+    assert "Open Meanwhile: http://app.test/" in footer
+    assert "/unsubscribe/" not in footer
     assert "List-Unsubscribe" not in message.extra_headers
 
 
@@ -106,13 +107,15 @@ def test_the_link_unsubscribes_from_that_kind_only_once_confirmed(world: World) 
     res = page.get(f"/api/unsubscribe/{token}")
     assert res.json() == {"email": "owner@example.test", "kind": "comments", "event_title": None, "subscribed": True}
     res = page.post(f"/api/unsubscribe/{token}")
-    assert res.status_code == 200 and res.json()["subscribed"] is False
+    assert res.status_code == 200
+    assert res.json()["subscribed"] is False
 
     django_mail.outbox.clear()
     comment(world, "Once more")
     assert to("owner@example.test") == []
     prefs = world["api"]["owner"].get("/users/me").json()["email_notifications"]
-    assert prefs["comments"] is False and prefs["approvals"] is True
+    assert prefs["comments"] is False
+    assert prefs["approvals"] is True
     # The page can take it back.
     assert page.delete(f"/api/unsubscribe/{token}").json()["subscribed"] is True
 

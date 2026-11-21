@@ -793,7 +793,8 @@ class Storage(storage.BaseStorage):
         """Renames an event or moves it to another calendar, e.g. when a client changes its calendar."""
         source = item.collection
         # Every collection is one of this storage's.
-        assert isinstance(source, Collection) and isinstance(to_collection, Collection)
+        assert isinstance(source, Collection)
+        assert isinstance(to_collection, Collection)
         assert item.href is not None
         target = to_collection._calendar
         event = source._events_by_href([item.href]).get(item.href)

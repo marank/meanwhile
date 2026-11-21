@@ -33,7 +33,8 @@ def test_the_exceptions_are_real_models_with_integer_keys() -> None:
 
 def test_a_model_with_an_integer_key_is_an_error(integer_model: type[models.Model]) -> None:
     [error] = uuid_primary_keys()
-    assert error.id == "core.E001" and error.obj is integer_model
+    assert error.id == "core.E001"
+    assert error.obj is integer_model
 
 
 def test_only_the_core_app_is_checked(integer_model: type[models.Model]) -> None:

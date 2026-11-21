@@ -28,7 +28,10 @@ def test_creates_the_admin(admin_env: Settings) -> None:
     call_command("ensure_admin")
 
     user = User.objects.get(email__iexact="admin@example.test")
-    assert user.is_admin and user.is_staff and user.is_superuser and user.is_active
+    assert user.is_admin
+    assert user.is_staff
+    assert user.is_superuser
+    assert user.is_active
     assert user.check_password("secret-1")
     assert user.display_name == "Admin"
     assert EmailAddress.objects.filter(user=user, primary=True, verified=True).exists()
@@ -58,7 +61,9 @@ def test_promotes_an_existing_user_and_updates_password_and_name(admin_env: Sett
     call_command("ensure_admin")
 
     user.refresh_from_db()
-    assert user.is_admin and user.is_staff and user.is_superuser
+    assert user.is_admin
+    assert user.is_staff
+    assert user.is_superuser
     assert user.check_password("secret-1")
     assert user.display_name == "Admin"
     assert User.objects.count() == 1
@@ -99,7 +104,8 @@ def test_whoever_signed_up_with_the_address_loses_the_account(admin_env: Setting
     call_command("ensure_admin")
     # Loaded anew rather than refreshed: the type checker keeps what the assert above found.
     squatter = User.objects.get(pk=squatter.pk)
-    assert squatter.is_admin and squatter.check_password("secret-1")
+    assert squatter.is_admin
+    assert squatter.check_password("secret-1")
     assert not AppPassword.objects.filter(user=squatter).exists()
     assert EmailAddress.objects.filter(user=squatter, verified=True).exists()
 

@@ -33,7 +33,8 @@ def test_the_api_neither_shows_nor_sets_superuser(admin_api: Api) -> None:
     assert res.status_code == 200, res.content
     assert "is_superuser" not in res.json()
     user = User.objects.get(email="new@example.test")
-    assert not user.is_superuser and not user.is_staff
+    assert not user.is_superuser
+    assert not user.is_staff
 
     res = admin_api.patch(f"/admin/users/{user.id}", {"is_superuser": True})
     assert res.status_code == 200, res.content
@@ -46,12 +47,14 @@ def test_set_superuser_hands_it_out_and_takes_it_away() -> None:
 
     call_command("set_superuser", user.email.upper())
     user.refresh_from_db()
-    assert user.is_superuser and user.is_staff
+    assert user.is_superuser
+    assert user.is_staff
 
     call_command("set_superuser", user.email, "--revoke")
     # Loaded anew rather than refreshed: the type checker keeps what the asserts above found.
     user = User.objects.get(pk=user.pk)
-    assert not user.is_superuser and not user.is_staff
+    assert not user.is_superuser
+    assert not user.is_staff
 
 
 def test_set_superuser_needs_an_existing_user() -> None:
@@ -77,7 +80,8 @@ def test_app_admins_leave_superusers_alone(admin_api: Api) -> None:
     assert admin_api.post(f"/admin/users/{boss.id}/reset-password").status_code == 403
     assert admin_api.delete(f"/admin/users/{boss.id}").status_code == 403
     boss.refresh_from_db()
-    assert boss.email == "boss@example.test" and not boss.check_password("taken-over-1")
+    assert boss.email == "boss@example.test"
+    assert not boss.check_password("taken-over-1")
 
     # A superuser may.
     root = make_user("root")

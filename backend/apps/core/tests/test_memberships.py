@@ -119,7 +119,8 @@ def test_a_direct_membership_wins_and_falls_back_to_the_group_keeping_its_place(
     assert setup["api"].delete(f"/api/calendars/{cal}/members/{setup['me'].id}").status_code == 200
     assert access(setup) == ("group", "own")
     row = membership(setup)
-    assert row is not None and row.folder_id == folder.id
+    assert row is not None
+    assert row.folder_id == folder.id
     assert [m["user_id"] for m in setup["api"].get(f"/api/calendars/{cal}/members").json()] == [str(setup["owner"].id)]
 
 
@@ -196,7 +197,8 @@ def test_fixtures_keep_the_memberships_they_bring(setup: Setup) -> None:
     for obj in serializers.deserialize("json", serializers.serialize("json", [setup["calendar"]])):
         obj.save()
     row = membership(setup)
-    assert row is not None and row.source == "public"
+    assert row is not None
+    assert row.source == "public"
 
 
 def test_comments_reach_only_who_can_still_see_the_event(world: World) -> None:

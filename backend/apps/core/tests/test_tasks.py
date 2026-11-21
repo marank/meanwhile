@@ -40,7 +40,8 @@ def test_emails_are_queued_and_sent_by_the_worker(world: World, settings: Settin
     settings.EMAIL_SEND_IN_BACKGROUND = settings.JOB_QUEUE = True
     outbox.outbox.clear()  # what setting up the world sent
     invite(world)
-    assert len(task_queue.jobs("send_email")) == 1 and outbox.outbox == []
+    assert len(task_queue.jobs("send_email")) == 1
+    assert outbox.outbox == []
 
     task_queue.run_jobs()
     [sent] = outbox.outbox
@@ -64,7 +65,8 @@ def test_a_failing_mail_server_fails_the_job_so_that_it_is_tried_again(
     with pytest.raises(ConnectionRefusedError):
         task_queue.run_jobs()
     retry_strategy = send_email.retry_strategy
-    assert isinstance(retry_strategy, RetryStrategy) and retry_strategy.max_attempts is not None
+    assert isinstance(retry_strategy, RetryStrategy)
+    assert retry_strategy.max_attempts is not None
     assert retry_strategy.max_attempts > 1
 
 
@@ -119,4 +121,5 @@ def test_queued_emails_keep_the_logo_they_carry(task_queue: TaskQueue, settings:
     task_queue.run_jobs()
     [sent] = outbox.outbox
     images = [p for p in sent.message().walk() if p.get("Content-ID") == "<logo@meanwhile>"]
-    assert len(images) == 1 and images[0].get_content_type() == "image/png"
+    assert len(images) == 1
+    assert images[0].get_content_type() == "image/png"

@@ -40,7 +40,8 @@ def delete_event(event: Event, actor: User) -> None:
         return
     series, rid = event.parent, event.recurrence_id
     # A changed occurrence belongs to a series and keeps the start it replaces.
-    assert series is not None and rid is not None
+    assert series is not None
+    assert rid is not None
     # Deleting a changed occurrence removes it from the series instead of restoring it.
     remove_occurrence(series, rid)
     record_activity(series, str(actor.id), "occurrence_deleted", _details(rid))

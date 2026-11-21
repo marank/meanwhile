@@ -36,6 +36,7 @@ dev = [
     "pytest-asyncio>=1.5.0",
     "pytest-cov>=7.1.0",
     "pytest-django>=4.14.0",
+    "pytest-randomly>=5.1.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.17.5",
     "types-channels>=4.3.0.20260518",
@@ -48,6 +49,9 @@ dev = [
 DJANGO_SETTINGS_MODULE = "config.settings_test"
 # In parallel, one process per CPU, each with its own test database; `-n 0` for one (e.g. to debug).
 addopts = "-n auto"
+# pytest-randomly shuffles the test order on every run, so a test that passes only because of
+# another test's leftovers fails; the seed is printed (`--randomly-seed=<seed>` or `last` to repeat,
+# `-p no:randomly` to switch it off while debugging).
 # Each async test and fixture gets its own event loop (pytest-asyncio's coming default, set to keep
 # it from warning).
 asyncio_default_fixture_loop_scope = "function"
@@ -78,6 +82,9 @@ select = [
     "TRY", # exception handling: no `except: pass`, re-raise with context, …
     "PERF", # slow patterns (building a list in a loop, …)
     "FURB", # older, longer spellings of what the standard library does directly
+    "PT",  # pytest: one condition per assert, precise `raises`, ...
+    "PGH", # no blanket `# noqa` or `# type: ignore`
+    "RUF100", # no unused `# noqa`
 ]
 ignore = [
     "DJ008",  # __str__ on every model

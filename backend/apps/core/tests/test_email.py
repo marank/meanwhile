@@ -115,7 +115,8 @@ def test_invited_guests_get_the_event_as_request_with_links_to_answer(world: Wor
     assert str(vevent["ORGANIZER"]) == "mailto:owner@example.test"
     attendee = vevent["ATTENDEE"]
     assert str(attendee) == f"mailto:{GUEST}"
-    assert attendee.params["PARTSTAT"] == "NEEDS-ACTION" and attendee.params["RSVP"] == "TRUE"
+    assert attendee.params["PARTSTAT"] == "NEEDS-ACTION"
+    assert attendee.params["RSVP"] == "TRUE"
     # Also as a file, for mail programs that don't show invitations.
     assert [a[0] for a in message.attachments] == ["invite.ics"]
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
@@ -124,11 +125,14 @@ def test_invited_guests_get_the_event_as_request_with_links_to_answer(world: Wor
     assert f"View event: http://app.test/invitation/{token}\n" in message.body
     assert isinstance(message, EmailMultiAlternatives)
     html = str(next(content for content, mimetype in message.alternatives if mimetype == "text/html"))
-    assert f'href="http://app.test/invitation/{token}"' in html and ">Planning</h1>" in html
+    assert f'href="http://app.test/invitation/{token}"' in html
+    assert ">Planning</h1>" in html
     # Light or dark, as the reader's system is set (where the mail program follows it).
-    assert 'content="light dark"' in html and "prefers-color-scheme: dark" in html
+    assert 'content="light dark"' in html
+    assert "prefers-color-scheme: dark" in html
     # Times are shown in the event's zone to guests (09:00 UTC is 10:00 in Berlin in January).
-    assert "10:00 AM" in message.body and "(Europe/Berlin)" in message.body
+    assert "10:00 AM" in message.body
+    assert "(Europe/Berlin)" in message.body
 
 
 def test_participants_given_with_a_new_event_are_invited(world: World) -> None:
@@ -165,7 +169,8 @@ def test_emails_are_written_in_the_language_of_the_recipient(world: World) -> No
     assert message.subject.startswith("Einladung: Planning @ Mo., 7. Jan. 2030, 10:00")
     assert "Zusagen" in message.body
     # The same words as the invitation page's buttons.
-    assert "Vorläufig:" in message.body and "Ablehnen:" in message.body
+    assert "Vorläufig:" in message.body
+    assert "Ablehnen:" in message.body
 
 
 def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(world: World) -> None:
@@ -178,7 +183,8 @@ def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(worl
     _, update = to(GUEST)
     assert update.subject.startswith("Updated invitation: Planning")
     method, vevent = itip(update)
-    assert method == "REQUEST" and vevent["SEQUENCE"] == 1
+    assert method == "REQUEST"
+    assert vevent["SEQUENCE"] == 1
     # The category concerns the calendar only.
     category = owner.post(f"/calendars/{world['cal']['id']}/categories", {"name": "Team", "color": "#ff0000"}).json()
     owner.patch(f"/events/{event['id']}", {"category_id": category["id"]})
@@ -214,13 +220,15 @@ def test_deleting_or_rejecting_the_event_cancels_it_for_everyone(world: World) -
     invite(world, event)
     world["api"]["owner"].delete(f"/events/{event['id']}")
     method, vevent = itip(to(GUEST)[-1])
-    assert method == "CANCEL" and vevent["SEQUENCE"] == 1
+    assert method == "CANCEL"
+    assert vevent["SEQUENCE"] == 1
     assert to(GUEST)[-1].subject.startswith("Cancelled: Planning")
 
     room = world["resource"]("Room")
     booking = world["book"](world["api"]["booker"], room["id"], participants=[{"email": GUEST}]).json()
     _, vevent = itip(to(GUEST)[-1])
-    assert str(vevent["UID"]) == booking["uid"] and str(vevent["STATUS"]) == "TENTATIVE"
+    assert str(vevent["UID"]) == booking["uid"]
+    assert str(vevent["STATUS"]) == "TENTATIVE"
     world["api"]["owner"].post(f"/events/{booking['id']}/reject", {})
     assert itip(to(GUEST)[-1])[0] == "CANCEL"
 
@@ -234,9 +242,12 @@ def test_guests_answer_by_link_without_an_account(world: World) -> None:
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
     anonymous = Client()
     shown = anonymous.get(f"/api/rsvp/{token}").json()
-    assert shown["title"] == "Planning" and shown["status"] == "needs_action" and shown["organizer_name"] == "Owner"
+    assert shown["title"] == "Planning"
+    assert shown["status"] == "needs_action"
+    assert shown["organizer_name"] == "Owner"
     res = anonymous.post(f"/api/rsvp/{token}", {"status": "accepted"}, content_type="application/json")
-    assert res.status_code == 200 and res.json()["status"] == "accepted"
+    assert res.status_code == 200
+    assert res.json()["status"] == "accepted"
     assert status_of(event) == "accepted"
     # The organizer hears of it, in the app and by email.
     notification = Notification.objects.get(user=world["users"]["owner"], type="participant_replied")
@@ -257,7 +268,8 @@ def test_the_invitation_page_shows_who_else_comes_without_their_addresses(world:
     anonymous = Client()
     res = anonymous.get(f"/api/rsvp/{token}")
     shown = res.json()
-    assert shown["organizer_name"] == "Owner" and "organizer_email" not in shown
+    assert shown["organizer_name"] == "Owner"
+    assert "organizer_email" not in shown
     assert sorted((p["name"] or "", p["you"]) for p in shown["participants"]) == [
         ("", False),
         ("Other", False),
@@ -293,12 +305,15 @@ def test_the_invitation_page_offers_the_event_as_file_without_the_people(world: 
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
     anonymous = Client()
     ics = anonymous.get(f"/api/rsvp/{token}/ics")
-    assert ics.status_code == 200 and ics["Content-Type"].startswith("text/calendar")
+    assert ics.status_code == 200
+    assert ics["Content-Type"].startswith("text/calendar")
     assert 'filename="invite.ics"' in ics["Content-Disposition"]
     cal = icalendar.Calendar.from_ical(ics.content)
     vevent = cal.walk("VEVENT")[0]
-    assert str(vevent["UID"]) == event["uid"] and str(vevent["SUMMARY"]) == "Planning"
-    assert "ATTENDEE" not in vevent and "ORGANIZER" not in vevent
+    assert str(vevent["UID"]) == event["uid"]
+    assert str(vevent["SUMMARY"]) == "Planning"
+    assert "ATTENDEE" not in vevent
+    assert "ORGANIZER" not in vevent
     assert b"@example.test" not in ics.content
     assert anonymous.get("/api/rsvp/not-a-token/ics").status_code == 404
 
@@ -551,7 +566,8 @@ def test_invitations_look_like_the_events_page(world: World) -> None:
     token = EventParticipant.objects.get(email=GUEST).rsvp_token
     assert "Invitation from Owner Planning" in text_
     assert f"{BASE.strftime('%b').upper()} {BASE.day} " in text_
-    assert BASE.strftime("%A, %B ") in text_ and "(Europe/Berlin) Weekly" in text_
+    assert BASE.strftime("%A, %B ") in text_
+    assert "(Europe/Berlin) Weekly" in text_
     assert "Where Room 1 Organizer Owner <owner@example.test>" in text_
     assert "Your answer Accept Tentative Decline You can also answer in your mail program." in text_
     # The button over the address it was sent to: side by side, a long address would be too wide for phones.
@@ -630,7 +646,8 @@ def test_cancelling_one_occurrence_cancels_only_that_one(world: World) -> None:
     assert world["api"]["owner"].post(f"/events/{override['id']}/cancel").status_code == 200
     method, vevent = itip(to(GUEST)[-1])
     assert method == "CANCEL"
-    assert vevent.decoded("RECURRENCE-ID").astimezone(BASE.tzinfo) == second and "RRULE" not in vevent
+    assert vevent.decoded("RECURRENCE-ID").astimezone(BASE.tzinfo) == second
+    assert "RRULE" not in vevent
 
 
 def test_invitations_go_to_single_email_addresses_only(world: World) -> None:
@@ -666,18 +683,23 @@ def test_who_is_invited_to_one_occurrence_gets_that_one_only(world: World) -> No
     participant = invite(world, {"id": override["id"]})
     ical = icalendar.Calendar.from_ical(to(GUEST)[-1].attachments[0][1])
     vevents = ical.walk("VEVENT")
-    assert len(vevents) == 1 and "RRULE" not in vevents[0] and "RECURRENCE-ID" in vevents[0]
+    assert len(vevents) == 1
+    assert "RRULE" not in vevents[0]
+    assert "RECURRENCE-ID" in vevents[0]
     assert "ORGANIZER" in vevents[0]
     assert "Moved" in to(GUEST)[-1].subject
     # The file on their invitation page has that occurrence only, too.
     token = EventParticipant.objects.get(id=participant["id"]).rsvp_token
     downloaded = icalendar.Calendar.from_ical(Client().get(f"/api/rsvp/{token}/ics").content).walk("VEVENT")
-    assert len(downloaded) == 1 and str(downloaded[0]["SUMMARY"]) == "Moved" and "RRULE" not in downloaded[0]
+    assert len(downloaded) == 1
+    assert str(downloaded[0]["SUMMARY"]) == "Moved"
+    assert "RRULE" not in downloaded[0]
 
     # Taken off it again, they hear so for that occurrence.
     world["api"]["owner"].delete(f"/events/{override['id']}/participants/{participant['id']}")
     method, vevent = itip(to(GUEST)[-1])
-    assert method == "CANCEL" and "RECURRENCE-ID" in vevent
+    assert method == "CANCEL"
+    assert "RECURRENCE-ID" in vevent
 
 
 def test_answers_for_one_unchanged_occurrence_count(world: World) -> None:
@@ -760,9 +782,12 @@ def test_event_notifications_show_the_event_like_invitations_do(world: World) ->
     world["book"](world["api"]["booker"], room["id"], location="Hall")
     [message] = to("owner@example.test")
     html = html_of(message)
-    assert "Booking request" in html and "mw-notice-warning" in html
+    assert "Booking request" in html
+    assert "mw-notice-warning" in html
     # What the approval is about.
-    assert ">Resource</td>" in html and "Beamer" in html and "Hall" in html
+    assert ">Resource</td>" in html
+    assert "Beamer" in html
+    assert "Hall" in html
     assert "Review request" in html
 
     event = create(world)

@@ -154,7 +154,8 @@ def test_multiget_returns_the_requested_events(team: Team) -> None:
     path = team["path"]
     content = multiget(path, team["users"]["owner"], path + "one.ics", path + "two.ics", path + "missing.ics")
     assert sorted(hrefs(content)) == sorted([path + "missing.ics", path + "one.ics", path + "two.ics"])
-    assert "UID:one" in content and "UID:two" in content
+    assert "UID:one" in content
+    assert "UID:two" in content
     assert content.count("404 Not Found") == 1
 
 
@@ -261,11 +262,13 @@ def test_events_stay_at_the_href_the_client_chose(team: Team) -> None:
     path = team["path"]
     assert put(team, "client-name.ics", text=ics("another-uid")) == 201
     status, content, _ = dav("GET", path + "client-name.ics", team["users"]["owner"])
-    assert status == 200 and "UID:another-uid" in content
+    assert status == 200
+    assert "UID:another-uid" in content
     assert dav("GET", path + "another-uid.ics", team["users"]["owner"])[0] == 404
 
     content = multiget(path, team["users"]["owner"], path + "client-name.ics")
-    assert hrefs(content) == [path + "client-name.ics"] and "UID:another-uid" in content
+    assert hrefs(content) == [path + "client-name.ics"]
+    assert "UID:another-uid" in content
 
     assert put(team, "client-name.ics", text=ics("another-uid", summary="Renamed")) == 204
     assert Event.objects.get(uid="another-uid").title == "Renamed"
@@ -287,7 +290,8 @@ def test_events_from_the_app_are_found_by_uid(team: Team) -> None:
         end=datetime(2030, 10, 7, 10, tzinfo=UTC),
     )
     status, content, _ = dav("GET", team["path"] + "app-event.ics", owner)
-    assert status == 200 and "SUMMARY:From the app" in content
+    assert status == 200
+    assert "SUMMARY:From the app" in content
     assert put(team, "app-event.ics", text=ics("app-event", summary="Edited on the phone")) == 204
     assert Event.objects.get(uid="app-event").title == "Edited on the phone"
 
@@ -313,7 +317,8 @@ def test_sync_reports_changes_and_deletions(team: Team) -> None:
     token = sync_token(content)
 
     _, content = sync_collection(path, owner, token)
-    assert changes(content) == {} and sync_token(content) == token
+    assert changes(content) == {}
+    assert sync_token(content) == token
 
     put(team, "edit.ics", text=ics("edit", summary="Edited"))
     dav("DELETE", path + "drop.ics", owner)
@@ -346,7 +351,8 @@ def test_sync_drops_bookings_that_turn_hidden(team: Team) -> None:
 )
 def test_unknown_or_expired_sync_tokens_ask_for_a_full_sync(team: Team, token: str) -> None:
     status, content = sync_collection(team["path"], team["users"]["owner"], token)
-    assert status == 403 and "valid-sync-token" in content
+    assert status == 403
+    assert "valid-sync-token" in content
 
 
 def test_ctag_changes_when_an_event_is_deleted(team: Team) -> None:
@@ -437,9 +443,11 @@ def test_all_day_events_keep_their_length(team: Team) -> None:
     )
     assert put(team, "allday.ics", text=text) == 201
     event = Event.objects.get(uid="allday")
-    assert event.all_day and event.start == event.end == datetime(2030, 10, 7, tzinfo=UTC)
+    assert event.all_day
+    assert event.start == event.end == datetime(2030, 10, 7, tzinfo=UTC)
     content = dav("GET", team["path"] + "allday.ics", team["users"]["owner"])[1]
-    assert "DTSTART;VALUE=DATE:20301007" in content and "DTEND;VALUE=DATE:20301008" in content
+    assert "DTSTART;VALUE=DATE:20301007" in content
+    assert "DTEND;VALUE=DATE:20301008" in content
 
 
 def test_duration_sets_the_end(team: Team) -> None:
@@ -447,7 +455,8 @@ def test_duration_sets_the_end(team: Team) -> None:
     assert put(team, "dur.ics", text=text) == 201
     assert Event.objects.get(uid="dur").end == datetime(2030, 10, 7, 11, 30, tzinfo=UTC)
     content = dav("GET", team["path"] + "dur.ics", team["users"]["owner"])[1]
-    assert "DURATION" not in content and "DTEND:20301007T113000Z" in content
+    assert "DURATION" not in content
+    assert "DTEND:20301007T113000Z" in content
 
 
 def test_tasks_are_refused(team: Team) -> None:
@@ -469,7 +478,8 @@ def test_all_day_series_until_a_date(team: Team) -> None:
         "2030-10-21T00:00:00Z",
     ]
     content = dav("GET", team["path"] + "weekly.ics", team["users"]["owner"])[1]
-    assert "UNTIL=20301021" in content and "UNTIL=20301021T" not in content
+    assert "UNTIL=20301021" in content
+    assert "UNTIL=20301021T" not in content
 
 
 def test_caldav_shows_the_current_booking_status(team: Team) -> None:
@@ -490,7 +500,8 @@ def test_caldav_shows_the_current_booking_status(team: Team) -> None:
     event.status = "approved"
     event.save()
     content = dav("GET", team["path"] + "booking.ics", owner)[1]
-    assert "STATUS:CONFIRMED" in content and "TENTATIVE" not in content
+    assert "STATUS:CONFIRMED" in content
+    assert "TENTATIVE" not in content
 
 
 def test_shared_calendars_are_listed_in_every_members_home(team: Team) -> None:
@@ -499,12 +510,14 @@ def test_shared_calendars_are_listed_in_every_members_home(team: Team) -> None:
     body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
     status, content, _ = dav("PROPFIND", home, contributor, body, DEPTH="1")
     assert status == 207
-    assert f"{team['calendar'].id}/" in content and "<displayname>Team</displayname>" in content
+    assert f"{team['calendar'].id}/" in content
+    assert "<displayname>Team</displayname>" in content
 
     own_path = f"{home}{team['calendar'].id}/"
     assert put(team, "x.ics", "own") == 201
     status, content, _ = dav("GET", own_path + "x.ics", contributor)
-    assert status == 200 and "UID:x" in content
+    assert status == 200
+    assert "UID:x" in content
     # The owner's path keeps working for clients set up with it.
     assert dav("GET", team["path"] + "x.ics", contributor)[0] == 200
 
@@ -624,7 +637,8 @@ def test_clients_create_calendars_in_their_home(team: Team) -> None:
     path = f"/caldav/{contributor.email}/3F2504E0-4F89-11D3-9A0C-0305E82C3301/"
     assert mkcalendar(contributor, path) == 201
     calendar = Calendar.objects.get(dav_name="3F2504E0-4F89-11D3-9A0C-0305E82C3301")
-    assert calendar.name == "Phone calendar" and calendar.owner == contributor
+    assert calendar.name == "Phone calendar"
+    assert calendar.owner == contributor
     assert calendar.members.get().role == "owner"
 
     # The client keeps using the address it chose.
@@ -736,7 +750,8 @@ def test_zones_by_other_names(team: Team, tzid: str, guessed: bool) -> None:
     assert event.timezone == "Europe/Berlin"
     starts = [s for s, _ in occurrences_in_app(team, "2030-01-01T00:00:00Z", "2030-08-01T00:00:00Z")]
     # 09:00 in Berlin, in winter and in summer.
-    assert starts[0] == "2030-01-07T08:00:00Z" and "2030-07-01T07:00:00Z" in starts
+    assert starts[0] == "2030-01-07T08:00:00Z"
+    assert "2030-07-01T07:00:00Z" in starts
 
 
 def test_extra_dates_of_a_series(team: Team) -> None:
@@ -753,7 +768,8 @@ def test_extra_dates_of_a_series(team: Team) -> None:
         "2030-10-20T09:00:00Z",
     ]
     content = dav("GET", team["path"] + "extra.ics", team["users"]["owner"])[1]
-    assert "RDATE:20301009T090000Z" in content and "RDATE:20301020T090000Z" in content
+    assert "RDATE:20301009T090000Z" in content
+    assert "RDATE:20301020T090000Z" in content
 
 
 def test_category_resource_and_participants(team: Team) -> None:
@@ -772,7 +788,8 @@ def test_category_resource_and_participants(team: Team) -> None:
     )
     assert put(team, "meet.ics", text=text) == 201
     event = Event.objects.get(uid="meet")
-    assert event.category is not None and event.category.name == "Workshop"
+    assert event.category is not None
+    assert event.category.name == "Workshop"
     assert {(p.email, p.status, bool(p.user)) for p in EventParticipant.objects.filter(event=event)} == {
         ("read@example.test", "tentative", True),
         ("guest@elsewhere.test", "needs_action", False),
@@ -783,13 +800,18 @@ def test_category_resource_and_participants(team: Team) -> None:
     content = dav("GET", team["path"] + "meet.ics", team["users"]["owner"])[1].replace("\r\n ", "")
     assert "CATEGORIES:Workshop,Private" in content
     # The booked resource is a resource, not the location.
-    assert "RESOURCES:Projector" in content and "LOCATION" not in content
+    assert "RESOURCES:Projector" in content
+    assert "LOCATION" not in content
     assert "ORGANIZER;CN=Owner:mailto:owner@example.test" in content
-    assert "PARTSTAT=TENTATIVE" in content and "mailto:guest@elsewhere.test" in content
+    assert "PARTSTAT=TENTATIVE" in content
+    assert "mailto:guest@elsewhere.test" in content
 
     feed = __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
-    assert "CATEGORIES:Workshop,Private" in feed and "RESOURCES:Projector" in feed
-    assert "ATTENDEE" not in feed and "ORGANIZER" not in feed and "mailto:" not in feed
+    assert "CATEGORIES:Workshop,Private" in feed
+    assert "RESOURCES:Projector" in feed
+    assert "ATTENDEE" not in feed
+    assert "ORGANIZER" not in feed
+    assert "mailto:" not in feed
 
     # Dropping an attendee on the phone removes the participant.
     assert put(team, "meet.ics", text=text.replace("ATTENDEE:mailto:guest@elsewhere.test\r\n", "")) == 204
@@ -812,7 +834,8 @@ def test_reminders_are_per_user(team: Team) -> None:
     ) == [15, 1440]
 
     owner_view = dav("GET", team["path"] + "remind.ics", team["users"]["owner"])[1]
-    assert owner_view.count("BEGIN:VALARM") == 2 and "TRIGGER:-PT15M" in owner_view
+    assert owner_view.count("BEGIN:VALARM") == 2
+    assert "TRIGGER:-PT15M" in owner_view
     assert "BEGIN:VALARM" not in dav("GET", team["path"] + "remind.ics", team["users"]["read"])[1]
     assert (
         "BEGIN:VALARM"
@@ -828,12 +851,14 @@ def test_location_and_booked_place(team: Team) -> None:
     )
     assert put(team, "loc.ics", text=text) == 201
     event = Event.objects.get(uid="loc")
-    assert event.location == "Café Central" and event.location_resource is None
+    assert event.location == "Café Central"
+    assert event.location_resource is None
 
     room = Resource.objects.create(calendar=team["calendar"], name="Room 1", is_location=True)
     Event.objects.filter(pk=event.pk).update(location_resource=room, location="Room 1")
     content = dav("GET", team["path"] + "loc.ics", team["users"]["owner"])[1]
-    assert "LOCATION:Room 1" in content and "RESOURCES" not in content
+    assert "LOCATION:Room 1" in content
+    assert "RESOURCES" not in content
     # A booked place is changed in the app only: the client's other location doesn't replace it.
     assert put(team, "loc.ics", text=text) == 204
     event.refresh_from_db()
@@ -901,11 +926,14 @@ def test_the_feed_leaves_out_what_clients_note_for_members(team: Team) -> None:
     )
     assert dav("PUT", team["path"] + "notes.ics", owner, body, content_type="text/calendar")[0] == 201
     members = dav("GET", team["path"] + "notes.ics", owner)[1]
-    assert "COMMENT:Call Ann" in members and "X-PRIVATE-NOTE" in members
+    assert "COMMENT:Call Ann" in members
+    assert "X-PRIVATE-NOTE" in members
 
     feed = __import__("django.test", fromlist=["Client"]).Client().get("/ics/team-feed.ics").content.decode()
-    assert "SUMMARY:Meeting" in feed and "TRANSP:OPAQUE" in feed
-    assert "Call Ann" not in feed and "X-PRIVATE-NOTE" not in feed
+    assert "SUMMARY:Meeting" in feed
+    assert "TRANSP:OPAQUE" in feed
+    assert "Call Ann" not in feed
+    assert "X-PRIVATE-NOTE" not in feed
 
 
 def test_expanded_queries_with_etags_work_for_series(team: Team) -> None:
@@ -983,7 +1011,8 @@ def test_principals_name_their_email_address_and_no_address_books(team: Team) ->
     )
     status, content, headers = dav("PROPFIND", f"/caldav/{owner.email}/", owner, body, DEPTH="0")
     assert status == 207, content
-    assert "mailto:owner@example.test" in content and "addressbook-home-set" not in content
+    assert "mailto:owner@example.test" in content
+    assert "addressbook-home-set" not in content
     assert "addressbook" not in dav("OPTIONS", "/caldav/", owner)[2]["DAV"]
 
 

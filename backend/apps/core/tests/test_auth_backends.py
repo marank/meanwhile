@@ -20,13 +20,15 @@ def test_users_in_groups_have_just_their_own_permissions() -> None:
     UserGroup.objects.create(name="Family").user_set.add(user)
     user.user_permissions.add(Permission.objects.get(codename="view_calendar"))
     assert user.get_all_permissions() == {"core.view_calendar"}
-    assert user.has_perm("core.view_calendar") and not user.has_perm("core.change_calendar")
+    assert user.has_perm("core.view_calendar")
+    assert not user.has_perm("core.change_calendar")
 
 
 def test_the_admin_turns_away_users_who_are_not_superusers(client: Client) -> None:
     client.force_login(make_user("member"))
     res = client.get("/django-admin/login/")
-    assert res.status_code == 200 and b"not authorized to access this page" in res.content
+    assert res.status_code == 200
+    assert b"not authorized to access this page" in res.content
 
 
 def test_the_django_admin_leaves_admin_to_the_apps_page(client: Client) -> None:

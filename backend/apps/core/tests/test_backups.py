@@ -64,7 +64,9 @@ def test_a_dump_is_written_and_old_ones_are_removed(backup_dir: Path, monkeypatc
     path = backups.backup_database()
 
     assert calls[0][:2] == ["pg_dump", "--format=custom"]
-    assert path.exists() and path.suffix == ".dump" and path.read_bytes() == b"PGDMP"
+    assert path.exists()
+    assert path.suffix == ".dump"
+    assert path.read_bytes() == b"PGDMP"
     assert sorted(p.name for p in backup_dir.iterdir()) == sorted([path.name, recent.name])
 
 

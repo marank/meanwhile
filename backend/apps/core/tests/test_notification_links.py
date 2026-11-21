@@ -41,7 +41,8 @@ def test_events_one_cannot_see_any_more_lead_to_the_notifications(world: World) 
     assert links(world, "approver")["booking_cancelled"] == "/notifications"
     # The email says the same.
     [message] = [m for m in django_mail.outbox if m.to == ["approver@example.test"]]
-    assert "/notifications" in message.body and f"/event/{event['id']}" not in message.body
+    assert "/notifications" in message.body
+    assert f"/event/{event['id']}" not in message.body
 
 
 def test_invitations_to_events_out_of_sight_lead_to_the_invitation_page(world: World) -> None:

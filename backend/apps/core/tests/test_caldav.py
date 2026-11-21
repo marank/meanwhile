@@ -68,16 +68,15 @@ def booking(
     return event
 
 
-def forbidden(exc_info: pytest.ExceptionInfo[ValueError]) -> bool:
-    return "[Errno 13]" in str(exc_info.value)
+# Radicale reports a refused write as a PermissionError, which arrives as this ValueError.
+FORBIDDEN = r"\[Errno 13\]"
 
 
 @pytest.mark.parametrize("status", ["pending", "rejected", "cancelled"])
 def test_hidden_bookings_cannot_be_changed(world: World, status: str) -> None:
     event = booking(world, status)
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match=FORBIDDEN):
         upload(world, event, summary="Hijacked")
-    assert forbidden(exc)
     stored = Event.objects.get(id=event["id"])
     assert stored.status == status
     assert stored.title == "Booking"
@@ -100,9 +99,8 @@ def test_renaming_an_approved_booking_keeps_its_status(world: World) -> None:
 
 def test_approved_booking_cannot_be_rescheduled_via_caldav(world: World) -> None:
     event = booking(world, "approved")
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match=FORBIDDEN):
         upload(world, event, start=BASE + timedelta(days=1))
-    assert forbidden(exc)
     assert Event.objects.get(id=event["id"]).start == BASE
 
 
@@ -111,9 +109,8 @@ def test_rescheduling_without_approval_checks_conflicts(world: World) -> None:
     world["book"](world["api"]["booker"], beamer["id"])
     later = world["book"](world["api"]["booker"], beamer["id"], start=BASE + timedelta(hours=2)).json()
 
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match="conflicts with an approved booking"):
         upload(world, later, start=BASE + timedelta(minutes=30))
-    assert not forbidden(exc)
     assert Event.objects.get(id=later["id"]).start == BASE + timedelta(hours=2)
 
     upload(world, later, start=BASE + timedelta(hours=1))

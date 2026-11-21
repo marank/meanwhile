@@ -11,7 +11,7 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.mark.parametrize(
-    "method, path",
+    ("method", "path"),
     [
         ("get", "/calendars/unknown"),
         ("get", "/calendars/unknown/members"),
@@ -76,7 +76,8 @@ def test_searches_list_no_more_than_a_dropdown_shows(world: World) -> None:
     for i in range(MAX_LIMIT + 5):
         make_user(f"person{i}")
     res = world["api"]["owner"].get("/search?entity=users&q=person&limit=100000")
-    assert res.status_code == 200 and len(res.json()) == MAX_LIMIT
+    assert res.status_code == 200
+    assert len(res.json()) == MAX_LIMIT
     assert world["api"]["owner"].get("/search?entity=users&q=person&limit=-1").status_code == 200
     assert world["api"]["owner"].get("/search?entity=nope&q=person").status_code == 422
 

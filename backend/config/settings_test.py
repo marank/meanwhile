@@ -9,7 +9,7 @@ os.environ["DEBUG"] = "true"
 # The app's address in links (emails, feeds), which the tests look for.
 os.environ["APP_URLS"] = "http://app.test"
 
-from config.settings import *  # noqa: E402, F403
+from config.settings import *  # noqa: F403
 
 # Argon2 is slow on purpose; the tests hash a password for every user they make and check one at
 # every CalDAV request. Which hasher is used isn't what they test.

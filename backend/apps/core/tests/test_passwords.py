@@ -77,7 +77,9 @@ def test_the_link_comes_like_the_apps_other_emails(settings: Settings) -> None:
     assert isinstance(message, EmailMultiAlternatives)
     assert message.subject == "Reset your password for Meanwhile"
     html = next(str(content) for content, mimetype in message.alternatives if mimetype == "text/html")
-    assert 'class="mw-heading"' in html and f"/reset-password/{key}" in html and "Choose new password" in html
+    assert 'class="mw-heading"' in html
+    assert f"/reset-password/{key}" in html
+    assert "Choose new password" in html
 
 
 def test_made_up_keys_change_nothing(settings: Settings) -> None:
