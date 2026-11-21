@@ -4,6 +4,7 @@ Notification creation helper, and the emails that go out along with notification
 
 from collections.abc import Iterable
 from datetime import datetime
+from functools import partial
 from typing import Any
 
 from django.core.mail import EmailMultiAlternatives
@@ -155,66 +156,39 @@ def _notification_email(
     app: str,
 ) -> EmailMultiAlternatives:
     language = mail.language_of(user)
-    if actor is not None:
-        actor_name = actor.display_name or actor.email
-    else:
-        actor_name = data.get("name") or data.get("email") or text(language, "someone")
+    actor_name = _actor_name(actor, data, language)
     title = title or text(language, "untitled")
     values = {"actor": actor_name, "title": title}
     if "role" in data:
         values["role"] = text(language, f"role_{data['role']}")
     key = type if type != "participant_replied" else f"participant_replied_{data.get('status', 'accepted')}"
-    subject = text(language, f"{key}_subject", **values)
     body = text(language, f"{key}_body", **values)
     kind = EMAIL_KIND_OF[type]
-    footer: dict[str, Any] = {
-        "reason": text(language, f"reason_{kind}", calendar=calendar.name if calendar else ""),
-        "recipient": user,
-        "kind": kind,
-        # The series, as no more emails are wanted about it as a whole.
-        "event": (event.parent or event) if event else None,
-    }
-
     url = mail.app_link(notification_link(user, type, event, calendar.id if calendar else None))
     label = text(language, "review_request" if type == "approval_requested" else "open", app=app)
-    links = [mail.Link(label, url, primary=True)]
-
+    link = mail.Link(label, url, primary=True)
+    # What every notification email has, with or without an event card.
+    build = partial(
+        mail.build_message,
+        to=user.email,
+        subject=text(language, f"{key}_subject", **values),
+        paragraphs=[body],
+        language=language,
+        links=[link],
+        from_name=actor.display_name if actor else None,
+        app=app,
+        reason=text(language, f"reason_{kind}", calendar=calendar.name if calendar else ""),
+        recipient=user,
+        kind=kind,
+        # The series, as no more emails are wanted about it as a whole.
+        event=(event.parent or event) if event else None,
+    )
     if event is None or key not in _NOTICE_TONES:
-        details = []
-        if calendar is not None and type not in ("member_added", "member_role_changed"):
-            details.append((text(language, "calendar"), calendar.name))
-        if "role" in data:
-            details.append((text(language, "your_role"), text(language, f"role_{data['role']}_description")))
-        return mail.build_message(
-            to=user.email,
-            subject=subject,
-            paragraphs=[body],
-            language=language,
-            details=details,
-            links=links,
-            from_name=actor.display_name if actor else None,
-            app=app,
-            **footer,
-        )
+        return build(details=_plain_details(type, calendar, data, language))
 
     reader = mail.Reader.of(user, language, event.timezone)
-    start, end = event.start, event.end
-    if type == "event_reminder" and data.get("start"):
-        # The occurrence reminded of, which in a series isn't the first.
-        start = datetime.fromisoformat(data["start"])
-        end = start + (event.end - event.start)
-    rows: list[tuple[str, str]] = []
-    if event.location:
-        rows.append((text(language, "location"), event.location))
-    if type in _BOOKINGS and event.resource is not None:
-        rows.append((text(language, "resource"), event.resource.name))
-    if type == "approval_requested" and actor is not None:
-        rows.append((text(language, "requested_by"), f"{actor_name} <{actor.email}>"))
-    if calendar is not None:
-        rows.append((text(language, "calendar"), calendar.name))
-    for field in ("note", "comment"):
-        if data.get(field):
-            rows.append((text(language, field), data[field]))
+    start, end = _occurrence(type, event, data)
+    rows = _event_rows(type, actor, actor_name, calendar, event, data, language)
     tone = _NOTICE_TONES[key]
     card = mail.EventCard(
         kicker=text(language, f"{type}_kicker"),
@@ -225,17 +199,60 @@ def _notification_email(
         notice=body if tone else "",
         notice_tone=tone or "neutral",
         struck=type == "booking_cancelled",
-        view=links[0] if links else None,
+        view=link,
     )
-    return mail.build_message(
-        to=user.email,
-        subject=subject,
-        paragraphs=[body],
-        language=language,
+    return build(
         details=[(text(language, "when"), mail.format_when(start, end, event.all_day, reader)), *rows],
-        links=links,
-        from_name=actor.display_name if actor else None,
-        app=app,
         card=card,
-        **footer,
     )
+
+
+def _actor_name(actor: User | None, data: dict[str, Any], language: str) -> str:
+    """Who did it: a user of the app, else the guest named in the data (an answer by link or email)."""
+    if actor is not None:
+        return actor.display_name or actor.email
+    return data.get("name") or data.get("email") or text(language, "someone")
+
+
+def _plain_details(type: str, calendar: Calendar | None, data: dict[str, Any], language: str) -> list[tuple[str, str]]:
+    """The lines of an email without an event card: the calendar (unless the email is about being in it)
+    and the role given."""
+    details = []
+    if calendar is not None and type not in ("member_added", "member_role_changed"):
+        details.append((text(language, "calendar"), calendar.name))
+    if "role" in data:
+        details.append((text(language, "your_role"), text(language, f"role_{data['role']}_description")))
+    return details
+
+
+def _occurrence(type: str, event: Event, data: dict[str, Any]) -> tuple[datetime, datetime]:
+    """Start and end the email is about: the event's, but a reminder's own occurrence, which in a series
+    isn't the first."""
+    if type == "event_reminder" and data.get("start"):
+        start = datetime.fromisoformat(data["start"])
+        return start, start + (event.end - event.start)
+    return event.start, event.end
+
+
+def _event_rows(
+    type: str,
+    actor: User | None,
+    actor_name: str,
+    calendar: Calendar | None,
+    event: Event,
+    data: dict[str, Any],
+    language: str,
+) -> list[tuple[str, str]]:
+    """The labelled lines of an event card: place, the resource and who asked for a booking, the calendar,
+    and the note or comment that came with it."""
+    rows: list[tuple[str, str]] = []
+    if event.location:
+        rows.append((text(language, "location"), event.location))
+    if type in _BOOKINGS and event.resource is not None:
+        rows.append((text(language, "resource"), event.resource.name))
+    if type == "approval_requested" and actor is not None:
+        rows.append((text(language, "requested_by"), f"{actor_name} <{actor.email}>"))
+    if calendar is not None:
+        rows.append((text(language, "calendar"), calendar.name))
+    rows += [(text(language, field), data[field]) for field in ("note", "comment") if data.get(field)]
+    return rows

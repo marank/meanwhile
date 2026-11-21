@@ -27,7 +27,9 @@ api = NinjaAPI(
 def http_error(request: HttpRequest, exc: HttpError) -> HttpResponse:
     # Ninja's default handler calls str(exc), which fails for structured details such as
     # booking conflicts ({"message": ..., "conflicts": [...]}); pass those through as-is.
-    detail = exc.message if isinstance(exc.message, (dict, list)) else str(exc)
+    # Ninja types the message as str; our own errors pass these structures too.
+    message: object = exc.message
+    detail = message if isinstance(message, (dict, list)) else str(exc)
     return api.create_response(request, {"detail": detail}, status=exc.status_code)
 
 

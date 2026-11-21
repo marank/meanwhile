@@ -70,13 +70,13 @@ def _local_start(event: Event, start: datetime, user: User) -> datetime:
 
 def _occurrences(series: Event, user: User, after: datetime, before: datetime) -> list[tuple[Event, datetime]]:
     """(event, start) of the series' occurrences starting in (after, before], changed ones included."""
-    found: list[tuple[Event, datetime]] = []
     # All-day starts move by up to a day with the user's zone; look a day further each way.
-    for start, _ in expand_event(series, after - timedelta(days=1), before + timedelta(days=1)):
-        found.append((series, _local_start(series, start, user)))
+    window = expand_event(series, after - timedelta(days=1), before + timedelta(days=1))
+    found = [(series, _local_start(series, start, user)) for start, _ in window]
     if is_series(series):
-        for override in series.overrides.all():
-            found.append((override, _local_start(override, as_utc(override.start), user)))
+        found += [
+            (override, _local_start(override, as_utc(override.start), user)) for override in series.overrides.all()
+        ]
     return [(event, start) for event, start in found if after < start <= before]
 
 
@@ -99,38 +99,54 @@ def deliver_due_reminders(user: User | None = None, now: datetime | None = None)
     delivered: list[dict[str, Any]] = []
     by_user: dict[UUID, list[dict[str, Any]]] = {}
     for reminder in reminders:
-        series, reader = reminder.event, reminder.user
-        membership = get_membership(series.calendar, reader)
-        before = timedelta(minutes=reminder.minutes_before)
-        # Occurrences whose reminder time has come, and that haven't long begun.
-        due = _occurrences(series, reader, now - LATE_DELIVERY, now + before) if membership else []
-        for event, start in due:
-            # membership is set: without one, nothing is due.
-            if event.status in _HIDDEN or membership is None or not can_see_event(event, reader, membership):
-                continue
-            try:
-                with transaction.atomic():
-                    ReminderDelivery.objects.create(reminder=reminder, occurrence_start=start)
-            except IntegrityError:
-                continue  # already reminded of this occurrence
-            data = {"start": start.isoformat(), "all_day": event.all_day, "minutes_before": reminder.minutes_before}
-            notify(
-                [str(reader.id)],
-                "event_reminder",
-                None,
-                event.title or "Untitled event",
-                calendar_id=str(event.calendar_id),
-                event_id=str(event.id),
-                data=data,
-            )
-            reminded = {"event_id": str(event.id), "title": event.title, **data}
+        for reminded in _deliver(reminder, now):
             delivered.append(reminded)
-            by_user.setdefault(reader.id, []).append(reminded)
+            by_user.setdefault(reminder.user.id, []).append(reminded)
         reminder.next_due_at = _next_due(reminder, now)
         reminder.save(update_fields=["next_due_at"])
     for user_id, user_reminders in by_user.items():
         broadcast.reminders_due(user_id, user_reminders)
     return delivered
+
+
+def _deliver(reminder: EventReminder, now: datetime) -> list[dict[str, Any]]:
+    """Notifies the reminder's user of each occurrence it is due for and they can still see, once each;
+    returns those reminded of."""
+    series, reader = reminder.event, reminder.user
+    membership = get_membership(series.calendar, reader)
+    if membership is None:
+        return []  # without access, nothing is due
+    before = timedelta(minutes=reminder.minutes_before)
+    reminded: list[dict[str, Any]] = []
+    # Occurrences whose reminder time has come, and that haven't long begun.
+    for event, start in _occurrences(series, reader, now - LATE_DELIVERY, now + before):
+        if event.status in _HIDDEN or not can_see_event(event, reader, membership):
+            continue
+        if not _record_delivery(reminder, start):
+            continue  # already reminded of this occurrence
+        data = {"start": start.isoformat(), "all_day": event.all_day, "minutes_before": reminder.minutes_before}
+        notify(
+            [str(reader.id)],
+            "event_reminder",
+            None,
+            event.title or "Untitled event",
+            calendar_id=str(event.calendar_id),
+            event_id=str(event.id),
+            data=data,
+        )
+        reminded.append({"event_id": str(event.id), "title": event.title, **data})
+    return reminded
+
+
+def _record_delivery(reminder: EventReminder, start: datetime) -> bool:
+    """Notes that the occurrence starting at `start` was reminded of; False if it already was, so that
+    concurrent deliveries remind of it only once."""
+    try:
+        with transaction.atomic():
+            ReminderDelivery.objects.create(reminder=reminder, occurrence_start=start)
+    except IntegrityError:
+        return False
+    return True
 
 
 def _next_due(reminder: EventReminder, now: datetime) -> datetime | None:

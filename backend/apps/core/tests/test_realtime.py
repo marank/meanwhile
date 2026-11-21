@@ -3,6 +3,7 @@ Live updates over WebSockets, through the ASGI application the server runs.
 """
 
 import base64
+import contextlib
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -150,22 +151,22 @@ async def test_changes_rolled_back_are_not_announced(team: Team) -> None:
     communicator = await connected(team)
     await subscribe(communicator, team["calendar"].id)
 
+    def create_and_fail() -> None:
+        with transaction.atomic():
+            Event.objects.create(
+                calendar=team["calendar"],
+                creator=team["owner"],
+                title="Gone",
+                uid="gone",
+                start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+                end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+            )
+            raise RuntimeError
+
     @database_sync_to_async
     def rolled_back() -> None:
-        with transaction.atomic():
-            try:
-                with transaction.atomic():
-                    Event.objects.create(
-                        calendar=team["calendar"],
-                        creator=team["owner"],
-                        title="Gone",
-                        uid="gone",
-                        start=datetime(2030, 1, 7, 9, tzinfo=UTC),
-                        end=datetime(2030, 1, 7, 10, tzinfo=UTC),
-                    )
-                    raise RuntimeError
-            except RuntimeError:
-                pass
+        with transaction.atomic(), contextlib.suppress(RuntimeError):
+            create_and_fail()
         # A later change still goes out.
         Event.objects.create(
             calendar=team["calendar"],

@@ -49,7 +49,8 @@ def test_set_superuser_hands_it_out_and_takes_it_away() -> None:
     assert user.is_superuser and user.is_staff
 
     call_command("set_superuser", user.email, "--revoke")
-    user.refresh_from_db()
+    # Loaded anew rather than refreshed: the type checker keeps what the asserts above found.
+    user = User.objects.get(pk=user.pk)
     assert not user.is_superuser and not user.is_staff
 
 

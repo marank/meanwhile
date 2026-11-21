@@ -295,7 +295,7 @@ def test_events_from_the_app_are_found_by_uid(team: Team) -> None:
 def changes(xml: str) -> dict[str, str]:
     """href -> "found" or "deleted" from a sync-collection answer."""
     result = {}
-    for response in re.findall(r"<response>(.*?)</response>", xml, re.S):
+    for response in re.findall(r"<response>(.*?)</response>", xml, re.DOTALL):
         match = re.search(r"<href>([^<]*)</href>", response)
         assert match is not None
         href = unquote(match.group(1))

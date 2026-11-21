@@ -91,8 +91,7 @@ def create_event(user: User, calendar: Calendar, payload: EventCreate) -> Event:
 
 def update_event(user: User, event: Event, data: dict[str, Any]) -> None:
     """Applies the fields in `data` to the event, with the checks and side effects of an edit."""
-    calendar = event.calendar
-    if calendar.force_all_day and data.get("all_day") is False:
+    if event.calendar.force_all_day and data.get("all_day") is False:
         raise HttpError(422, "This calendar only allows all-day events")
     if event.parent_id:
         # A changed occurrence takes its recurrence from the series.
@@ -103,39 +102,16 @@ def update_event(user: User, event: Event, data: dict[str, Any]) -> None:
     old_status = event.status
     old_values = _tracked_values(event)
 
-    start = as_utc(data["start"]) if "start" in data else event.start
-    end = as_utc(data["end"]) if "end" in data else event.end
-    if "start" in data or "end" in data or "all_day" in data:
-        _check_times(start, end, data.get("all_day", event.all_day))
-
+    start, end = _new_times(event, data)
     resource, location_resource = _new_bookings(event, data)
     _apply_fields(event, data, start, end, location_resource)
 
-    # Compare values rather than the presence of keys: the event dialog resends every field.
-    rescheduled = (
-        event.start != old_values["start"]
-        or event.end != old_values["end"]
-        or event.all_day != old_values["all_day"]
-        or event.rrule != old_values["rrule"]
-    )
+    rescheduled = _is_rescheduled(event, old_values)
     # Clients send their zone with every save; it only replaces the event's zone along with a new
     # schedule, so editing e.g. the title from another zone leaves the series where it is.
     if rescheduled and data.get("timezone"):
         event.timezone = data["timezone"]
-    resource_changed = (resource.id if resource else None) != old_values["resource"]
-    location_changed = (location_resource.id if location_resource else None) != old_values["location_resource"]
-    event.resource = resource
-    event.location_resource = location_resource
-
-    # New bookings, and all bookings at a new time, need approval again unless the user may
-    # approve them; the others keep their state.
-    candidates = ((resource, resource_changed), (location_resource, location_changed))
-    recheck = [r for r, changed in candidates if r and changed]
-    active = event.status in {EventStatus.APPROVED, EventStatus.CONFIRMED, EventStatus.PENDING}
-    if rescheduled and active:
-        recheck = booked_resources(event)
-    if resource_changed or location_changed or (rescheduled and active):
-        update_booking_status(event, user, recheck)
+    _rebook(event, user, (resource, location_resource), old_values, rescheduled=rescheduled)
     _check_booking_conflicts(event)
 
     changed = [field for field, value in _tracked_values(event).items() if value != old_values[field]]
@@ -143,6 +119,62 @@ def update_event(user: User, event: Event, data: dict[str, Any]) -> None:
     event.save()
     if rescheduled:
         _reschedule(event, user, before)
+    _announce_update(event, user, old_status, old_values, changed)
+
+
+def _new_times(event: Event, data: dict[str, Any]) -> tuple[datetime, datetime]:
+    """The start and end the event has after the edit, checked when the edit touches them."""
+    start = as_utc(data["start"]) if "start" in data else event.start
+    end = as_utc(data["end"]) if "end" in data else event.end
+    if "start" in data or "end" in data or "all_day" in data:
+        _check_times(start, end, data.get("all_day", event.all_day))
+    return start, end
+
+
+def _is_rescheduled(event: Event, old_values: dict[str, Any]) -> bool:
+    """Whether the edit moved the event or changed its rule.
+
+    Compares values rather than the presence of keys: the event dialog resends every field.
+    """
+    return bool(
+        event.start != old_values["start"]
+        or event.end != old_values["end"]
+        or event.all_day != old_values["all_day"]
+        or event.rrule != old_values["rrule"]
+    )
+
+
+def _rebook(
+    event: Event,
+    user: User,
+    bookings: tuple[Resource | None, Resource | None],
+    old_values: dict[str, Any],
+    *,
+    rescheduled: bool,
+) -> None:
+    """Sets the resource and the location booked after the edit (`bookings`) and their approval state.
+
+    New bookings, and all bookings at a new time, need approval again unless the user may approve
+    them; the others keep their state.
+    """
+    resource, location_resource = bookings
+    resource_changed = (resource.id if resource else None) != old_values["resource"]
+    location_changed = (location_resource.id if location_resource else None) != old_values["location_resource"]
+    event.resource = resource
+    event.location_resource = location_resource
+
+    candidates = ((resource, resource_changed), (location_resource, location_changed))
+    recheck = [r for r, changed in candidates if r and changed]
+    active = event.status in {EventStatus.APPROVED, EventStatus.CONFIRMED, EventStatus.PENDING}
+    if rescheduled and active:
+        recheck = booked_resources(event)
+    if resource_changed or location_changed or (rescheduled and active):
+        update_booking_status(event, user, recheck)
+
+
+def _announce_update(event: Event, user: User, old_status: str, old_values: dict[str, Any], changed: list[str]) -> None:
+    """After a saved edit: the activity log, the approvers of bookings that wait for them again, and
+    the participants when something they were sent changed."""
     status_reset = event.status == EventStatus.PENDING and old_status != EventStatus.PENDING
     if changed:
         details: dict[str, list[str] | str] = {"fields": changed}
@@ -184,16 +216,20 @@ def _apply_fields(
     elif "location" in data:
         event.location = data["location"] or ""
     if "start" in data:
-        if event.rdates and not event.parent_id:
-            # Moving the series moves its extra dates along.
-            delta = start - event.start
-            event.rdates = sorted(format_exdate(d + delta) for d in parse_exdates(event.rdates))
-        event.start = start
+        _move_start(event, start)
     if "end" in data:
         event.end = end
     for field in ("all_day", "show_recurrence_count", "rrule"):
         if field in data:
             setattr(event, field, data[field])
+
+
+def _move_start(event: Event, start: datetime) -> None:
+    """Sets the new start; moving a series moves its extra dates (RDATE) along by as much."""
+    if event.rdates and not event.parent_id:
+        delta = start - event.start
+        event.rdates = sorted(format_exdate(d + delta) for d in parse_exdates(event.rdates))
+    event.start = start
 
 
 def _reschedule(event: Event, user: User, before: Any) -> None:

@@ -82,13 +82,14 @@ sync-env:
 # Everything CI checks; must pass before a push
 check: check-backend check-deploy check-frontend check-workflows
 
-# ruff, mypy, deptry, import layers, licenses, migrations, Django checks, translations, OpenAPI, tests
+# ruff, mypy, complexipy, deptry, import layers, licenses, migrations, Django checks, translations, OpenAPI, tests
 [working-directory: 'backend']
 check-backend:
     uv sync --locked
     uv run ruff check --output-format=concise .
     uv run ruff format --check .
     uv run mypy .
+    uv run complexipy --failed apps config
     uv run deptry .
     uv run lint-imports
     uv run python scripts/check_licenses.py
@@ -116,6 +117,12 @@ check-frontend:
     pnpm size
     pnpm check:licenses
     pnpm audit --prod --audit-level high
+
+# Python, Debian, Node.js, PostgreSQL, Django: fails 180 days before their support ends.
+# Not in `check`: it needs the network and its result changes with the date (weekly in CI).
+[working-directory: 'backend']
+check-eol:
+    uv run --no-project python scripts/check_eol.py
 
 # GitHub workflows: syntax (actionlint) and security (zizmor)
 check-workflows:

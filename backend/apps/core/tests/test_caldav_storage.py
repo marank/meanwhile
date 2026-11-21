@@ -17,7 +17,7 @@ def test_a_principal_is_returned_as_radicale_unpacks_it() -> None:
     user = make_user("someone")
     with acting_as(user.email):
         principal, replaced, new_hrefs = Storage(config.load()).create_collection(f"/{user.email}/")
-    assert isinstance(principal, Collection) and principal.is_principal
+    assert principal.is_principal
     assert (replaced, new_hrefs) == ({}, [])
 
 

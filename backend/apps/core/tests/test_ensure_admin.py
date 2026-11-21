@@ -97,7 +97,8 @@ def test_whoever_signed_up_with_the_address_loses_the_account(admin_env: Setting
 
     admin_env.ADMIN_PASSWORD = "secret-1"
     call_command("ensure_admin")
-    squatter.refresh_from_db()
+    # Loaded anew rather than refreshed: the type checker keeps what the assert above found.
+    squatter = User.objects.get(pk=squatter.pk)
     assert squatter.is_admin and squatter.check_password("secret-1")
     assert not AppPassword.objects.filter(user=squatter).exists()
     assert EmailAddress.objects.filter(user=squatter, verified=True).exists()

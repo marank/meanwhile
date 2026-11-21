@@ -77,29 +77,43 @@ def memberships_of(user: User, calendars: Iterable[Calendar]) -> dict[UUID, Memb
     rows = {m.calendar_id: m for m in CalendarMember.objects.filter(calendar_id__in=by_id, user_id=user.id)}
     direct = {calendar_id for calendar_id, row in rows.items() if row.source == MembershipSource.DIRECT}
     # Groups only matter where the user has no direct membership.
-    others = [calendar_id for calendar_id in by_id if calendar_id not in direct]
-    group_roles: dict[UUID, str] = {}
-    if others:
-        links = CalendarGroup.objects.filter(calendar_id__in=others, group__in=user.groups.all())
-        for calendar_id, role in links.values_list("calendar_id", "role"):
-            if calendar_id not in group_roles or role_weight(role) > role_weight(group_roles[calendar_id]):
-                group_roles[calendar_id] = role
+    group_roles = _best_group_roles(user, [calendar_id for calendar_id in by_id if calendar_id not in direct])
 
     result: dict[UUID, MembershipInfo] = {}
     for calendar_id, calendar in by_id.items():
         row = rows.get(calendar_id)
-        if row is not None and row.source == MembershipSource.DIRECT:
-            # Direct memberships always have a role; only the others leave it empty.
-            assert row.role is not None
-            role = row.role
-        elif calendar_id in group_roles:
-            role = group_roles[calendar_id]
-        elif calendar.is_public:
-            role = calendar.public_role
-        else:
+        role = _role_in(calendar, row, group_roles.get(calendar_id))
+        if role is None:
             continue
         result[calendar_id] = _from_row(row, role, calendar, user) if row else _synthetic(calendar, user, role)
     return result
+
+
+def _best_group_roles(user: User, calendar_ids: list[UUID]) -> dict[UUID, str]:
+    """The best role any of the user's groups has in each of the calendars, by calendar id; no query
+    when there are none to look at."""
+    group_roles: dict[UUID, str] = {}
+    if not calendar_ids:
+        return group_roles
+    links = CalendarGroup.objects.filter(calendar_id__in=calendar_ids, group__in=user.groups.all())
+    for calendar_id, role in links.values_list("calendar_id", "role"):
+        if calendar_id not in group_roles or role_weight(role) > role_weight(group_roles[calendar_id]):
+            group_roles[calendar_id] = role
+    return group_roles
+
+
+def _role_in(calendar: Calendar, row: CalendarMember | None, group_role: str | None) -> str | None:
+    """The user's role in the calendar: a direct membership's, else their groups' best, else the public
+    role; None without access."""
+    if row is not None and row.source == MembershipSource.DIRECT:
+        # Direct memberships always have a role; only the others leave it empty.
+        assert row.role is not None
+        return row.role
+    if group_role is not None:
+        return group_role
+    if calendar.is_public:
+        return calendar.public_role
+    return None
 
 
 def _from_row(membership: CalendarMember, role: str, calendar: Calendar, user: User) -> MembershipInfo:

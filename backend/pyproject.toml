@@ -26,6 +26,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "complexipy>=9.0.0",
     "deptry>=0.25.1",
     "django-stubs>=6.1.2",
     "import-linter>=2.17",
@@ -73,11 +74,16 @@ select = [
     "T20", # no print()
     "ERA", # no commented-out code
     "S",   # security patterns (bandit)
+    "BLE", # no blind `except Exception` that swallows errors
+    "TRY", # exception handling: no `except: pass`, re-raise with context, …
+    "PERF", # slow patterns (building a list in a loop, …)
+    "FURB", # older, longer spellings of what the standard library does directly
 ]
 ignore = [
     "DJ008",  # __str__ on every model
     "S603", "S607",  # subprocess with fixed argument lists (pg_dump) is intended
     "S101",  # asserts state invariants for the type checker; the image never runs with -O
+    "TRY003",  # messages passed to the exception class are fine
 ]
 # Only the preview rules selected by name (PLR1702), not preview behaviour of the stable ones.
 preview = true
@@ -106,6 +112,17 @@ extend-immutable-calls = ["ninja.Query", "ninja.Path", "ninja.Body", "ninja.Form
 plugins = ["mypy_django_plugin.main"]
 exclude = ["/migrations/"]
 strict = true
+# Checks against cases the types rule out (`if x is None` for a non-optional x, a branch
+# that can't run) are reported instead of kept "to be safe".
+warn_unreachable = true
+strict_equality_for_none = true
+enable_error_code = [
+    "redundant-expr",
+    "truthy-bool",          # `if obj:` on an object that is always true
+    "possibly-undefined",   # a variable only set in some branches
+    "ignore-without-code",  # `# type: ignore` names the error it silences
+    "exhaustive-match",     # a `match` over an enum or union misses a case
+]
 # What the image and CI run on; keeps the checks the same on every developer machine.
 platform = "linux"
 
