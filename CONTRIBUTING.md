@@ -30,18 +30,20 @@ from logs and screenshots. **Security issues** never go into a public issue — 
 ## Development
 
 Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js 24 with pnpm (`npm install -g pnpm`),
-just (`uv tool install rust-just`, `winget install Casey.Just` or `brew install just`), and GNU
-gettext for the translation checks (`winget install mlocati.GetText`, `brew install gettext`,
-`apt install gettext`). Docker only for the image and the optional services.
+just ≥ 1.42 (`uv tool install rust-just`, `winget install Casey.Just` or `brew install just`),
+and GNU gettext for the translation checks (`winget install mlocati.GetText`,
+`brew install gettext`, `apt install gettext`). Docker only for the image and the optional services.
 
 ```bash
 cp .env.example .env     # once, in the project root (DEBUG=true; ADMIN_* give you a user to sign in with)
 just setup               # uv sync + pnpm install
-just dev-backend         # migrations, admin user, Django on :8000 (SQLite in backend/data)
-just dev-frontend        # in a second terminal: Vite on http://localhost:6326
+just dev                 # Django on :8000 and Vite on http://localhost:6326; Ctrl+C stops both
 ```
 
-In VS Code the task `dev` starts both; every task only calls a just recipe (`just` lists them).
+`just dev` runs `just dev-backend` (migrations, admin user, Django with SQLite in backend/data)
+and `just dev-frontend` side by side in one terminal; start them separately to keep their output
+apart. In VS Code the task `dev` starts both, each in its own panel; every task only calls a just
+recipe (`just` lists them).
 The Vite dev proxy forwards `/api`, `/django-admin`, `/django-static`, `/ics`, `/caldav` and `/ws`
 to `http://localhost:8000`, keeping the browser's `Host`.
 

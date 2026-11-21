@@ -100,7 +100,7 @@ To run Meanwhile from source:
 
 ```bash
 cp .env.example .env && just setup
-just dev-backend     # second terminal: just dev-frontend → http://localhost:6326
+just dev             # backend and frontend → http://localhost:6326
 ```
 
 ## License

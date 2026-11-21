@@ -1,6 +1,6 @@
 # The project's commands — the one place they live. CI (.github/workflows/build.yaml) and the
 # VS Code tasks (.vscode/tasks.json) call these recipes, so a check is changed here and
-# nowhere else. `just` lists them. Needs just >= 1.38 (working-directory attribute).
+# nowhere else. `just` lists them. Needs just >= 1.42 (working-directory and parallel attributes).
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
@@ -22,6 +22,10 @@ setup-frontend:
     pnpm install
 
 # --- Development ----------------------------------------------------------------------
+
+# Backend and frontend together → http://localhost:6326; Ctrl+C stops both
+[parallel]
+dev: dev-backend dev-frontend
 
 # Django on :8000 under uvicorn like production, restarting on changes (SQLite in backend/data,
 # jobs in-process, no worker); applies migrations first

@@ -28,9 +28,9 @@ and the worker. Read this before changing structure; `CONTRIBUTING.md` has setup
 
 Every command lives in the `justfile`; CI (`.github/workflows/build.yaml`) and the VS Code tasks
 only call its recipes, so a check is changed in one place.
-- `just dev-backend` + `just dev-frontend` (VS Code: `dev`) → http://localhost:6326. Natively the
-  backend uses SQLite and runs jobs in-process; `just services` + `DB_HOST=localhost` (and
-  `just dev-worker`) run it on PostgreSQL like CI.
+- `just dev` (or `just dev-backend` + `just dev-frontend`; VS Code: `dev`) → http://localhost:6326.
+  Natively the backend uses SQLite and runs jobs in-process; `just services` +
+  `DB_HOST=localhost` (and `just dev-worker`) run it on PostgreSQL like CI.
 - `just check` runs everything CI runs and must pass before pushing.
 - `just api-types` after any API change (schema → `frontend/openapi.json` → `frontend/src/api/schema.d.ts`);
   commit both. CI fails when they drift.
@@ -116,7 +116,7 @@ only call its recipes, so a check is changed in one place.
 - Both run read-only, without capabilities, as the unprivileged user `app`. Only `/data`
   (`DATA_DIR`), `/backups` (worker) and `/tmp` are writable; new features write there instead of
   loosening `compose.yml`.
-- Development is native (`just dev-backend`, `just dev-frontend`); `compose.dev.yml` holds only
+- Development is native (`just dev`); `compose.dev.yml` holds only
   the services next to it (PostgreSQL, Redis, Mailpit), no images of the app.
 - `compose.yml` works with `.env` alone: no file of the repository is mounted.
 - New runtime probes go into `docker/smoke-test`, which CI runs in both containers.
