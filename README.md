@@ -5,6 +5,10 @@ own server. People share calendars with each other, book rooms and equipment (wi
 needed), invite participants by email and keep everything in sync with the calendar apps on their
 phones and computers. It runs self-hosted with Docker, in English and German.
 
+![Month view with shared team, marketing, holiday and personal calendars](docs/images/screenshot-month.png)
+
+![Week view with booked rooms and a car booking awaiting approval, next to the list view of upcoming events](docs/images/screenshot-week-list.png)
+
 ## Features
 
 ### Calendars and events
