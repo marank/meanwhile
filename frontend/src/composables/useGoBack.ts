@@ -9,6 +9,6 @@ export function useGoBack(defaultFallback = '/calendar') {
 
   return function goBack(fallback = defaultFallback) {
     if (router.options.history.state.back) router.back()
-    else router.push(fallback)
+    else void router.push(fallback)
   }
 }

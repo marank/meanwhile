@@ -62,7 +62,7 @@ export function calendar(id: string, overrides: Partial<Calendar> = {}): Calenda
     updated_at: '',
     my_membership: null,
     ...overrides,
-  } as Calendar
+  }
 }
 
 export function calendarItem(

@@ -12,12 +12,12 @@ import WeekLayoutFields from '../WeekLayoutFields.vue'
 
 // The lists of selects are teleported to <body>.
 function optionTexts(): string[] {
-  return [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent!.trim())
+  return [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent.trim())
 }
 
 function clickOption(text: string) {
   const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (o) => o.textContent!.trim() === text,
+    (o) => o.textContent.trim() === text,
   )
   if (!option) throw new Error(`No option ${text}`)
   option.click()
@@ -44,7 +44,7 @@ describe('SettingsToggle', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[true]])
   })
 
-  it('does nothing while disabled', async () => {
+  it('does nothing while disabled', () => {
     wrapper = mount(SettingsToggle, { props: { title: 'Weekends', modelValue: true, disabled: true } })
     expect(wrapper.find('.text-xs').exists()).toBe(false) // no description line
     // A disabled button gets no clicks in a browser; the handler must not switch either.

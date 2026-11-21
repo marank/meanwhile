@@ -15,12 +15,12 @@ export function useQueryTab<T extends string>(tabs: readonly T[]) {
   watch(
     () => route.query.tab,
     (value) => {
-      if (value !== undefined && !isTab(value)) router.replace({ query: { ...route.query, tab: tabs[0] } })
+      if (value !== undefined && !isTab(value)) void router.replace({ query: { ...route.query, tab: tabs[0] } })
     },
   )
 
   function selectTab(id: T) {
-    router.replace({ query: { ...route.query, tab: id } })
+    void router.replace({ query: { ...route.query, tab: id } })
   }
 
   return { tab, selectTab }

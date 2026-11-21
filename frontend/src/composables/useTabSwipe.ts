@@ -156,6 +156,7 @@ export function useTabSwipe<T extends string>(options: Options<T>) {
       if (Math.abs(dx) > DECIDE_AFTER && Math.abs(dx) > Math.abs(dy) * 1.2) {
         decided = 'sideways'
         dragging.value = true
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- jsdom has no pointer capture
         ;(event.currentTarget as Element | null)?.setPointerCapture?.(event.pointerId)
       } else if (Math.abs(dy) > DECIDE_AFTER) {
         decided = 'scroll'

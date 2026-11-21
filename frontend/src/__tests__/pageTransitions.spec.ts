@@ -117,7 +117,7 @@ describe('page transitions', () => {
   })
 
   afterEach(() => {
-    wrapper?.unmount()
+    wrapper.unmount()
     vi.restoreAllMocks()
   })
 

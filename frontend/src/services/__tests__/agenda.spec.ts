@@ -28,7 +28,7 @@ function occurrence(fields: Partial<Occurrence>): Occurrence {
     series_id: null,
     recurrence_id: null,
     ...fields,
-  } as Occurrence
+  }
 }
 
 const local = (day: number, hour = 0, minute = 0) => new Date(2026, 9, day, hour, minute).toISOString()

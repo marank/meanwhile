@@ -11,27 +11,27 @@ function render(date: Date, view: 'dayGridMonth' | 'timeGridWeek' = 'dayGridMont
   })
 }
 
-function gotoAfter(wrapper: ReturnType<typeof render>, label: string): Date {
-  wrapper.get(`button[aria-label="${label}"]`).trigger('click')
+async function gotoAfter(wrapper: ReturnType<typeof render>, label: string): Promise<Date> {
+  await wrapper.get(`button[aria-label="${label}"]`).trigger('click')
   return wrapper.emitted('goto')!.at(-1)![0] as Date
 }
 
 describe('CalendarToolbar', () => {
-  it('changes the year with the double arrows, keeping month and day', () => {
+  it('changes the year with the double arrows, keeping month and day', async () => {
     const wrapper = render(new Date(2026, 9, 1))
-    expect(gotoAfter(wrapper, 'Previous year')).toEqual(new Date(2025, 9, 1))
-    expect(gotoAfter(wrapper, 'Next year')).toEqual(new Date(2027, 9, 1))
+    expect(await gotoAfter(wrapper, 'Previous year')).toEqual(new Date(2025, 9, 1))
+    expect(await gotoAfter(wrapper, 'Next year')).toEqual(new Date(2027, 9, 1))
   })
 
-  it('shows the same date a year on in the week view, and never spills into the next month', () => {
-    expect(gotoAfter(render(new Date(2026, 9, 12), 'timeGridWeek'), 'Next year')).toEqual(new Date(2027, 9, 12))
-    expect(gotoAfter(render(new Date(2028, 1, 29), 'timeGridWeek'), 'Next year')).toEqual(new Date(2029, 1, 28))
+  it('shows the same date a year on in the week view, and never spills into the next month', async () => {
+    expect(await gotoAfter(render(new Date(2026, 9, 12), 'timeGridWeek'), 'Next year')).toEqual(new Date(2027, 9, 12))
+    expect(await gotoAfter(render(new Date(2028, 1, 29), 'timeGridWeek'), 'Next year')).toEqual(new Date(2029, 1, 28))
   })
 
-  it('still steps by month or week with the single arrows', () => {
+  it('still steps by month or week with the single arrows', async () => {
     const wrapper = render(new Date(2026, 9, 1))
-    wrapper.get('button[aria-label="Previous"]').trigger('click')
-    wrapper.get('button[aria-label="Next"]').trigger('click')
+    await wrapper.get('button[aria-label="Previous"]').trigger('click')
+    await wrapper.get('button[aria-label="Next"]').trigger('click')
     expect(wrapper.emitted('prev')).toHaveLength(1)
     expect(wrapper.emitted('next')).toHaveLength(1)
   })

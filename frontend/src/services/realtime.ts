@@ -20,6 +20,10 @@ export interface RealtimeMessage {
 
 type Handler = (message: RealtimeMessage) => void
 
+function isMessage(value: unknown): value is RealtimeMessage {
+  return typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string'
+}
+
 /** Close codes after which reconnecting can't help until the user signs in again. */
 const CLOSE_UNAUTHENTICATED = 4401
 const CLOSE_FORBIDDEN_ORIGIN = 4403
@@ -103,7 +107,7 @@ export class RealtimeClient {
     let set = this.handlers.get(type)
     if (!set) this.handlers.set(type, (set = new Set()))
     set.add(handler)
-    return () => set!.delete(handler)
+    return () => set.delete(handler)
   }
 
   private emit(message: RealtimeMessage) {
@@ -144,13 +148,13 @@ export class RealtimeClient {
 
   private onMessage(socket: WebSocket, event: MessageEvent) {
     if (socket !== this.socket || typeof event.data !== 'string') return
-    let message: RealtimeMessage
+    let message: unknown
     try {
       message = JSON.parse(event.data)
     } catch {
       return
     }
-    if (!message || typeof message.type !== 'string') return
+    if (!isMessage(message)) return
     // Any message shows the connection is alive.
     clearTimeout(this.pongTimer)
     if (message.type === 'hello') {

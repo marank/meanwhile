@@ -102,6 +102,11 @@ only call its recipes, so a check is changed in one place.
 - Tailwind for styling. No inline `<script>`, no remote scripts or styles: the CSP only allows our origin.
 - Expose state semantically (`aria-pressed`, `aria-current`, `aria-expanded`, `data-*`) rather than
   only through classes; tests check those, not Tailwind classes.
+- ESLint lints with types (typescript-eslint's `recommendedTypeChecked` plus unnecessary conditions,
+  `??` and exhaustive switches; sonarjs cognitive complexity ≤ 15). A promise that isn't awaited is
+  marked `void`, and only where it handles its own errors. Defaults use `??`; where the server's empty
+  string means "none" (names, logo URLs), `nonEmpty(value) ?? fallback` from `services/text.ts`.
+  `eslint-disable` only for one line and with the reason after `--`.
 
 ## Tests
 
@@ -140,7 +145,7 @@ moves them weekly. It does **not** see, so bump by hand now and then:
 
 ## House defaults
 
-Checked against django-spa-defaults 1.6.0 (2026-11-21).
+Checked against django-spa-defaults 1.7.0 (2026-11-21).
 
 - Releases: release-please
 - Contributions: team only

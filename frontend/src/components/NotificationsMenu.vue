@@ -66,6 +66,7 @@ const toneClasses: Record<Tone, string> = {
 
 function kind(notification: AppNotification) {
   // Types added on the server before the client knows them get a plain bell.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the server may know more types
   const { icon, tone } = kinds[notification.type] ?? { icon: Bell, tone: 'gray' }
   const status = notification.type === 'participant_replied' ? String(notification.data?.status ?? '') : ''
   return { icon, toneClass: toneClasses[replyTones[status] ?? tone] }

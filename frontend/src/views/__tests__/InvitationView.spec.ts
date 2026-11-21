@@ -62,7 +62,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  wrapper?.unmount()
+  wrapper.unmount()
   vi.restoreAllMocks()
 })
 

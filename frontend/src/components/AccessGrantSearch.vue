@@ -80,7 +80,7 @@ function open() {
   if (props.disabled) return
   isOpen.value = true
   void nextTick(place)
-  search()
+  void search()
 }
 
 function close() {
@@ -126,7 +126,7 @@ function onDocumentClick(event: MouseEvent) {
 
 // The list is fixed to the viewport, so scrolling the page would detach it from the input.
 function onScroll(event: Event) {
-  if (isOpen.value && !(event.target as HTMLElement)?.closest?.('[role=listbox]')) close()
+  if (isOpen.value && !(event.target instanceof Element && event.target.closest('[role=listbox]'))) close()
 }
 
 onMounted(() => {

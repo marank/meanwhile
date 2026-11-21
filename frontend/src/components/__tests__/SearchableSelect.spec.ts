@@ -41,9 +41,9 @@ function render(props: Record<string, unknown> = {}) {
 
 // The list is teleported to <body>.
 const listbox = () => document.querySelector<HTMLElement>('[role="listbox"]')
-const optionTexts = () => [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent!.trim())
+const optionTexts = () => [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent.trim())
 const optionNamed = (text: string) =>
-  [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent!.includes(text))!
+  [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent.includes(text))!
 
 async function typeText(input: ReturnType<typeof render>, text: string) {
   await input.setValue(text)
@@ -63,7 +63,7 @@ describe('SearchableSelect', () => {
   })
 
   afterEach(() => {
-    wrapper?.unmount()
+    wrapper.unmount()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -292,7 +292,7 @@ describe('SearchableSelect', () => {
     fakeBackend({ 'GET /api/search': search })
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       const rect = this.tagName === 'UL' ? { top: 0, bottom: 200, height: 200 } : { top: 640, bottom: 676, height: 36 }
-      return { ...rect, left: 10, right: 210, width: 200, x: 10, y: rect.top, toJSON: () => ({}) } as DOMRect
+      return { ...rect, left: 10, right: 210, width: 200, x: 10, y: rect.top, toJSON: () => ({}) }
     })
     const input = render({ openOnFocus: true })
     await input.trigger('focus')

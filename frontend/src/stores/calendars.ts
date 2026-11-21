@@ -5,6 +5,7 @@ import { realtime } from '@/services/realtime'
 import { readStorage, writeStorage } from '@/services/storage'
 import { compareSiblings } from '@/services/sidebarDrag'
 import { hasRole } from '@/services/roles'
+import { nonEmpty } from '@/services/text'
 
 /** Selection of the calendar view: a calendar id, a folder id, or 'all'. It follows the URL. */
 export const ALL_CALENDARS = 'all'
@@ -116,7 +117,7 @@ export const useCalendarStore = defineStore('calendars', () => {
     if (id === ALL_CALENDARS) return '/calendar/all'
     if (folders.value.some((f) => f.id === id)) return `/calendar/folder/${id}`
     const calendar = calendarsById.value.get(id)
-    return `/calendar/${calendar?.url_path || id}`
+    return `/calendar/${nonEmpty(calendar?.url_path) ?? id}`
   }
 
   /** Loads calendars and folders; when loads overlap, only the latest one is applied. */

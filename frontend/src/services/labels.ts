@@ -3,6 +3,7 @@ import { i18n } from '@/i18n'
 import { allValues } from '@/utils/enums'
 import { formatDayMonth, weekdayName } from './datetime'
 import { reminderText } from './reminders'
+import { nonEmpty } from './text'
 import { matchingPreset, parseRrule, recurrenceDefaults, type RecurrencePreset } from './rrule'
 
 export const participantStatuses = allValues<ParticipantStatus>({
@@ -53,9 +54,13 @@ export function notificationText(notification: AppNotification): string {
     return reminderText(notification.title, notification.data.start, !!notification.data.all_day)
   }
   // Participants without an account answer by email or link; they are named by their address.
-  const actor = notification.actor_name || notification.data?.name || notification.data?.email || t('app.someone')
+  const actor =
+    nonEmpty(notification.actor_name) ??
+    nonEmpty(notification.data?.name) ??
+    nonEmpty(notification.data?.email) ??
+    t('app.someone')
   if (notification.type === 'participant_replied') {
-    const status = notification.data?.status as ParticipantStatus | undefined
+    const status = notification.data?.status
     return t(status ? replyKeys[status] : key, { actor, title: notification.title })
   }
   return t(key, { actor, title: notification.title })

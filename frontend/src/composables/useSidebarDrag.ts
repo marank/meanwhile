@@ -73,7 +73,7 @@ function typeOf(el: HTMLElement): NodeType | null {
 }
 
 function parentOf(el: HTMLElement): string | null {
-  return (el.parentElement as HTMLElement | null)?.dataset.folderId ?? null
+  return el.parentElement?.dataset.folderId ?? null
 }
 
 /** The rows on screen, top to bottom, without the dragged item and what is inside it. */
@@ -241,7 +241,7 @@ export function useSidebarDrag(
     point = { x: event.clientX, y: event.clientY }
     const moved = Math.hypot(point.x - press.startX, point.y - press.startY)
     if (moved > 8) press.moved = true
-    if (!active && press) {
+    if (!active) {
       if (press.pointerType === 'touch') {
         // Moving before the long press means scrolling.
         if (moved > 8) reset()
@@ -250,10 +250,8 @@ export function useSidebarDrag(
       }
       return
     }
-    if (active) {
-      moveGhost()
-      update()
-    }
+    moveGhost()
+    update()
   }
 
   function onPointerUp(event: PointerEvent) {

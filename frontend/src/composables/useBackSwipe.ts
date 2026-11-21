@@ -62,6 +62,7 @@ export function useBackSwipe(options: Options) {
   function begin(pointer: number) {
     const scroller = options.scroller.value!
     // The element the finger is on goes away with the page; the rest of the swipe comes to the scroller.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- jsdom has no pointer capture
     scroller.setPointerCapture?.(pointer)
     const rect = scroller.getBoundingClientRect()
     width = rect.width || 1

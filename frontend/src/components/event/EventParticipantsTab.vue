@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import * as api from '@/api'
 import { participantStatusLabel, participantStatuses } from '@/services/labels'
+import { nonEmpty } from '@/services/text'
 
 /** A participant added in the dialog but not saved yet; sent along when the event is saved. */
 export interface PendingParticipant {
@@ -71,11 +72,11 @@ const loading = computed(() => !!props.eventId && participants.value === null)
 /** Picking a user or entering an email address adds them to the list right away; saving sends them. */
 function add(value: string | null, user: api.SearchResult | null) {
   // Emptied after the field took the pick, so it sees the change and clears its text.
-  nextTick(() => (inputValue.value = null))
+  void nextTick(() => (inputValue.value = null))
   const picked = value?.trim()
   if (!picked) return
   // A picked user's value is their id; free text is an email address.
-  const email = user?.subtitle || picked
+  const email = nonEmpty(user?.subtitle) ?? picked
   if (items.value.some((item) => item.email.toLowerCase() === email.toLowerCase())) return
   // Removed and added again: the saved participant simply stays.
   const saved = participants.value?.find((p) => p.email.toLowerCase() === email.toLowerCase())
@@ -89,7 +90,7 @@ function add(value: string | null, user: api.SearchResult | null) {
       tempId: crypto.randomUUID(),
       user_id: user ? picked : undefined,
       email,
-      display_name: user?.label || email,
+      display_name: nonEmpty(user?.label) ?? email,
       status: 'needs_action',
     },
   ]

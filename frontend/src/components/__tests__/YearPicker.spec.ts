@@ -22,7 +22,7 @@ async function typeDigits(field: Pick<DOMWrapper<Element>, 'trigger'>, digits: s
   for (const key of digits) await field.trigger('keydown', { key })
 }
 
-afterEach(() => wrapper?.unmount())
+afterEach(() => wrapper.unmount())
 
 describe('YearPicker', () => {
   it('is a button, not a text field', () => {

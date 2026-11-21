@@ -37,7 +37,7 @@ const isResizing = ref(false)
 const scroller = ref<HTMLElement | null>(null)
 
 useLoader(store.load)
-useSidebarDrag(scroller, handleDrop, openHeldMenu)
+useSidebarDrag(scroller, (drop) => void handleDrop(drop), openHeldMenu)
 useEscapeToClose(
   () => sidebarDrawerOpen.value,
   () => (sidebarDrawerOpen.value = false),
@@ -66,7 +66,7 @@ function clampWidth(width: number): number {
 }
 
 function select(id: string) {
-  router.push(store.selectionPath(id))
+  void router.push(store.selectionPath(id))
 }
 
 // Drag and drop

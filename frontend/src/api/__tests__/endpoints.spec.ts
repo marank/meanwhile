@@ -104,7 +104,7 @@ const cases: Case[] = [
   ['listCategories', () => api.listCategories('c'), 'GET', '/api/calendars/c/categories'],
   [
     'createCategory',
-    () => api.createCategory('c', { name: 'A' } as never),
+    () => api.createCategory('c', { name: 'A' }),
     'POST',
     '/api/calendars/c/categories',
     {
@@ -113,7 +113,7 @@ const cases: Case[] = [
   ],
   [
     'updateCategory',
-    () => api.updateCategory('c', 'k', { name: 'B' } as never),
+    () => api.updateCategory('c', 'k', { name: 'B' }),
     'PATCH',
     '/api/calendars/c/categories/k',
     { name: 'B' },
@@ -122,7 +122,7 @@ const cases: Case[] = [
   ['listResources', () => api.listResources('c'), 'GET', '/api/calendars/c/resources'],
   [
     'createResource',
-    () => api.createResource('c', { name: 'R' } as never),
+    () => api.createResource('c', { name: 'R' }),
     'POST',
     '/api/calendars/c/resources',
     {
@@ -198,7 +198,7 @@ const cases: Case[] = [
   ['listEventParticipants', () => api.listEventParticipants('e'), 'GET', '/api/events/e/participants'],
   [
     'addEventParticipant',
-    () => api.addEventParticipant('e', { user_id: 'u' } as never),
+    () => api.addEventParticipant('e', { user_id: 'u' }),
     'POST',
     '/api/events/e/participants',
     { user_id: 'u' },
@@ -222,7 +222,7 @@ const cases: Case[] = [
   ['getAppSettings', () => api.getAppSettings(), 'GET', '/api/settings'],
   [
     'updateAppSettings',
-    () => api.updateAppSettings({ app_name: 'M' } as never),
+    () => api.updateAppSettings({ app_name: 'M' }),
     'PATCH',
     '/api/admin/settings',
     {
@@ -241,7 +241,7 @@ const cases: Case[] = [
   ],
   [
     'updateAdminUser',
-    () => api.updateAdminUser('u', { is_admin: true } as never),
+    () => api.updateAdminUser('u', { is_admin: true }),
     'PATCH',
     '/api/admin/users/u',
     {
@@ -255,11 +255,11 @@ const cases: Case[] = [
   ['unsubscribe', () => api.unsubscribe('t'), 'POST', '/api/unsubscribe/t'],
   ['resubscribe', () => api.resubscribe('t'), 'DELETE', '/api/unsubscribe/t'],
   ['listUserGroups', () => api.listUserGroups(), 'GET', '/api/groups'],
-  ['createUserGroup', () => api.createUserGroup({ name: 'G' } as never), 'POST', '/api/groups', { name: 'G' }],
+  ['createUserGroup', () => api.createUserGroup({ name: 'G' }), 'POST', '/api/groups', { name: 'G' }],
   ['getUserGroup', () => api.getUserGroup('g'), 'GET', '/api/groups/g'],
   [
     'updateUserGroup',
-    () => api.updateUserGroup('g', { name: 'H' } as never),
+    () => api.updateUserGroup('g', { name: 'H' }),
     'PATCH',
     '/api/groups/g',
     {
@@ -330,7 +330,7 @@ describe('api endpoints', () => {
   it('lists notifications of a group, or all', async () => {
     const backend = fakeBackend({ 'GET /api/notifications': [] })
     await api.listNotifications()
-    await api.listNotifications('approvals' as api.NotificationGroup, 10)
+    await api.listNotifications('approvals', 10)
     expect(Object.fromEntries(backend.requests[0]!.query)).toEqual({ limit: '50' })
     expect(Object.fromEntries(backend.requests[1]!.query)).toEqual({ limit: '10', group: 'approvals' })
   })

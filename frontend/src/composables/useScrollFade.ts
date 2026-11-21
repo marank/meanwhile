@@ -32,7 +32,7 @@ export function useScrollFade(scroller: Ref<HTMLElement | null>, axis: 'x' | 'y'
     [scroller, () => content?.value],
     ([el, inner], previous) => {
       // On the first run there is no previous value.
-      previous?.[0]?.removeEventListener('scroll', update)
+      previous[0]?.removeEventListener('scroll', update)
       resize?.disconnect()
       overflow.value = { start: false, end: false }
       if (!el) return

@@ -53,6 +53,27 @@ function compareEntries(a: AgendaEntry, b: AgendaEntry): number {
   return aAllDay - bAllDay || aStart - bStart || aTitle.localeCompare(bTitle)
 }
 
+function spanOf(index: number, dayCount: number): AgendaSpan {
+  if (dayCount === 1) return 'single'
+  if (index === 0) return 'first'
+  return index === dayCount - 1 ? 'last' : 'middle'
+}
+
+/** Lists an occurrence on each of its days from `firstDay` (inclusive) to `rangeEnd` (exclusive). */
+function addToDays(days: Map<string, AgendaDay>, occurrence: Occurrence, firstDay: Date, rangeEnd: Date) {
+  const [first, last] = occurrenceDays(occurrence)
+  const dayCount = Math.round((last.getTime() - first.getTime()) / DAY_MS) + 1
+  for (let index = 0; index < dayCount; index++) {
+    const date = addDays(first, index)
+    if (date < firstDay) continue
+    if (date >= rangeEnd) break
+    const key = dayKey(date)
+    const day = days.get(key) ?? { date, key, entries: [] }
+    days.set(key, day)
+    day.entries.push({ occurrence, span: spanOf(index, dayCount), dayIndex: index + 1, dayCount })
+  }
+}
+
 /**
  * The days from `rangeStart` (inclusive) to `rangeEnd` (exclusive) that have occurrences, in order. An event
  * over several days is listed on each of its days within the range.
@@ -60,24 +81,7 @@ function compareEntries(a: AgendaEntry, b: AgendaEntry): number {
 export function groupByDay(occurrences: Occurrence[], rangeStart: Date, rangeEnd: Date): AgendaDay[] {
   const days = new Map<string, AgendaDay>()
   const firstDay = startOfDay(rangeStart)
-  for (const occurrence of occurrences) {
-    const [first, last] = occurrenceDays(occurrence)
-    const dayCount = Math.round((last.getTime() - first.getTime()) / DAY_MS) + 1
-    for (let index = 0; index < dayCount; index++) {
-      const date = addDays(first, index)
-      if (date < firstDay) continue
-      if (date >= rangeEnd) break
-      const span: AgendaSpan =
-        dayCount === 1 ? 'single' : index === 0 ? 'first' : index === dayCount - 1 ? 'last' : 'middle'
-      const key = dayKey(date)
-      let day = days.get(key)
-      if (!day) {
-        day = { date, key, entries: [] }
-        days.set(key, day)
-      }
-      day.entries.push({ occurrence, span, dayIndex: index + 1, dayCount })
-    }
-  }
+  for (const occurrence of occurrences) addToDays(days, occurrence, firstDay, rangeEnd)
   const sorted = [...days.values()].sort((a, b) => a.date.getTime() - b.date.getTime())
   for (const day of sorted) day.entries.sort(compareEntries)
   return sorted

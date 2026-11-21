@@ -41,7 +41,7 @@ export function fakeBackend(routes: Record<string, Answer> = {}) {
   }
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = new URL(String(input), 'http://localhost')
+    const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
     const request: FakeRequest = {
       method: init.method ?? 'GET',
       path: decodeURIComponent(url.pathname),

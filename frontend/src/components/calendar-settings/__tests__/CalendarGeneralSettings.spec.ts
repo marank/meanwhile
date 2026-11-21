@@ -22,7 +22,7 @@ const colorMode = (wrapper: ReturnType<typeof render>, label: 'Preset' | 'Advanc
   wrapper.findAll('[role="radio"]').find((b) => b.text() === label)!
 
 function clickOption(text: string) {
-  ;[...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent!.trim() === text)!.click()
+  ;[...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent.trim() === text)!.click()
 }
 
 describe('calendar general settings', () => {

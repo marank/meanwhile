@@ -2,6 +2,7 @@ import { computed, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createAvailabilityCache, loadAvailability } from '@/services/availability'
 import { startOfDay } from '@/services/days'
+import { nonEmpty } from '@/services/text'
 import { useAuthStore } from '@/stores/auth'
 
 interface Person {
@@ -24,7 +25,7 @@ export function useEventAvailability(options: {
     const me = auth.user ? [{ id: auth.user.id, name: t('availability.me') }] : []
     const others = options.participants.value
       .filter((p) => p.user_id && p.user_id !== auth.user?.id)
-      .map((p) => ({ id: p.user_id!, name: p.display_name || p.email }))
+      .map((p) => ({ id: p.user_id!, name: nonEmpty(p.display_name) ?? p.email }))
     return [...me, ...others]
   })
   const cache = createAvailabilityCache()

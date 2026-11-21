@@ -58,17 +58,17 @@ async function openMenu(wrapper: Wrapper, row: number) {
 }
 
 async function chooseFromMenu(wrapper: Wrapper, row: number, label: string) {
-  const entry = (await openMenu(wrapper, row)).find((item) => item.textContent!.trim() === label)
+  const entry = (await openMenu(wrapper, row)).find((item) => item.textContent.trim() === label)
   if (!entry) throw new Error(`No menu entry ${label}`)
   entry.click()
   await flushPromises()
 }
 
-const menuLabels = (items: HTMLElement[]) => items.map((item) => item.textContent!.trim())
+const menuLabels = (items: HTMLElement[]) => items.map((item) => item.textContent.trim())
 
 function closeDialog() {
   ;[...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
-    .find((b) => b.textContent!.trim() === 'OK')!
+    .find((b) => b.textContent.trim() === 'OK')!
     .click()
 }
 

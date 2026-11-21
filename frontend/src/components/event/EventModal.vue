@@ -105,7 +105,7 @@ const { el: panel, minHeight: panelMinHeight } = useTallestHeight(activeTab)
 /** A changed occurrence of a series: it repeats with the series, not on its own. */
 const isException = computed(() => !!event.value?.parent_id)
 /** An occurrence of a series was opened; changes ask which occurrences they apply to. */
-const seriesOccurrence = computed(() => (event.value?.rrule && props.occurrence) || null)
+const seriesOccurrence = computed(() => (event.value?.rrule ? (props.occurrence ?? null) : null))
 
 const tabLabels: Record<Tab, () => string> = {
   details: () => t('event.details'),
@@ -135,7 +135,7 @@ const canModify = computed(
 const forceAllDay = computed(() => !!calendar.value?.force_all_day)
 // Only bookings (events with a resource) go through approval, so only they show a status.
 const bookingStatus = computed(() => {
-  const booking = event.value?.resource_id || event.value?.location_resource_id
+  const booking = event.value?.resource_id ?? event.value?.location_resource_id
   const status = booking ? event.value!.status : null
   return status && statusLabels[status] ? status : null
 })
@@ -190,7 +190,7 @@ onMounted(async () => {
   fillForm()
   // Shown early, the dialog had no title field to focus yet.
   if (loadingShown.value)
-    nextTick(() => panel.value?.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)')?.focus())
+    void nextTick(() => panel.value?.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)')?.focus())
   if (event.value?.rrule) loadRrule(event.value.rrule)
   if (event.value) {
     const eventId = event.value.id

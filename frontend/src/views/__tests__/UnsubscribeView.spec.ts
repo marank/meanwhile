@@ -33,7 +33,7 @@ beforeEach(() => {
   backend = fakeBackend({ 'GET /api/unsubscribe/tok-1': subscription(true) })
 })
 
-afterEach(() => wrapper?.unmount())
+afterEach(() => wrapper.unmount())
 
 describe('UnsubscribeView', () => {
   it('asks first, then stops that kind of email', async () => {

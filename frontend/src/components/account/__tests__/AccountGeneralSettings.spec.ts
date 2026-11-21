@@ -19,7 +19,7 @@ function render() {
 /** Opens the select at `index` and picks the option with `text`. */
 async function choose(wrapper: ReturnType<typeof render>, index: number, text: string) {
   await wrapper.findAll('[role="combobox"]')[index]!.trigger('click')
-  ;[...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent!.trim() === text)!.click()
+  ;[...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent.trim() === text)!.click()
   await flushPromises()
 }
 

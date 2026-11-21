@@ -29,7 +29,7 @@ beforeEach(() => {
   backend = fakeBackend()
 })
 
-afterEach(() => wrapper?.unmount())
+afterEach(() => wrapper.unmount())
 
 describe('ResetPasswordView', () => {
   describe('without a key', () => {

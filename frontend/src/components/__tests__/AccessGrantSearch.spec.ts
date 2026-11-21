@@ -53,7 +53,7 @@ describe('AccessGrantSearch', () => {
   })
 
   afterEach(() => {
-    wrapper?.unmount()
+    wrapper.unmount()
     vi.useRealTimers()
   })
 
@@ -146,12 +146,13 @@ describe('AccessGrantSearch', () => {
     fakeBackend({ 'GET /api/search': search })
     const input = render()
     const isOpen = () => wrapper.find('[role="listbox"]').exists()
-    for (const close of [
+    const closers: (() => unknown)[] = [
       () => input.trigger('keydown', { key: 'Escape' }),
       () => input.trigger('keydown', { key: 'Tab' }),
       () => document.body.click(),
       () => document.dispatchEvent(new Event('scroll')),
-    ]) {
+    ]
+    for (const close of closers) {
       await input.trigger('focus')
       await flushPromises()
       expect(isOpen()).toBe(true)

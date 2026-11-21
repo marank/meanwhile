@@ -2,7 +2,7 @@ function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`
   const parts = value.split(`; ${name}=`)
   if (parts.length === 2) {
-    return parts.pop()?.split(';').shift() || null
+    return parts.pop()?.split(';').shift() ?? null
   }
   return null
 }
@@ -30,7 +30,7 @@ export function setUnauthorizedHandler(handler: () => void) {
 }
 
 export async function api<T = unknown>(path: string, options: FetchOptions = {}): Promise<T> {
-  const method = options.method || 'GET'
+  const method = options.method ?? 'GET'
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && method !== 'HEAD') {

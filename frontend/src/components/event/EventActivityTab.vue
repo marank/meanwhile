@@ -5,6 +5,7 @@ import * as api from '@/api'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
 import { formatDateTime } from '@/services/datetime'
+import { nonEmpty } from '@/services/text'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
@@ -54,7 +55,7 @@ function occurrenceDate(entry: api.EventActivity): string {
 }
 
 function changedFields(entry: api.EventActivity): string {
-  return (entry.details?.fields || []).map((field) => t(`activity.field.${field}`)).join(', ')
+  return (entry.details?.fields ?? []).map((field) => t(`activity.field.${field}`)).join(', ')
 }
 
 // The text for each kind of entry; kinds the app doesn't know yet show their name.
@@ -81,7 +82,7 @@ const activityTexts: Record<string, (entry: api.EventActivity, name: string) => 
 
 function activityText(entry: api.EventActivity): string {
   const text = activityTexts[entry.action]
-  return text ? text(entry, entry.actor_name || t('app.someone')) : entry.action
+  return text ? text(entry, nonEmpty(entry.actor_name) ?? t('app.someone')) : entry.action
 }
 
 function canDelete(comment: api.EventComment): boolean {

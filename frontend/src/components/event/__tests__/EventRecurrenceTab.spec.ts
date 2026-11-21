@@ -53,7 +53,7 @@ function options(field: ReturnType<typeof combobox>) {
 async function pick(field: ReturnType<typeof combobox>, label: string) {
   await field.trigger('click')
   options(field)
-    .find((option) => option.textContent!.trim() === label)!
+    .find((option) => option.textContent.trim() === label)!
     .click()
   await nextTick()
 }
@@ -63,7 +63,7 @@ const button = (text: string) => wrapper.findAll('button').find((b) => b.text() 
 describe('EventRecurrenceTab', () => {
   beforeEach(() => signIn())
   afterEach(() => {
-    wrapper?.unmount()
+    wrapper.unmount()
     vi.restoreAllMocks()
   })
 
@@ -71,7 +71,7 @@ describe('EventRecurrenceTab', () => {
     render()
     expect(combobox().text()).toBe('Does not repeat')
     await combobox().trigger('click')
-    expect(options(combobox()).map((o) => o.textContent!.trim())).toEqual([
+    expect(options(combobox()).map((o) => o.textContent.trim())).toEqual([
       'Does not repeat',
       'Daily',
       'Every weekday (Mon–Fri)',

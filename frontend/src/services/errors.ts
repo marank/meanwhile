@@ -1,5 +1,6 @@
 import { ApiError } from '@/api'
 import { i18n } from '@/i18n'
+import { nonEmpty } from './text'
 
 type ErrorDetail = {
   detail?: unknown
@@ -14,7 +15,7 @@ function detailMessage(detail: unknown): string | null {
   if (typeof value.message === 'string') return value.message
   if (value.detail !== undefined) return detailMessage(value.detail)
   // django-allauth reports validation problems as a list.
-  const errors = value.errors?.map((item) => item.message || item.code).filter(Boolean)
+  const errors = value.errors?.map((item) => nonEmpty(item.message) ?? item.code).filter(Boolean)
   return errors?.length ? errors.join(', ') : null
 }
 

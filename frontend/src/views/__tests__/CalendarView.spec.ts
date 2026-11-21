@@ -148,7 +148,7 @@ describe('CalendarView', () => {
     // Wednesday, 14 October 2026, noon.
     vi.setSystemTime(new Date(2026, 9, 14, 12))
     vi.spyOn(realtime, 'setCalendars').mockImplementation(() => {})
-    Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo
+    Element.prototype.scrollTo = vi.fn()
     fullCalendar.reset()
     events = []
     backend = fakeBackend({

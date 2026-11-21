@@ -62,7 +62,7 @@ const openExisting = (props: Props = {}) => open({ eventId: 'ev1', ...props })
 
 // The dialog lives in <body>.
 const page = () => new DOMWrapper(document.body)
-const text = () => document.body.textContent!.replace(/\s+/g, ' ')
+const text = () => document.body.textContent.replace(/\s+/g, ' ')
 const button = (label: string) =>
   page()
     .findAll('button')
@@ -101,7 +101,7 @@ async function chooseOption(label: string, optionLabel: string) {
   await field(label).trigger('focus')
   await flushPromises()
   const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) =>
-    o.textContent!.includes(optionLabel),
+    o.textContent.includes(optionLabel),
   )!
   option.dispatchEvent(new MouseEvent('mouseup'))
   await flushPromises()
@@ -117,7 +117,7 @@ describe('EventModal', () => {
   })
 
   afterEach(() => {
-    wrapper?.unmount()
+    wrapper.unmount()
     vi.useRealTimers()
     if (dialog.open) submitDialog(null)
     vi.restoreAllMocks()

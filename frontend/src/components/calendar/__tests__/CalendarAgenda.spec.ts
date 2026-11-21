@@ -240,7 +240,7 @@ describe('CalendarAgenda', () => {
     expect(wrapper.findAll('button').some((b) => b.text() === 'New event')).toBe(false)
   })
 
-  it('jumps to the search with "/", but not while typing elsewhere or with a modifier', async () => {
+  it('jumps to the search with "/", but not while typing elsewhere or with a modifier', () => {
     const wrapper = render([])
     const other = document.createElement('input')
     document.body.append(other)

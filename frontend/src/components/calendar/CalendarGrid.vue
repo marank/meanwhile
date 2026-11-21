@@ -87,7 +87,7 @@ function handleDatesSet(info: DatesSetInfo) {
   // The week with today opens at the current time, an hour before it at the top; others at the usual 6:00.
   if (view.type === 'timeGridWeek' && now >= view.currentStart && now < view.currentEnd) {
     const hour = String(Math.max(0, now.getHours() - 1)).padStart(2, '0')
-    nextTick(() => getApi()?.scrollToTime(`${hour}:00`))
+    void nextTick(() => getApi()?.scrollToTime(`${hour}:00`))
   }
 }
 

@@ -8,7 +8,7 @@ let wrapper: VueWrapper
 
 const panel = () => document.querySelector<HTMLElement>('[role="dialog"]')
 const buttons = () => [...panel()!.querySelectorAll<HTMLButtonElement>('button')]
-const button = (text: string) => buttons().find((b) => b.textContent?.trim() === text)!
+const button = (text: string) => buttons().find((b) => b.textContent.trim() === text)!
 
 beforeEach(() => {
   i18n.global.locale.value = 'en'
@@ -30,7 +30,7 @@ describe('DialogHost', () => {
     await flushPromises()
     expect(panel()!.textContent).toContain('Notice')
     expect(panel()!.textContent).toContain('Saved.')
-    expect(buttons().map((b) => b.textContent?.trim())).toEqual(['', 'OK'])
+    expect(buttons().map((b) => b.textContent.trim())).toEqual(['', 'OK'])
     button('OK').click()
     await expect(answer).resolves.toBeUndefined()
     await flushPromises()
@@ -83,7 +83,7 @@ describe('DialogHost', () => {
       { value: 'all', label: 'All of them' },
     ])
     await flushPromises()
-    expect(buttons().some((b) => b.textContent?.trim() === 'OK')).toBe(false)
+    expect(buttons().some((b) => b.textContent.trim() === 'OK')).toBe(false)
     button('All of them').click()
     await expect(answer).resolves.toBe('all')
   })

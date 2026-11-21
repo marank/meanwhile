@@ -20,7 +20,7 @@ const isRegister = computed(() => props.mode === 'register')
 watch(
   () => [isRegister.value, settings.settings, settings.allowRegistration] as const,
   ([register, loaded, allowed]) => {
-    if (register && loaded && !allowed) router.replace('/login')
+    if (register && loaded && !allowed) void router.replace('/login')
   },
   { immediate: true },
 )
@@ -40,7 +40,7 @@ async function submit() {
     } else {
       await auth.login(email.value, password.value)
     }
-    router.push('/calendar')
+    await router.push('/calendar')
   } catch (e) {
     error.value = errorMessage(e, t('app.actionFailed'))
   } finally {

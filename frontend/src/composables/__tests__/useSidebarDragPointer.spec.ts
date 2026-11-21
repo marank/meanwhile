@@ -98,7 +98,7 @@ describe('dragging in the sidebar tree', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-      return rects.get((this as HTMLElement).dataset?.rect ?? '') ?? rect(0, 0, 0, 0)
+      return rects.get((this as HTMLElement).dataset.rect ?? '') ?? rect(0, 0, 0, 0)
     })
   })
 

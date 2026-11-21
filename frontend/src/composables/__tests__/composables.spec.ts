@@ -84,7 +84,7 @@ describe('useLoader', () => {
 describe('useMediaQuery', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('follows the media query until unmounted', async () => {
+  it('follows the media query until unmounted', () => {
     const listeners = new Set<(event: { matches: boolean }) => void>()
     vi.stubGlobal('matchMedia', () => ({
       matches: false,

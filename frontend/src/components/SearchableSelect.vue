@@ -89,7 +89,7 @@ const optionCount = computed(() => options.value.length + (freeTextValue.value ?
 
 // Loaded results change the list's height, and with it whether it fits below the field.
 watch([optionCount, loading], () => {
-  if (isOpen.value) nextTick(updatePosition)
+  if (isOpen.value) void nextTick(updatePosition)
 })
 
 function canSearch(q: string) {
@@ -129,7 +129,7 @@ function open() {
   if (props.disabled || isOpen.value) return
   isOpen.value = true
   activeIndex.value = -1
-  nextTick(updatePosition)
+  void nextTick(updatePosition)
 }
 
 function debouncedSearch(q: string) {
@@ -170,7 +170,7 @@ function onFocus() {
   const q = query.value.trim()
   if (props.openOnFocus || q.length >= props.minSearchLength) {
     open()
-    fetchResults(q)
+    void fetchResults(q)
   }
 }
 
@@ -202,21 +202,20 @@ function clear() {
   inputRef.value?.focus()
 }
 
+/** Moves the highlight one option down or up, opening the list first if it is closed. */
+function moveActive(step: 1 | -1) {
+  if (!isOpen.value) {
+    open()
+    void fetchResults(query.value.trim())
+  }
+  activeIndex.value =
+    step > 0 ? Math.min(activeIndex.value + 1, optionCount.value - 1) : Math.max(activeIndex.value - 1, 0)
+}
+
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'ArrowDown') {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault()
-    if (!isOpen.value) {
-      open()
-      fetchResults(query.value.trim())
-    }
-    activeIndex.value = Math.min(activeIndex.value + 1, optionCount.value - 1)
-  } else if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    if (!isOpen.value) {
-      open()
-      fetchResults(query.value.trim())
-    }
-    activeIndex.value = Math.max(activeIndex.value - 1, 0)
+    moveActive(event.key === 'ArrowDown' ? 1 : -1)
   } else if (event.key === 'Enter') {
     event.preventDefault()
     if (!isOpen.value) {
@@ -243,7 +242,7 @@ function onDocumentClick(event: MouseEvent) {
 }
 
 function onWindowResize() {
-  if (isOpen.value) updatePosition()
+  if (isOpen.value) void updatePosition()
 }
 
 // Scrolling the page would detach the fixed list from its input; scrolling the list itself is fine.
@@ -286,7 +285,7 @@ onMounted(() => {
   document.addEventListener('click', onDocumentClick)
   window.addEventListener('resize', onWindowResize)
   window.addEventListener('scroll', onScrollClose, true)
-  if (props.minSearchLength === 0) fetchResults('')
+  if (props.minSearchLength === 0) void fetchResults('')
 })
 
 onBeforeUnmount(() => {
@@ -296,7 +295,7 @@ onBeforeUnmount(() => {
   if (debounceTimer) clearTimeout(debounceTimer)
 })
 
-const displayPlaceholder = computed(() => props.placeholder || t('app.search'))
+const displayPlaceholder = computed(() => props.placeholder ?? t('app.search'))
 </script>
 
 <template>

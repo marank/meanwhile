@@ -22,7 +22,7 @@ const settings: api.AppSettings = {
 let backend: FakeBackend
 
 /** Picks `file` in a file input, as the browser would. */
-async function pickFile(input: HTMLInputElement, file: File) {
+function pickFile(input: HTMLInputElement, file: File) {
   Object.defineProperty(input, 'files', { value: [file], configurable: true })
   input.dispatchEvent(new Event('change'))
 }
@@ -58,7 +58,7 @@ describe('image upload field', () => {
 
   it('takes a picked file as a data URL', async () => {
     const wrapper = render(null)
-    await pickFile(
+    pickFile(
       wrapper.get('input[type="file"]').element as HTMLInputElement,
       new File(['hi'], 'logo.png', { type: 'image/png' }),
     )

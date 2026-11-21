@@ -35,7 +35,7 @@ async function openFromButton(open: { value: boolean }) {
   await nextTick()
 }
 
-afterEach(() => wrapper?.unmount())
+afterEach(() => wrapper.unmount())
 
 describe('AppModal', () => {
   it('is labelled by its title', async () => {

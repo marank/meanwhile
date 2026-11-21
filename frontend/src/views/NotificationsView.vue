@@ -57,6 +57,8 @@ function requestState(notification: AppNotification): string | null {
       return t('notifications.stateRejected')
     case 'cancelled':
       return t('notifications.stateCancelled')
+    // No status left: the event is gone.
+    case null:
     default:
       return t('notifications.stateDeleted')
   }

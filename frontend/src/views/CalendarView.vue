@@ -45,7 +45,7 @@ watch(
     else if (loaded) {
       const start = calendarStore.startSelection()
       calendarStore.select(start)
-      if (!props.eventId) router.replace({ path: calendarStore.selectionPath(start), query: route.query })
+      if (!props.eventId) void router.replace({ path: calendarStore.selectionPath(start), query: route.query })
     }
   },
   { immediate: true },
@@ -58,7 +58,7 @@ watch(
   ([id, loaded, calendar, folder]) => {
     if (!loaded || id === null) return
     if (id === ALL_CALENDARS || calendar || folder) calendarStore.rememberSelection(calendarStore.selectedId)
-    else router.replace('/calendar')
+    else void router.replace('/calendar')
   },
   { immediate: true },
 )
@@ -74,7 +74,7 @@ const nav = useCalendarNavigation({
   initial: parseCalendarQuery(route.query),
   firstWeekday: () => displaySettings.value.first_weekday,
   gridApi: () => gridRef.value?.getApi(),
-  load: eventStore.load,
+  load: (start, end, force) => void eventStore.load(start, end, force),
   scrollListToToday: () => agendaRef.value?.scrollToToday(),
 })
 const { listMode, listMonth, listEnd, stackMode, stackStart, gridStart, gridToolbar, shownToolbar } = nav

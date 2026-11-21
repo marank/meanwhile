@@ -41,7 +41,7 @@ describe('app settings store', () => {
 
   it('saves new settings', async () => {
     const store = useSettingsStore()
-    await expect(store.update({ app_name: '' } as never)).resolves.toMatchObject({ favicon_url: '/f.ico' })
+    await expect(store.update({ app_name: '' })).resolves.toMatchObject({ favicon_url: '/f.ico' })
     expect(store.appName).toBe('Meanwhile')
     expect(store.faviconUrl).toBe('/f.ico')
   })

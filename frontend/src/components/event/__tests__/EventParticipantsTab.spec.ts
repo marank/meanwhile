@@ -42,7 +42,7 @@ const pending = () => (wrapper.props() as { pending: PendingParticipant[] }).pen
 const removed = () => (wrapper.props() as { removed: string[] }).removed
 const groups = () =>
   wrapper.findAll('ul').map((ul) => [
-    ul.element.previousElementSibling!.textContent!.trim(),
+    ul.element.previousElementSibling!.textContent.trim(),
     ...ul.findAll('li').map((li) =>
       li
         .findAll('p')
@@ -67,7 +67,7 @@ describe('EventParticipantsTab', () => {
   })
 
   afterEach(() => {
-    wrapper?.unmount()
+    wrapper.unmount()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })

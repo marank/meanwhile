@@ -21,10 +21,10 @@ function render(props: Record<string, unknown> = {}) {
 
 // The list is teleported to <body>.
 function optionTexts(): string[] {
-  return [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent!.trim())
+  return [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent.trim())
 }
 
-afterEach(() => wrapper?.unmount())
+afterEach(() => wrapper.unmount())
 
 describe('AppSelect', () => {
   it('shows the selected label, or the placeholder without a match', () => {

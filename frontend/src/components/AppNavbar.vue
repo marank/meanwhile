@@ -7,6 +7,7 @@ import IconButton from '@/components/IconButton.vue'
 import NotificationsMenu from '@/components/NotificationsMenu.vue'
 import { useEscapeToClose } from '@/composables/useEscapeToClose'
 import { sidebarDrawerOpen } from '@/services/sidebarState'
+import { nonEmpty } from '@/services/text'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useSettingsStore } from '@/stores/settings'
@@ -60,7 +61,7 @@ onBeforeUnmount(() => {
 const unreadBadge = computed(() => (notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount)))
 
 const initials = computed(() =>
-  (auth.user?.display_name || auth.user?.email || '')
+  (nonEmpty(auth.user?.display_name) ?? auth.user?.email ?? '')
     .split(' ')
     .map((part) => part[0])
     .join('')
@@ -71,7 +72,7 @@ const initials = computed(() =>
 function navigate(path: string) {
   menuOpen.value = false
   notificationsOpen.value = false
-  router.push(path)
+  void router.push(path)
 }
 
 async function logout() {

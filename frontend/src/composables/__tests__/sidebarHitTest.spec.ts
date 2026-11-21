@@ -28,6 +28,23 @@ function build(root: Spec[]) {
   const rects = new Map<Element, DOMRect>()
   let y = 8
 
+  /** A folder: its header row, then its entries, which take no height while it or a parent is collapsed. */
+  function placeFolder(spec: Spec, el: HTMLElement, left: number, hidden: boolean) {
+    const top = y
+    const header = document.createElement('div')
+    el.append(header)
+    rects.set(header, rect(left, top, WIDTH - left, hidden ? 0 : ROW))
+    if (!hidden) y += ROW + GAP
+    const children = document.createElement('div')
+    children.dataset.folderId = spec.id
+    el.append(children)
+    const childrenTop = y
+    const childrenHidden = hidden || !!spec.collapsed
+    place(spec.children ?? [], children, left + 16, childrenHidden)
+    rects.set(children, rect(left + 16, childrenTop, WIDTH - left - 16, childrenHidden ? 0 : y - childrenTop))
+    rects.set(el, rect(left, top, WIDTH - left, hidden ? 0 : y - top - GAP))
+  }
+
   function place(specs: Spec[], parent: HTMLElement, left: number, hidden: boolean) {
     for (const spec of specs) {
       const el = document.createElement('div')
@@ -35,25 +52,10 @@ function build(root: Spec[]) {
       el.dataset.type = spec.type
       el.dataset.id = spec.id
       parent.append(el)
-      const top = y
-      const rowHeight = hidden ? 0 : ROW
       if (spec.type === 'folder') {
-        const header = document.createElement('div')
-        el.append(header)
-        rects.set(header, rect(left, top, WIDTH - left, rowHeight))
-        if (!hidden) y += ROW + GAP
-        const children = document.createElement('div')
-        children.dataset.folderId = spec.id
-        el.append(children)
-        const childrenTop = y
-        place(spec.children ?? [], children, left + 16, hidden || !!spec.collapsed)
-        rects.set(
-          children,
-          rect(left + 16, childrenTop, WIDTH - left - 16, hidden || spec.collapsed ? 0 : y - childrenTop),
-        )
-        rects.set(el, rect(left, top, WIDTH - left, hidden ? 0 : y - top - GAP))
+        placeFolder(spec, el, left, hidden)
       } else {
-        rects.set(el, rect(left, top, WIDTH - left, rowHeight))
+        rects.set(el, rect(left, y, WIDTH - left, hidden ? 0 : ROW))
         if (!hidden) y += ROW + GAP
       }
     }

@@ -27,10 +27,11 @@ export const useAuthStore = defineStore('auth', () => {
   // the session is really gone: if it is, the request fails with 401 and the unauthorized handler signs out;
   // otherwise connect again, though not more than once a minute should the socket keep refusing.
   let lastRestart = 0
-  const stopListening = realtime.on('unauthenticated', async () => {
+  async function recheckSession() {
     if (!user.value) return
     try {
       const current = await api.me()
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- may have signed out during the await
       if (user.value?.id === current.id) user.value = current
     } catch (error) {
       if (error instanceof api.ApiError && error.status === 401) return
@@ -42,7 +43,8 @@ export const useAuthStore = defineStore('auth', () => {
       lastRestart = Date.now()
       realtime.start()
     }, wait)
-  })
+  }
+  const stopListening = realtime.on('unauthenticated', () => void recheckSession())
   onScopeDispose(stopListening)
 
   // The server reads times that calendar apps send without a zone in the user's zone, and
