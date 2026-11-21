@@ -3,19 +3,20 @@ Live updates over WebSockets, through the ASGI application the server runs.
 """
 
 import base64
+import contextlib
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 import pytest
 from channels.db import database_sync_to_async
-from channels.testing import HttpCommunicator, WebsocketCommunicator
 from django.db import transaction
 from django.test import Client
 
-from apps.core.models import Calendar, CalendarMember, Event, Notification, User
+from apps.core.models import AppPassword, Calendar, CalendarMember, Event, Notification, User
+from apps.core.services import app_passwords
 from apps.core.services.reminders import deliver_due_reminders
+from apps.core.tests.asgi import HttpCommunicator, WebsocketCommunicator
 from apps.core.tests.helpers import Response
-from config.asgi import application
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
@@ -34,6 +35,7 @@ class Team(TypedDict):
 def team() -> Team:
     owner = User.objects.create_user(email="owner@example.test", password="pw", display_name="Owner")
     other = User.objects.create_user(email="other@example.test", password="pw", display_name="Other")
+    AppPassword.objects.create(user=owner, label="Tests", token_hash=app_passwords.token_hash("app-token"))
     calendar = Calendar.objects.create(name="Team", owner=owner)
     CalendarMember.objects.create(calendar=calendar, user=owner, role="owner")
     private = Calendar.objects.create(name="Private", owner=other)
@@ -53,7 +55,7 @@ def socket(session: str | None = None, origin: bytes = ORIGIN) -> WebsocketCommu
     headers = [(b"host", b"localhost:8000"), (b"origin", origin)]
     if session:
         headers.append((b"cookie", f"sessionid={session}".encode()))
-    return WebsocketCommunicator(application, "/ws/", headers=headers)
+    return WebsocketCommunicator("/ws/", headers=headers)
 
 
 async def connected(team: Team) -> WebsocketCommunicator:
@@ -149,22 +151,22 @@ async def test_changes_rolled_back_are_not_announced(team: Team) -> None:
     communicator = await connected(team)
     await subscribe(communicator, team["calendar"].id)
 
+    def create_and_fail() -> None:
+        with transaction.atomic():
+            Event.objects.create(
+                calendar=team["calendar"],
+                creator=team["owner"],
+                title="Gone",
+                uid="gone",
+                start=datetime(2030, 1, 7, 9, tzinfo=UTC),
+                end=datetime(2030, 1, 7, 10, tzinfo=UTC),
+            )
+            raise RuntimeError
+
     @database_sync_to_async
     def rolled_back() -> None:
-        with transaction.atomic():
-            try:
-                with transaction.atomic():
-                    Event.objects.create(
-                        calendar=team["calendar"],
-                        creator=team["owner"],
-                        title="Gone",
-                        uid="gone",
-                        start=datetime(2030, 1, 7, 9, tzinfo=UTC),
-                        end=datetime(2030, 1, 7, 10, tzinfo=UTC),
-                    )
-                    raise RuntimeError
-            except RuntimeError:
-                pass
+        with transaction.atomic(), contextlib.suppress(RuntimeError):
+            create_and_fail()
         # A later change still goes out.
         Event.objects.create(
             calendar=team["calendar"],
@@ -239,9 +241,8 @@ async def test_bad_messages_are_answered_not_fatal(team: Team) -> None:
 
 
 async def test_caldav_is_served_through_asgi(team: Team) -> None:
-    auth = base64.b64encode(b"owner@example.test:pw")
+    auth = base64.b64encode(b"owner@example.test:app-token")
     communicator = HttpCommunicator(
-        application,
         "PROPFIND",
         "/caldav/owner@example.test/",
         body=b'<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>',
@@ -251,7 +252,7 @@ async def test_caldav_is_served_through_asgi(team: Team) -> None:
     assert response["status"] == 207
     assert f"{team['calendar'].id}/".encode() in response["body"]
 
-    communicator = HttpCommunicator(application, "GET", "/api/users/me", headers=[(b"host", b"localhost:8000")])
+    communicator = HttpCommunicator("GET", "/api/users/me", headers=[(b"host", b"localhost:8000")])
     assert (await communicator.get_response())["status"] == 401
     # Django waits for the client to go away after answering, as a real one would.
     await communicator.send_input({"type": "http.disconnect"})

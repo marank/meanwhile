@@ -27,6 +27,8 @@ from typing import Any, cast
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.base import SessionBase
 
 from apps.core.models import Calendar, User, as_uuid
@@ -64,7 +66,8 @@ class LiveUpdatesConsumer(AsyncWebsocketConsumer):
         self.user: User | None = None
         self.calendars: set[str] = set()
         self.groups_joined: set[str] = set()
-        user = self.scope.get("user")
+        # The stubs know only a signed-in user here; behind AuthMiddlewareStack it may be anonymous.
+        user: AbstractBaseUser | AnonymousUser | None = self.scope.get("user")
         if user is None or not user.is_authenticated or not user.is_active:
             # Accept first so the browser sees the close code instead of a failed handshake.
             await self.accept()

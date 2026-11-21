@@ -15,7 +15,7 @@ ARG SUPERVISOR_VERSION=4.3.0
 FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS frontend
 
 WORKDIR /frontend
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 # pnpm in the version of packageManager in package.json (the one place it is set).
 RUN npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")" \
  && pnpm install --frozen-lockfile

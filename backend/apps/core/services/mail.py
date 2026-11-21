@@ -363,31 +363,39 @@ def _before(value: str) -> str:
 
 
 def _card_html(card: EventCard) -> str:
-    out = []
-    if card.notice:
-        background, color = _NOTICE_TONES[card.notice_tone]
-        out.append(
-            f'<div class="mw-notice mw-notice-{card.notice_tone}" style="padding:12px 28px;background:{background};'
-            f'color:{color};font-size:14px;font-weight:600;border-radius:12px 12px 0 0;{_WRAP}">'
-            f"{escape(card.notice)}</div>"
+    """The card from top to bottom; the parts an email has no use for are left out."""
+    return "".join(
+        (
+            _notice_html(card),
+            f'<div style="padding:28px">{_card_main_html(card)}</div>',
+            _answers_html(card),
+            _view_html(card),
         )
-    title_style = "text-decoration:line-through;opacity:0.6;" if card.struck else ""
-    tile = (
-        '<table class="mw-tile" role="presentation" cellpadding="0" cellspacing="0" width="56" '
-        'style="width:56px;border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate">'
-        '<tr><td style="padding:2px 0;background:#2563eb;border-radius:7px 7px 0 0;color:#ffffff;font-size:11px;'
-        f'font-weight:600;line-height:16px;text-align:center;letter-spacing:0.05em">{escape(card.when.month)}</td></tr>'
-        '<tr><td class="mw-heading" style="padding:4px 0;color:#111827;font-size:20px;font-weight:600;'
-        f'line-height:28px;text-align:center">{card.when.day}</td></tr></table>'
     )
-    when_lines = [f'<div class="mw-value" style="color:#111827;font-weight:600;{_WRAP}">{escape(card.when.date)}</div>']
-    when_lines += [
-        f'<div class="mw-text" style="color:#4b5563;{_WRAP}">{escape(line)}</div>'
-        for line in (card.when.time, card.repeats)
-        if line
+
+
+def _notice_html(card: EventCard) -> str:
+    """The coloured line on top that says what happened, if anything did."""
+    if not card.notice:
+        return ""
+    background, color = _NOTICE_TONES[card.notice_tone]
+    return (
+        f'<div class="mw-notice mw-notice-{card.notice_tone}" style="padding:12px 28px;background:{background};'
+        f'color:{color};font-size:14px;font-weight:600;border-radius:12px 12px 0 0;{_WRAP}">'
+        f"{escape(card.notice)}</div>"
+    )
+
+
+def _card_main_html(card: EventCard) -> str:
+    """What the event is: kicker, title, time, labelled rows and description, each with what a change replaced."""
+    main = [
+        '<p class="mw-label" style="margin:0;color:#6b7280;font-size:12px;font-weight:600;line-height:16px;'
+        f'letter-spacing:0.05em;text-transform:uppercase;{_WRAP}">{escape(card.kicker)}</p>',
+        _heading_html(card),
+        f'<table role="presentation" cellpadding="0" cellspacing="0" style="{_SMALL}"><tr>'
+        f'<td style="vertical-align:top;padding-right:16px">{_tile_html(card.when)}</td>'
+        f'<td style="vertical-align:top">{_when_html(card)}</td></tr></table>',
     ]
-    if "when" in card.previous:
-        when_lines.append(_before(card.previous["when"]))
     rows = "".join(
         '<tr><td class="mw-label" style="padding:3px 16px 3px 0;color:#6b7280;vertical-align:top;white-space:nowrap">'
         f"{escape(label)}</td>"
@@ -395,21 +403,6 @@ def _card_html(card: EventCard) -> str:
         f"{_before(card.previous[label]) if label in card.previous else ''}</td></tr>"
         for label, value in card.rows
     )
-    old_title = card.previous.get("title")
-    heading = (
-        f'<h1 class="mw-heading" style="margin:4px 0 {0 if old_title is not None else 20}px;color:#111827;'
-        f'font-size:24px;font-weight:600;line-height:32px;{title_style}{_WRAP}">{escape(card.title)}</h1>'
-    )
-    if old_title is not None:
-        heading += f'<div style="margin:0 0 20px">{_before(old_title)}</div>'
-    main = [
-        '<p class="mw-label" style="margin:0;color:#6b7280;font-size:12px;font-weight:600;line-height:16px;'
-        f'letter-spacing:0.05em;text-transform:uppercase;{_WRAP}">{escape(card.kicker)}</p>',
-        heading,
-        f'<table role="presentation" cellpadding="0" cellspacing="0" style="{_SMALL}"><tr>'
-        f'<td style="vertical-align:top;padding-right:16px">{tile}</td>'
-        f'<td style="vertical-align:top">{"".join(when_lines)}</td></tr></table>',
-    ]
     if rows:
         main.append(
             '<table role="presentation" cellpadding="0" cellspacing="0" '
@@ -421,42 +414,88 @@ def _card_html(card: EventCard) -> str:
             f'color:#374151;white-space:pre-line;{_SMALL};{_WRAP}">{escape(card.description)}'
             f"{_before(card.previous['description']) if 'description' in card.previous else ''}</div>"
         )
-    out.append(f'<div style="padding:28px">{"".join(main)}</div>')
+    return "".join(main)
 
-    if card.answers:
-        width = f"{100 // len(card.answers)}%"
-        cells = "".join(
-            f'<td width="{width}" style="padding:0 {4 if i < len(card.answers) - 1 else 0}px 0 {4 if i else 0}px">'
-            f"{_button(link, 'block')}</td>"
-            for i, link in enumerate(card.answers)
-        )
-        hint = (
-            f'<p class="mw-label" style="margin:12px 0 0;color:#6b7280;font-size:12px;line-height:16px">'
-            f"{escape(card.answers_hint)}</p>"
-            if card.answers_hint
-            else ""
-        )
-        out.append(
-            '<div class="mw-band" style="padding:20px 28px;background:#f9fafb;border-top:1px solid #e5e7eb">'
-            f'<p class="mw-heading" style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600">'
-            f"{escape(card.answers_heading)}</p>"
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{cells}</tr></table>'
-            f"{hint}</div>"
-        )
-    if card.invited_as or card.view:
-        # One below the other: side by side, a long address would make the email wider than a phone.
-        view = f'<div style="margin:0 0 8px">{_button(card.view, "alone")}</div>' if card.view else ""
-        invited = (
-            f'<div class="mw-label" style="color:#6b7280;font-size:12px;line-height:16px;{_WRAP}">'
-            f"{escape(card.invited_as)}</div>"
-            if card.invited_as
-            else ""
-        )
-        out.append(
-            '<div class="mw-rule" style="padding:16px 28px;border-top:1px solid #e5e7eb;text-align:center">'
-            f"{view}{invited}</div>"
-        )
-    return "".join(out)
+
+def _heading_html(card: EventCard) -> str:
+    """The title, struck through when called off; a changed one with the old title below it."""
+    title_style = "text-decoration:line-through;opacity:0.6;" if card.struck else ""
+    old_title = card.previous.get("title")
+    heading = (
+        f'<h1 class="mw-heading" style="margin:4px 0 {0 if old_title is not None else 20}px;color:#111827;'
+        f'font-size:24px;font-weight:600;line-height:32px;{title_style}{_WRAP}">{escape(card.title)}</h1>'
+    )
+    if old_title is not None:
+        heading += f'<div style="margin:0 0 20px">{_before(old_title)}</div>'
+    return heading
+
+
+def _tile_html(when: When) -> str:
+    """The leaf of a tear-off calendar: month on a blue strip, the day below."""
+    return (
+        '<table class="mw-tile" role="presentation" cellpadding="0" cellspacing="0" width="56" '
+        'style="width:56px;border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate">'
+        '<tr><td style="padding:2px 0;background:#2563eb;border-radius:7px 7px 0 0;color:#ffffff;font-size:11px;'
+        f'font-weight:600;line-height:16px;text-align:center;letter-spacing:0.05em">{escape(when.month)}</td></tr>'
+        '<tr><td class="mw-heading" style="padding:4px 0;color:#111827;font-size:20px;font-weight:600;'
+        f'line-height:28px;text-align:center">{when.day}</td></tr></table>'
+    )
+
+
+def _when_html(card: EventCard) -> str:
+    """Beside the tile: the date, the time and how it repeats, and the time a change replaced."""
+    when_lines = [f'<div class="mw-value" style="color:#111827;font-weight:600;{_WRAP}">{escape(card.when.date)}</div>']
+    when_lines += [
+        f'<div class="mw-text" style="color:#4b5563;{_WRAP}">{escape(line)}</div>'
+        for line in (card.when.time, card.repeats)
+        if line
+    ]
+    if "when" in card.previous:
+        when_lines.append(_before(card.previous["when"]))
+    return "".join(when_lines)
+
+
+def _answers_html(card: EventCard) -> str:
+    """The band with the answer buttons side by side, in equal widths, if the email asks for one."""
+    if not card.answers:
+        return ""
+    width = f"{100 // len(card.answers)}%"
+    cells = "".join(
+        f'<td width="{width}" style="padding:0 {4 if i < len(card.answers) - 1 else 0}px 0 {4 if i else 0}px">'
+        f"{_button(link, 'block')}</td>"
+        for i, link in enumerate(card.answers)
+    )
+    hint = (
+        f'<p class="mw-label" style="margin:12px 0 0;color:#6b7280;font-size:12px;line-height:16px">'
+        f"{escape(card.answers_hint)}</p>"
+        if card.answers_hint
+        else ""
+    )
+    return (
+        '<div class="mw-band" style="padding:20px 28px;background:#f9fafb;border-top:1px solid #e5e7eb">'
+        f'<p class="mw-heading" style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600">'
+        f"{escape(card.answers_heading)}</p>"
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{cells}</tr></table>'
+        f"{hint}</div>"
+    )
+
+
+def _view_html(card: EventCard) -> str:
+    """At the bottom: the button into the app and whom the invitation went to."""
+    if not (card.invited_as or card.view):
+        return ""
+    # One below the other: side by side, a long address would make the email wider than a phone.
+    view = f'<div style="margin:0 0 8px">{_button(card.view, "alone")}</div>' if card.view else ""
+    invited = (
+        f'<div class="mw-label" style="color:#6b7280;font-size:12px;line-height:16px;{_WRAP}">'
+        f"{escape(card.invited_as)}</div>"
+        if card.invited_as
+        else ""
+    )
+    return (
+        '<div class="mw-rule" style="padding:16px 28px;border-top:1px solid #e5e7eb;text-align:center">'
+        f"{view}{invited}</div>"
+    )
 
 
 def _html(

@@ -23,10 +23,11 @@ setup-frontend:
 
 # --- Development ----------------------------------------------------------------------
 
-# Django on :8000 (SQLite in backend/data, jobs in-process, no worker); applies migrations first
+# Django on :8000 under uvicorn like production, restarting on changes (SQLite in backend/data,
+# jobs in-process, no worker); applies migrations first
 [working-directory: 'backend']
 dev-backend: migrate
-    uv run python manage.py runserver
+    uv run uvicorn config.asgi:application --reload --port 8000
 
 # Vite on :6326, proxying the backend's paths to Django
 [working-directory: 'frontend']
@@ -81,13 +82,14 @@ sync-env:
 # Everything CI checks; must pass before a push
 check: check-backend check-deploy check-frontend check-workflows
 
-# ruff, mypy, deptry, import layers, licenses, migrations, Django checks, translations, OpenAPI, tests
+# ruff, mypy, complexipy, deptry, import layers, licenses, migrations, Django checks, translations, OpenAPI, tests
 [working-directory: 'backend']
 check-backend:
     uv sync --locked
     uv run ruff check --output-format=concise .
     uv run ruff format --check .
     uv run mypy .
+    uv run complexipy --failed apps config
     uv run deptry .
     uv run lint-imports
     uv run python scripts/check_licenses.py
@@ -116,6 +118,12 @@ check-frontend:
     pnpm check:licenses
     pnpm audit --prod --audit-level high
 
+# Python, Debian, Node.js, PostgreSQL, Django: fails 180 days before their support ends.
+# Not in `check`: it needs the network and its result changes with the date (weekly in CI).
+[working-directory: 'backend']
+check-eol:
+    uv run --no-project python scripts/check_eol.py
+
 # GitHub workflows: syntax (actionlint) and security (zizmor)
 check-workflows:
     uvx --from actionlint-py==1.7.12.25 actionlint
@@ -127,10 +135,6 @@ check-workflows:
 docker-up $APP_IMAGE="meanwhile":
     docker build -t meanwhile .
     docker compose up -d
-
-# The whole development stack in Docker (compose.dev.yml, http://localhost:6326)
-docker-dev:
-    docker compose -f compose.dev.yml up --build
 
 # Dump the database now (the worker does it nightly)
 docker-backup:

@@ -42,14 +42,6 @@
       "isBackground": true,
       "problemMatcher": []
     },
-    {
-      "label": "dev: docker stack",
-      "detail": "The whole development stack in Docker (http://localhost:6326)",
-      "type": "shell",
-      "command": "just docker-dev",
-      "isBackground": true,
-      "problemMatcher": []
-    },
     { "label": "setup", "detail": "Install all dependencies", "type": "shell", "command": "just setup", "problemMatcher": [] },
     {
       "label": "check",

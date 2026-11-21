@@ -14,7 +14,6 @@ from wsgiref.util import setup_testing_defaults
 from zoneinfo import ZoneInfo
 
 import pytest
-from django.contrib.auth.hashers import check_password, make_password
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from icalendar.error import GloballyUniqueTZIDGuessed
@@ -22,11 +21,15 @@ from icalendar.error import GloballyUniqueTZIDGuessed
 from apps.core.caldav import auth
 from apps.core.caldav.app import create_application
 from apps.core.models import AppPassword, Calendar, CalendarMember, Event, FeedToken, User
+from apps.core.services import app_passwords
 
 # The CalDAV app tidies up the database connection after every request, which a test transaction can't survive.
 pytestmark = pytest.mark.django_db(transaction=True)
 
-PASSWORD = "secret-pw"
+# CalDAV clients sign in with an app password; each user of `team` has one with this token.
+PASSWORD = "app-token"
+# The account password, which only the web app takes.
+ACCOUNT_PASSWORD = "account-pw"
 
 # Mounted under the CalDAV path, as config/asgi.py does.
 PREFIX = "/caldav"
@@ -49,7 +52,8 @@ def dav(
     environ["wsgi.input"] = io.BytesIO(data)
     if user is not None:
         login = user if isinstance(user, str) else user.email
-        environ["HTTP_AUTHORIZATION"] = "Basic " + base64.b64encode(f"{login}:{password}".encode()).decode()
+        token = password + login if password == PASSWORD else password
+        environ["HTTP_AUTHORIZATION"] = "Basic " + base64.b64encode(f"{login}:{token}".encode()).decode()
     for name, value in headers.items():
         environ["HTTP_" + name.upper()] = value
     response: dict[str, Any] = {}
@@ -117,9 +121,13 @@ class Team(TypedDict):
 @pytest.fixture
 def team() -> Team:
     users = {
-        name: User.objects.create_user(email=f"{name}@example.test", password=PASSWORD, display_name=name.title())
+        name: User.objects.create_user(
+            email=f"{name}@example.test", password=ACCOUNT_PASSWORD, display_name=name.title()
+        )
         for name in ("owner", "own", "read", "outsider")
     }
+    for user in users.values():
+        AppPassword.objects.create(user=user, label="Tests", token_hash=app_passwords.token_hash(PASSWORD + user.email))
     calendar = Calendar.objects.create(name="Team", owner=users["owner"])
     for name, role in (("owner", "owner"), ("own", "own"), ("read", "read")):
         CalendarMember.objects.create(calendar=calendar, user=users[name], role=role)
@@ -170,18 +178,27 @@ def login(email: str, password: str) -> bool:
 
 def test_deactivated_users_cannot_log_in(team: Team) -> None:
     user = team["users"]["read"]
-    assert login(user.email, PASSWORD)
+    assert login(user.email, PASSWORD + user.email)
     user.is_active = False
     user.save()
-    assert not login(user.email, PASSWORD)
+    assert not login(user.email, PASSWORD + user.email)
 
 
-def test_app_passwords_replace_the_account_password(team: Team) -> None:
+def test_only_app_passwords_sign_in_not_the_account_password(team: Team) -> None:
     user = team["users"]["read"]
-    AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
-    assert login(user.email, "app-pw")
-    assert not login(user.email, PASSWORD)
-    assert AppPassword.objects.get(user=user).last_used_at is not None
+    app_password, token = app_passwords.create(user, "Phone")
+    assert login(user.email, token)
+    assert login(user.email.upper(), token)
+    assert not login(user.email, ACCOUNT_PASSWORD)
+    app_password.refresh_from_db()
+    assert app_password.last_used_at is not None
+    # Only the token's hash is kept.
+    assert token not in app_password.token_hash
+
+
+def test_an_app_password_signs_in_only_its_own_user(team: Team) -> None:
+    _, token = app_passwords.create(team["users"]["read"], "Phone")
+    assert not login(team["users"]["owner"].email, token)
 
 
 def test_requests_are_answered_for_valid_credentials_only(team: Team) -> None:
@@ -278,7 +295,7 @@ def test_events_from_the_app_are_found_by_uid(team: Team) -> None:
 def changes(xml: str) -> dict[str, str]:
     """href -> "found" or "deleted" from a sync-collection answer."""
     result = {}
-    for response in re.findall(r"<response>(.*?)</response>", xml, re.S):
+    for response in re.findall(r"<response>(.*?)</response>", xml, re.DOTALL):
         match = re.search(r"<href>([^<]*)</href>", response)
         assert match is not None
         href = unquote(match.group(1))
@@ -851,31 +868,20 @@ def propfind_queries(team: Team) -> int:
 
 def test_listing_a_calendar_costs_the_same_for_more_events(team: Team) -> None:
     add_events(team, range(5))
+    propfind_queries(team)  # the first request notes when the app password was last used
     few = propfind_queries(team)
     add_events(team, range(5, 55))
     assert propfind_queries(team) == few
 
 
-def test_a_password_is_checked_once_and_a_deleted_app_password_stops_working(
-    team: Team, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_deleted_app_password_stops_working(team: Team) -> None:
     user = team["users"]["owner"]
-    app_password = AppPassword.objects.create(user=user, label="Phone", password_hash=make_password("app-pw"))
-    checks: list[str] = []
-
-    def counted_check(password: str, encoded: str) -> bool:
-        checks.append(password)
-        return check_password(password, encoded)
-
-    monkeypatch.setattr(auth, "check_password", counted_check)
-
-    for _ in range(3):
-        assert dav("PROPFIND", team["path"], user, password="app-pw", DEPTH="0")[0] == 207
-    assert len(checks) == 1
+    app_password, token = app_passwords.create(user, "Phone")
+    assert dav("PROPFIND", team["path"], user, password=token, DEPTH="0")[0] == 207
     assert dav("PROPFIND", team["path"], user, password="wrong", DEPTH="0")[0] == 401
 
     app_password.delete()
-    assert dav("PROPFIND", team["path"], user, password="app-pw", DEPTH="0")[0] == 401
+    assert dav("PROPFIND", team["path"], user, password=token, DEPTH="0")[0] == 401
 
 
 def test_failed_logins_are_limited_like_the_web_login(team: Team) -> None:

@@ -86,7 +86,9 @@ def _zone_like(zone_info: tzinfo, around: datetime, preferred: str) -> str | Non
     samples = tuple(around.replace(tzinfo=None) + timedelta(days=15 * k) for k in range(-4, 50))
     try:
         offsets = tuple(zone_info.utcoffset(sample) for sample in samples)
-    except Exception:
+    # The zone comes from the client's own VTIMEZONE rules; whatever fails in them only means
+    # no IANA zone matches, and the event falls back to UTC.
+    except Exception:  # noqa: BLE001
         return None
     return _zone_with_offsets(offsets, samples, preferred)
 
@@ -145,22 +147,14 @@ class EventData(TypedDict):
     alarms: list[int] | None
 
 
-def component_data(vevent: Any, floating: str) -> EventData:
-    """The fields of one VEVENT, with ends stored the way the app does (inclusive for all-day events).
-
-    `floating`: the zone (IANA name) for times that come without one.
-    """
+def _span(vevent: Any, floating: str) -> tuple[datetime, datetime, bool]:
+    """Start and end in UTC, and whether the event lasts whole days; the end stored the way the app
+    does (inclusive for all-day events)."""
     if not hasattr(vevent, "dtstart"):
         raise ValueError("VEVENT without DTSTART")
     dtstart = vevent.dtstart.value
     all_day = isinstance(dtstart, date) and not isinstance(dtstart, datetime)
-    if hasattr(vevent, "dtend"):
-        dtend = vevent.dtend.value
-    elif hasattr(vevent, "duration"):
-        dtend = dtstart + vevent.duration.value
-    else:
-        # RFC 5545: without an end, an all-day event lasts its day and a timed event no time at all.
-        dtend = dtstart + timedelta(days=1) if all_day else dtstart
+    dtend = _end_value(vevent, dtstart, all_day)
 
     naive_zone = _naive_zone(vevent.dtstart, floating)
     start = to_utc(dtstart, naive_zone)
@@ -170,29 +164,51 @@ def component_data(vevent: Any, floating: str) -> EventData:
     if all_day:
         # iCalendar's DTEND is the day after an all-day event; the app stores its last day.
         end = max(start, end - timedelta(days=1))
+    return start, end, all_day
 
-    # The zone the client planned the event in, so its recurrences repeat in local time.
-    event_timezone = "UTC"
-    if not all_day:
-        name = iana_zone_name(_tzid(vevent.dtstart) or getattr(dtstart.tzinfo, "zone", None))
-        if name:
-            event_timezone = name
-        elif dtstart.tzinfo is None:
-            event_timezone = floating
-        else:
-            # A zone the client defined itself: the IANA zone that keeps its local times, if any.
-            event_timezone = _zone_like(dtstart.tzinfo, dtstart, floating) or "UTC"
 
-    recurrence_id = None
-    if hasattr(vevent, "recurrence_id"):
-        recurrence_id = to_utc(vevent.recurrence_id.value, _naive_zone(vevent.recurrence_id, floating))
+def _end_value(vevent: Any, dtstart: datetime | date, all_day: bool) -> datetime | date:
+    """The end as the client gave it: DTEND, or DTSTART plus DURATION, or the default end."""
+    if hasattr(vevent, "dtend"):
+        dtend: datetime | date = vevent.dtend.value
+        return dtend
+    if hasattr(vevent, "duration"):
+        duration: timedelta = vevent.duration.value
+        return dtstart + duration
+    # RFC 5545: without an end, an all-day event lasts its day and a timed event no time at all.
+    return dtstart + timedelta(days=1) if all_day else dtstart
 
+
+def _event_timezone(dtstart_line: Any, floating: str) -> str:
+    """The zone the client planned a timed event in, so its recurrences repeat in local time."""
+    dtstart = dtstart_line.value
+    name = iana_zone_name(_tzid(dtstart_line) or getattr(dtstart.tzinfo, "zone", None))
+    if name:
+        return name
+    if dtstart.tzinfo is None:
+        return floating
+    # A zone the client defined itself: the IANA zone that keeps its local times, if any.
+    return _zone_like(dtstart.tzinfo, dtstart, floating) or "UTC"
+
+
+def _recurrence_id(vevent: Any, floating: str) -> datetime | None:
+    """The original start of the occurrence a VEVENT changes, in UTC; None for the series itself."""
+    if not hasattr(vevent, "recurrence_id"):
+        return None
+    return to_utc(vevent.recurrence_id.value, _naive_zone(vevent.recurrence_id, floating))
+
+
+def _categories(vevent: Any) -> list[str]:
+    """All CATEGORIES values, from every such line, without empty ones."""
     categories: list[str] = []
     for line in vevent.contents.get("categories", []):
         values = line.value if isinstance(line.value, list) else [line.value]
         categories += [str(v).strip() for v in values if str(v).strip()]
+    return categories
 
-    organizer = _email(vevent.organizer.value) if hasattr(vevent, "organizer") else None
+
+def _attendees(vevent: Any) -> list[tuple[str, str]]:
+    """(email, status) of each ATTENDEE with an email address."""
     attendees: list[tuple[str, str]] = []
     for line in vevent.contents.get("attendee", []):
         email = _attendee_email(line.value)
@@ -200,17 +216,37 @@ def component_data(vevent: Any, floating: str) -> EventData:
             continue  # rooms and groups by URN and the like; the app invites people by email
         partstat = (line.params.get("PARTSTAT") or ["NEEDS-ACTION"])[0].upper()
         attendees.append((email, PARTSTATS.get(partstat, "needs_action")))
+    return attendees
+
+
+def _text(vevent: Any, name: str) -> str | None:
+    """A property's value as text; None if the VEVENT doesn't have it."""
+    return str(getattr(vevent, name).value) if hasattr(vevent, name) else None
+
+
+def component_data(vevent: Any, floating: str) -> EventData:
+    """The fields of one VEVENT, with ends stored the way the app does (inclusive for all-day events).
+
+    `floating`: the zone (IANA name) for times that come without one.
+    """
+    start, end, all_day = _span(vevent, floating)
+    event_timezone = "UTC" if all_day else _event_timezone(vevent.dtstart, floating)
+    recurrence_id = _recurrence_id(vevent, floating)
+    categories = _categories(vevent)
+    organizer = _email(vevent.organizer.value) if hasattr(vevent, "organizer") else None
+    attendees = _attendees(vevent)
+    rrule = _text(vevent, "rrule")
 
     return {
-        "title": str(vevent.summary.value)[:TITLE_MAX_LENGTH] if hasattr(vevent, "summary") else "",
-        "description": str(vevent.description.value) if hasattr(vevent, "description") else "",
-        "location": str(vevent.location.value)[:TITLE_MAX_LENGTH] if hasattr(vevent, "location") else "",
+        "title": (_text(vevent, "summary") or "")[:TITLE_MAX_LENGTH],
+        "description": _text(vevent, "description") or "",
+        "location": (_text(vevent, "location") or "")[:TITLE_MAX_LENGTH],
         "start": start,
         "end": end,
         "all_day": all_day,
         "timezone": event_timezone,
-        "rrule": validate_rrule(str(vevent.rrule.value)) if hasattr(vevent, "rrule") else None,
-        "uid": str(vevent.uid.value) if hasattr(vevent, "uid") else None,
+        "rrule": validate_rrule(rrule) if rrule is not None else None,
+        "uid": _text(vevent, "uid"),
         "recurrence_id": recurrence_id,
         "exdates": _times(vevent, "exdate", floating),
         "rdates": _times(vevent, "rdate", floating),

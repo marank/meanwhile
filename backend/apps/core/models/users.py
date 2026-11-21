@@ -124,7 +124,8 @@ class AppSettings(models.Model):
 class AppPassword(UUIDModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="app_passwords")
     label = models.CharField(max_length=255)
-    password_hash = models.CharField(max_length=255)
+    # SHA-256 of the token (apps.core.services.app_passwords); the token itself is never kept.
+    token_hash = models.CharField(max_length=64, unique=True)
     last_used_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

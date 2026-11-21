@@ -5,12 +5,12 @@
 import pytest
 from allauth.account.models import EmailAddress
 from django.contrib.auth import SESSION_KEY
-from django.contrib.auth.hashers import make_password
 from django.core.management import CommandError, call_command
 from django.test import Client
 from pytest_django.fixtures import Settings
 
 from apps.core.models import AppPassword, OverviewSettings, User
+from apps.core.services import app_passwords
 from apps.core.tests.helpers import make_user
 
 pytestmark = pytest.mark.django_db
@@ -86,7 +86,7 @@ def test_without_a_password_an_existing_admin_keeps_theirs(admin_env: Settings) 
 def test_whoever_signed_up_with_the_address_loses_the_account(admin_env: Settings) -> None:
     """Emails aren't verified: someone else may have registered ADMIN_EMAIL before the admin was set up."""
     squatter = make_user("someone")
-    AppPassword.objects.create(user=squatter, label="Phone", password_hash=make_password("app-1"))
+    app_passwords.create(squatter, "Phone")
     admin_env.ADMIN_EMAIL = squatter.email
 
     admin_env.ADMIN_PASSWORD = ""
@@ -97,7 +97,8 @@ def test_whoever_signed_up_with_the_address_loses_the_account(admin_env: Setting
 
     admin_env.ADMIN_PASSWORD = "secret-1"
     call_command("ensure_admin")
-    squatter.refresh_from_db()
+    # Loaded anew rather than refreshed: the type checker keeps what the assert above found.
+    squatter = User.objects.get(pk=squatter.pk)
     assert squatter.is_admin and squatter.check_password("secret-1")
     assert not AppPassword.objects.filter(user=squatter).exists()
     assert EmailAddress.objects.filter(user=squatter, verified=True).exists()

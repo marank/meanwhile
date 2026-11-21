@@ -54,11 +54,11 @@ def list_pending_approvals(request: AuthedRequest) -> list[ApprovalOut]:
         )
         .distinct()
     )
-    result: list[ApprovalOut] = []
-    for event in pending:
-        if is_in_approver_pool(event, user.id):
-            result.append(ApprovalOut.model_validate(_serialize_approval(event)))
-    return result
+    return [
+        ApprovalOut.model_validate(_serialize_approval(event))
+        for event in pending
+        if is_in_approver_pool(event, user.id)
+    ]
 
 
 @router.post("/events/{event_id}/approve", response=ApprovalOut)

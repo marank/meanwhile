@@ -146,6 +146,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: just check-workflows
 
+  # --- End of support: `just check-eol`, only in the weekly run ----------------------------
+  # Updates Dependabot ignores (PostgreSQL majors) or doesn't offer (base image majors) come
+  # up here: the run turns red 180 days before a platform's support ends. Not a dependency of
+  # `image` and not a required check, so it never blocks the rebuild or a pull request.
+  eol:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+
+      - name: Install just
+        run: uv tool install rust-just==1.59.0
+
+      - name: Check
+        run: just check-eol
+
   # --- Repository: committed secrets, vulnerable lock files, Dockerfile/compose ------------
   repository:
     runs-on: ubuntu-latest
@@ -175,10 +197,7 @@ jobs:
           trivy --scanners vuln,secret,misconfig --format sarif --output /out/repository.sarif
           trivy --scanners secret --exit-code 1
           trivy --scanners vuln --severity CRITICAL --ignore-unfixed --exit-code 1
-          # The development images run as root on purpose (with rootless Docker that is the host
-          # user, who owns the mounted source); they are never deployed.
-          trivy --scanners misconfig --severity HIGH,CRITICAL --exit-code 1 \
-            --skip-files backend/Dockerfile.dev --skip-files frontend/Dockerfile.dev
+          trivy --scanners misconfig --severity HIGH,CRITICAL --exit-code 1
           trivy --scanners vuln --severity HIGH
 
       # Code scanning results need GitHub Advanced Security on private repositories.

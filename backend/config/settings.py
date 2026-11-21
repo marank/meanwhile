@@ -87,8 +87,6 @@ ADMIN_ENABLED = env_bool("ADMIN_ENABLED", DEBUG)
 # ---------------------------------------------------------------------------
 
 INSTALLED_APPS = [
-    # First, so that `runserver` serves the ASGI application, WebSockets included.
-    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",

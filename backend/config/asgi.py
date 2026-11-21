@@ -1,14 +1,15 @@
 """
 ASGI entry point: the app and its API, the CalDAV server, and the WebSocket for live updates.
 
-Development: `manage.py runserver` serves it (through daphne). Production: run it with uvicorn,
-e.g. `uvicorn config.asgi:application`.
+uvicorn serves it: in development with --reload (`just dev-backend`), in production behind nginx
+(docker/supervisord.conf).
 """
 
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, cast
 
+from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -25,6 +26,10 @@ from django.conf import settings  # noqa: E402
 from apps.core.caldav.app import create_application  # noqa: E402
 from apps.core.realtime.routing import websocket_urlpatterns  # noqa: E402
 from apps.core.realtime.security import OriginCheck  # noqa: E402
+
+if settings.DEBUG:
+    # The Django admin's static files, as runserver would serve them; in production nginx does.
+    django_application = ASGIStaticFilesHandler(django_application)
 
 _caldav_prefix = settings.CALDAV_PATH.rstrip("/") or "/caldav"
 # Radicale is a WSGI application; its requests run in a thread pool, so a slow one (e.g. the

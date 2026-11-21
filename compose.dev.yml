@@ -1,35 +1,7 @@
-# The whole development stack: `docker compose -f compose.dev.yml up --build`
-# App at http://localhost:6326 (Vite), API at http://localhost:8000, emails at http://localhost:8025.
-# The source is mounted into the containers: the backend, the worker and Vite reload on changes.
-# Only the services next to the app (`just services`) to run natively against PostgreSQL like CI.
+# The services next to the natively run app (`just services`), to develop against PostgreSQL like
+# CI, with live updates across processes (Redis) and the emails caught by Mailpit. Then in .env:
+# DB_HOST=localhost, REDIS_URL=redis://localhost:6379/0 and the Mailpit settings (.env.example).
 name: meanwhile-dev
-
-x-backend: &backend
-  image: meanwhile-dev-backend
-  build:
-    context: ./backend
-    dockerfile: Dockerfile.dev
-  volumes:
-    - ./backend:/app
-  # The project's .env (ADMIN_*, SECRET_KEY, ...); the wiring below takes precedence over it.
-  env_file:
-    - path: .env
-      required: false
-  environment: &backend-environment
-    DEBUG: "true"
-    DB_HOST: postgres
-    DB_NAME: meanwhile
-    DB_USER: meanwhile
-    DB_PASSWORD: meanwhile
-    # Links in emails point to Vite; the dev database's password is the one above.
-    APP_URLS: http://localhost:6326
-    REDIS_URL: redis://redis:6379/0
-    EMAIL_HOST: mailpit
-    EMAIL_PORT: "1025"
-    EMAIL_USE_TLS: "false"
-    EMAIL_USE_SSL: "false"
-    DEFAULT_FROM_EMAIL: meanwhile@localhost
-    IMIP_ADDRESS: meanwhile@localhost
 
 services:
   # PostgreSQL like production and CI (natively the default is SQLite: no queue, no worker).
@@ -49,7 +21,7 @@ services:
       timeout: 5s
       retries: 30
 
-  # Passes live updates between the backend and the task queue's worker.
+  # Passes live updates between the backend's processes and the task queue's worker.
   redis:
     image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     command: ["redis-server", "--save", "", "--appendonly", "no"]
@@ -63,64 +35,8 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     ports:
-      - "1025:1025"
-      - "8025:8025"
-
-  # Applies the migrations (the task queue's included) and sets up the admin user of ADMIN_EMAIL
-  # (.env) before the backend and the worker start.
-  migrate:
-    <<: *backend
-    command: ["sh", "-c", "python manage.py migrate && python manage.py ensure_admin"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # runserver (daphne: API, CalDAV and WebSockets) restarts itself on changes to the code.
-  backend:
-    <<: *backend
-    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
-    ports:
-      - "8000:8000"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
-        condition: service_started
-      mailpit:
-        condition: service_started
-
-  # The task queue's worker (apps/core/tasks.py); watchfiles restarts it on changes to Python files.
-  worker:
-    <<: *backend
-    command: ["watchfiles", "--filter", "python", "python manage.py procrastinate worker", "/app"]
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
-        condition: service_started
-      mailpit:
-        condition: service_started
-
-  # Vite with hot module replacement; passes the backend's paths on to it (vite.config.ts).
-  frontend:
-    image: meanwhile-dev-frontend
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    command: ["sh", "-c", "pnpm install --frozen-lockfile && exec pnpm dev --host 0.0.0.0"]
-    environment:
-      BACKEND_URL: http://backend:8000
-      # pnpm doesn't ask before reinstalling node_modules.
-      CI: "true"
-    volumes:
-      - ./frontend:/app
-      # The container's own node_modules, separate from the host's.
-      - node_modules:/app/node_modules
-    ports:
-      - "6326:6326"
-    depends_on:
-      - backend
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   pgdata:
-  node_modules:
