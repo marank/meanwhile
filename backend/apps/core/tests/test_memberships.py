@@ -212,3 +212,21 @@ def test_comments_reach_only_who_can_still_see_the_event(world: World) -> None:
     assert world["api"]["full"].post(f"/events/{event_id}/comments", {"body": "Secret plan"}).status_code == 200
     assert not Notification.objects.filter(user=world["users"]["other"], type="comment_added").exists()
     assert Notification.objects.filter(user=world["users"]["booker"], type="comment_added").exists()
+
+
+def test_members_are_listed_in_the_order_they_were_granted(setup: Setup) -> None:
+    cal = setup["calendar"].id
+    others = [
+        User.objects.create_user(email=f"m{i}@example.test", password="x", display_name=f"M{i}") for i in range(3)
+    ]
+    for user in [setup["me"], *reversed(others)]:
+        res = setup["api"].post(
+            f"/api/calendars/{cal}/members", {"user_id": str(user.id), "role": "read"}, content_type="application/json"
+        )
+        assert res.status_code == 200, res.content
+    # Rewritten rows (here: moved into a folder) move within the table; the list stays as it was.
+    folder = Folder.objects.create(user=setup["owner"], name="Mine")
+    CalendarMember.objects.filter(calendar=setup["calendar"], user=setup["owner"]).update(folder=folder)
+
+    listed = [m["user_id"] for m in setup["api"].get(f"/api/calendars/{cal}/members").json()]
+    assert listed == [str(u.id) for u in [setup["owner"], setup["me"], *reversed(others)]]
