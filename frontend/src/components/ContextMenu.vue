@@ -78,6 +78,7 @@ function onKeydown(event: KeyboardEvent) {
 
 <template>
   <div class="fixed inset-0 z-50" @click="close" @contextmenu.prevent="close">
+    <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -- focus goes to the menu items -->
     <div
       ref="menu"
       role="menu"

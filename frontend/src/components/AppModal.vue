@@ -104,6 +104,7 @@ function trapFocus(event: KeyboardEvent) {
 
 <template>
   <Teleport to="body">
+    <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -- the keyboard closes it with Escape -->
     <div
       v-if="open"
       class="fixed inset-0 flex items-center justify-center bg-black/50 p-2 pt-[max(0.5rem,var(--safe-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:p-4 sm:pt-[max(1rem,var(--safe-top))] sm:pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-black/80"
@@ -113,6 +114,7 @@ function trapFocus(event: KeyboardEvent) {
       ]"
       @click="onBackdropClick"
     >
+      <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- keeps Tab inside the dialog -->
       <div
         ref="panel"
         class="flex max-h-full w-full outline-none flex-col sm:max-h-[90vh] overflow-hidden rounded-xl border border-transparent bg-surface shadow-2xl dark:border-zinc-600 dark:shadow-black/75"

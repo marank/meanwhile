@@ -40,8 +40,9 @@ test.db
 .env
 frontend/.pnpm-store/
 
-# Claude Code: only the shared launch configuration
+# Claude Code: only the shared launch configuration and hooks (settings.local.json stays yours)
 .claude/*
 !.claude/launch.json
+!.claude/settings.json
 # Compiled translations; built by `just compile-messages` and in the image
 *.mo

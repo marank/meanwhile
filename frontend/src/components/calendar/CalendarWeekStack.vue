@@ -114,6 +114,7 @@ function create(date: Date) {
       </button>
 
       <!-- Tapping the free part of a day adds an event there. -->
+      <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -- a pointer shortcut; the day's date button does the same -->
       <div class="week-stack-events" @click.self="create(day.date)">
         <button
           v-for="entry in day.entries"

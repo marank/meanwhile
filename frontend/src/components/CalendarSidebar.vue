@@ -242,6 +242,7 @@ function startResize(event: MouseEvent) {
     ]"
     :style="{ '--sidebar-width': `${sidebarWidth}px` }"
   >
+    <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -- a right-click shortcut for the menu next to "New calendar" -->
     <div
       ref="scroller"
       class="relative flex-1 select-none space-y-1 overflow-y-auto p-2"

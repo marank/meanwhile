@@ -5,7 +5,7 @@ import en, { type MessageSchema } from './locales/en'
 
 declare module 'vue-i18n' {
   // Gives $t/t key completion and checking against the English messages.
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- augmenting vue-i18n needs an interface
   export interface DefineLocaleMessage extends MessageSchema {}
 }
 

@@ -37,6 +37,8 @@ only call its recipes, so a check is changed in one place.
 - `just migrations` after model changes; commit the migrations.
 - `just messages` after new backend texts; translate every entry of `backend/locale/de/LC_MESSAGES/django.po`.
 - Frontend: **pnpm** only. Backend: `uv add` / `uv add --dev`.
+- Claude Code formats and lints each file right after editing it (`.claude/settings.json` runs
+  `scripts/lint_file.py`); what is left comes back to the agent to fix, not to silence.
 - Commits on `main` are Conventional Commits (squash-merged PR titles); release-please makes the
   releases from them.
 
@@ -69,7 +71,9 @@ only call its recipes, so a check is changed in one place.
   know beyond it goes into `docs/operations.md`). No secrets with placeholder values in production.
 - ruff with complexity ≤ 15 and nesting ≤ 4, complexipy with cognitive complexity ≤ 15; split by
   responsibility, never to meet a size. ruff also reports blind `except Exception` (`BLE`, `TRY`; with the reason in a
-  comment where it is a deliberate boundary), slow patterns (`PERF`) and longer spellings (`FURB`).
+  comment where it is a deliberate boundary), slow patterns (`PERF`) and longer spellings (`FURB`),
+  pytest misuse (`PT`: one condition per `assert`, `raises` with `match`), blanket and unused
+  `# noqa` (`PGH`, `RUF100`).
 - mypy runs in strict mode (django-stubs), tests included, and also reports checks the types
   rule out (`warn_unreachable`, `redundant-expr`, `truthy-bool`, …): delete such a check; where
   the stubs are narrower than the data, widen the annotation with the reason in a comment.
@@ -106,7 +110,10 @@ only call its recipes, so a check is changed in one place.
   `??` and exhaustive switches; sonarjs cognitive complexity ≤ 15). A promise that isn't awaited is
   marked `void`, and only where it handles its own errors. Defaults use `??`; where the server's empty
   string means "none" (names, logo URLs), `nonEmpty(value) ?? fallback` from `services/text.ts`.
-  `eslint-disable` only for one line and with the reason after `--`.
+  `eslint-disable` only for one line, naming its rules, with the reason after `--`; unused ones fail.
+  Also on: `vue/no-v-html`, `vue/no-unused-properties` and eslint-plugin-vuejs-accessibility (labels
+  wrap their field; comboboxes keep focus in the field, see `project/comboboxes`). No comment before
+  a component's root element: in development it turns the component into a fragment.
 
 ## Tests
 
@@ -115,6 +122,9 @@ only call its recipes, so a check is changed in one place.
   by the generated API types; make fixtures look like what the backend really sends.
 - A bug fix comes with a test that fails without it.
 - Frontend coverage gate: 95/95/95/90 (lines/statements/functions/branches).
+- Every test asserts; no `.only` or skipped test is committed (`@vitest/eslint-plugin`). Backend
+  tests run in random order (pytest-randomly prints the seed; `--randomly-seed=<seed>` repeats it).
+- At most 3 % copied code across frontend and backend sources (`pnpm check:duplication`, jscpd).
 
 ## Docker / runtime
 
@@ -145,7 +155,7 @@ moves them weekly. It does **not** see, so bump by hand now and then:
 
 ## House defaults
 
-Checked against django-spa-defaults 1.7.0 (2026-11-21).
+Checked against django-spa-defaults 1.8.0 (2026-11-21).
 
 - Releases: release-please
 - Contributions: team only

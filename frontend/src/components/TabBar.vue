@@ -97,6 +97,7 @@ onBeforeUnmount(() => resize?.disconnect())
       :class="{ 'scroll-smooth': position === undefined }"
       :style="fadeMask"
     >
+      <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -- focus goes to the tabs -->
       <div ref="tablist" class="relative flex min-w-max gap-1" role="tablist" @keydown="onKeydown">
         <button
           v-for="tab in tabs"

@@ -3,6 +3,9 @@ import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescri
 import pluginVue from 'eslint-plugin-vue'
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import sonarjs from 'eslint-plugin-sonarjs'
+import pluginVueA11y from 'eslint-plugin-vuejs-accessibility'
+import comments from '@eslint-community/eslint-plugin-eslint-comments'
+import vitest from '@vitest/eslint-plugin'
 
 // Import boundaries: components call the API through src/api/<area>.ts, shared code never
 // reaches into a page, and src/utils stays pure.
@@ -23,6 +26,43 @@ export default defineConfigWithVueTs(
   globalIgnores(['**/dist/**', '**/coverage/**']),
 
   pluginVue.configs['flat/recommended'],
+  // Alt texts, labelled form fields, keyboard access for whatever reacts to clicks.
+  ...pluginVueA11y.configs['flat/recommended'],
+  {
+    // A label that wraps its field, or points at it with `for`, is enough for browsers and screen readers.
+    // Our select components render a native button or input, which a wrapping label names.
+    rules: {
+      'vuejs-accessibility/label-has-for': [
+        'error',
+        { required: { some: ['nesting', 'id'] }, controlComponents: ['AppSelect', 'SearchableSelect', 'RoleSelect'] },
+      ],
+    },
+  },
+  {
+    // Comboboxes: focus stays in the field, which handles the arrow keys and Enter and points at the
+    // active option with aria-activedescendant; the options themselves take no focus.
+    name: 'project/comboboxes',
+    files: [
+      'src/components/AccessGrantSearch.vue',
+      'src/components/SearchableSelect.vue',
+      'src/components/AppSelect.vue',
+    ],
+    rules: {
+      'vuejs-accessibility/interactive-supports-focus': 'off',
+      'vuejs-accessibility/mouse-events-have-key-events': 'off',
+      'vuejs-accessibility/click-events-have-key-events': 'off',
+    },
+  },
+  {
+    // The overlay behind the menu closes it on a click; the keyboard closes it with Escape. Set here:
+    // a comment before the root element would turn the component into a fragment.
+    name: 'project/context-menu-overlay',
+    files: ['src/components/ContextMenu.vue'],
+    rules: {
+      'vuejs-accessibility/click-events-have-key-events': 'off',
+      'vuejs-accessibility/no-static-element-interactions': 'off',
+    },
+  },
   // Type-aware: unawaited promises, conditions the types settle, `??` over `||`,
   // exhaustive switches.
   vueTsConfigs.recommendedTypeChecked,
@@ -54,6 +94,30 @@ export default defineConfigWithVueTs(
   // Formatting is Prettier's job.
   skipFormatting,
 
+  // No silenced checks: every disable names its rules and says why; unused ones fail.
+  { name: 'project/linter', linterOptions: { reportUnusedDisableDirectives: 'error' } },
+  {
+    name: 'project/no-silencing',
+    files: ['src/**/*.{ts,vue}'],
+    plugins: { '@eslint-community/eslint-comments': comments },
+    rules: {
+      '@eslint-community/eslint-comments/no-unlimited-disable': 'error',
+      '@eslint-community/eslint-comments/require-description': 'error',
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': 'allow-with-description' }],
+    },
+  },
+  // Tests that test: every test asserts, no `.only` or skipped test is committed.
+  {
+    name: 'project/test-assertions',
+    files: ['src/**/*.spec.ts'],
+    plugins: { vitest },
+    rules: {
+      'vitest/expect-expect': 'error',
+      'vitest/no-focused-tests': 'error',
+      'vitest/no-disabled-tests': 'error',
+    },
+  },
+
   // Limits on tangle, not on length (no max-lines or max-statements).
   {
     name: 'project/readability',
@@ -63,6 +127,9 @@ export default defineConfigWithVueTs(
       complexity: ['error', 15],
       'sonarjs/cognitive-complexity': ['error', 15],
       'max-depth': ['error', 4],
+      // Unescaped HTML is an XSS hole; a real exception names its reason.
+      'vue/no-v-html': 'error',
+      'vue/no-unused-properties': ['error', { groups: ['props', 'data', 'computed', 'methods', 'setup'] }],
       'no-restricted-imports': ['error', { patterns: [apiClient] }],
     },
   },
