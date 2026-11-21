@@ -75,8 +75,11 @@ only call its recipes, so a check is changed in one place.
   the stubs are narrower than the data, widen the annotation with the reason in a comment.
   `# type: ignore[code]` only with the reason next to it. Coverage stays ≥ 90 %. Tests run in parallel (`-n auto`), natively on SQLite,
   in CI on PostgreSQL.
-- No GPL/AGPL/SSPL dependencies (license gate in `just check`). Radicale (GPL-3.0) is the one
-  deliberate exception, compatible with the project's AGPL-3.0.
+- Production dependencies must fit the project's AGPL-3.0-or-later (license gate in
+  `just check`): permissive, LGPL, GPL-3.0, AGPL-3.0 and GPL-2.0 "or later" are fine;
+  GPL-2.0-only, an unversioned GPL, EPL-1.0, CDDL, MPL-1.1, SSPL and missing license
+  information are not. Packages with wrong metadata go into the scripts' `ALLOW` with the
+  reason (Radicale declares only "GPL"; it is GPL-3.0).
   The services in `compose.yml` (PostgreSQL, Redis under its AGPLv3 option) are separate programs
   the app talks to over the network, not dependencies; their licenses don't reach the app's code.
 

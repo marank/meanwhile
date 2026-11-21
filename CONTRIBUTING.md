@@ -127,6 +127,5 @@ Set up once on GitHub:
 ## License
 
 Meanwhile is licensed under the [AGPL-3.0-or-later](LICENSE). By submitting a contribution
-you agree that it is licensed under the same terms. New dependencies must not be under
-GPL, AGPL or SSPL (checked in CI); Radicale (GPL-3.0, the CalDAV server) is the one
-deliberate exception, compatible with the AGPL.
+you agree that it is licensed under the same terms. Dependencies must be compatible with
+it (checked in CI).
