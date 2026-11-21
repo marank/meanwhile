@@ -17,7 +17,7 @@ one hardened container image (`ghcr.io/marank/meanwhile`). Licensed under the
 
 ## Tech stack
 
-- **Backend**: Python 3.14, Django 6.0, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI (daphne in development, uvicorn in production).
+- **Backend**: Python 3.14, Django 6.1, Django Ninja, django-allauth headless, Radicale, Django Channels (WebSockets), served over ASGI by uvicorn.
 - **Frontend**: Vue 3, Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS.
 - **Database**: PostgreSQL in Docker, CI and production, where it also holds the task queue (procrastinate); SQLite for native development.
 - **Tools**: `uv` (backend), `pnpm` (frontend), [`just`](https://just.systems) (every command).
@@ -36,7 +36,7 @@ meanwhile/
   justfile            Every command: development, checks (= CI), API types, migrations, Docker
   Dockerfile          Production image (frontend + backend; app and worker containers)
   compose.yml         Production: PostgreSQL, Redis, app, worker (with nightly backups)
-  compose.dev.yml     Development stack with live reload; or only its PostgreSQL, Redis, Mailpit
+  compose.dev.yml     PostgreSQL, Redis and Mailpit next to the natively run app (`just services`)
   .github/            CI (checks, multi-platform image, smoke test, scans), releases, Dependabot
   AGENTS.md           Conventions for contributors and coding agents (CLAUDE.md imports it)
   CONTRIBUTING.md     How to contribute: checks, Conventional Commits
@@ -85,21 +85,6 @@ cd backend && uv run pytest
 They run in parallel (pytest-xdist); `uv run pytest -n 0` runs them in one process, e.g. to debug
 with `-s` or `--pdb`. Natively on SQLite, with `DB_HOST` on PostgreSQL like CI.
 
-### Development with Docker
-
-The whole stack with live reload: PostgreSQL, Redis, Mailpit, the backend (`runserver`), the
-worker and the Vite dev server (`just docker-dev`, i.e. `docker compose -f compose.dev.yml up --build`).
-The app is at http://localhost:6326, the backend at http://localhost:8000, the emails at
-http://localhost:8025. The source is mounted into the containers: `runserver` and the worker
-(through `watchfiles`) restart on changes to Python files, Vite updates the page right away.
-Migrations run on every start (service `migrate`), followed by `manage.py ensure_admin`. After
-changing dependencies (`uv.lock`, `pnpm-lock.yaml`), start it again with `--build`.
-
-```bash
-docker compose -f compose.dev.yml exec backend pytest
-docker compose -f compose.dev.yml exec backend python manage.py fetch_imip --mailpit http://mailpit:8025
-```
-
 ### Everyday commands
 
 | Command | When |
@@ -122,9 +107,7 @@ uv run python manage.py set_superuser someone@example.com
 uv run python manage.py set_superuser someone@example.com --revoke
 ```
 
-In the Docker setups: `docker compose exec app python manage.py set_superuser ...` (production),
-`docker compose -f compose.dev.yml exec backend python manage.py set_superuser ...`
-(development).
+In production: `docker compose exec app python manage.py set_superuser ...`.
 
 ## Frontend development
 
@@ -139,7 +122,7 @@ pnpm type-check     # vue-tsc
 ```
 
 The Vite dev proxy forwards `/api`, `/django-admin`, `/django-static`, `/ics`, `/caldav` and `/ws` to
-`http://localhost:8000` (`BACKEND_URL` changes it), keeping the browser's `Host`.
+`http://localhost:8000`, keeping the browser's `Host`.
 
 ## Configuration
 
@@ -231,11 +214,10 @@ uv run python manage.py fetch_imip
 [Mailpit](https://mailpit.axllent.org/) catches every email and shows it in the browser:
 
 ```bash
-docker compose -f compose.dev.yml up -d mailpit   # SMTP on 1025, web UI on http://localhost:8025
+just services   # with PostgreSQL and Redis; Mailpit: SMTP on 1025, web UI on http://localhost:8025
 ```
 
-`compose.dev.yml` sends the backend's emails there by itself. A backend run without Docker
-needs `EMAIL_HOST=localhost`, `EMAIL_PORT=1025`, `EMAIL_USE_TLS=false` and
+The backend sends there with `EMAIL_HOST=localhost`, `EMAIL_PORT=1025`, `EMAIL_USE_TLS=false` and
 `IMIP_ADDRESS=meanwhile@localhost` in `.env`.
 
 Restart the backend, invite someone (any address) to an event and open the invitation in Mailpit;
@@ -270,8 +252,8 @@ nothing missed meanwhile is lost. Pages of other sites can't open it (the `Origi
 
 Without a working WebSocket (a proxy that doesn't pass it on), the app falls back to fetching the unread count every minute; reminders then only arrive as notifications.
 
-In development nothing extra is needed: `manage.py runserver` serves WebSockets, and the Vite dev
-server passes `/ws` on.
+In development nothing extra is needed: uvicorn (`just dev-backend`) serves WebSockets, and the
+Vite dev server passes `/ws` on.
 
 ## Deployment with Docker
 

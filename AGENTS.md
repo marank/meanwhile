@@ -92,7 +92,9 @@ only call its recipes, so a check is changed in one place.
   `pg_dump` into `/backups`). If a program in `app` keeps failing, the container stops.
 - Both run read-only, without capabilities, as the unprivileged user `app`. Only `/data`
   (`DATA_DIR`), `/backups` (worker) and `/tmp` are writable; new features write there instead of
-  loosening `compose.yml`. The dev images (`*/Dockerfile.dev`) run as root on purpose (rootless Docker).
+  loosening `compose.yml`.
+- Development is native (`just dev-backend`, `just dev-frontend`); `compose.dev.yml` holds only
+  the services next to it (PostgreSQL, Redis, Mailpit), no images of the app.
 - `compose.yml` works with `.env` alone: no file of the repository is mounted.
 - New runtime probes go into `docker/smoke-test`, which CI runs in both containers.
 - nginx believes `X-Forwarded-*` only from `TRUSTED_PROXIES`. It sends no HSTS: the proxy in front

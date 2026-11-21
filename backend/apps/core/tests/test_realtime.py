@@ -8,14 +8,13 @@ from typing import Any, TypedDict
 
 import pytest
 from channels.db import database_sync_to_async
-from channels.testing import HttpCommunicator, WebsocketCommunicator
 from django.db import transaction
 from django.test import Client
 
 from apps.core.models import Calendar, CalendarMember, Event, Notification, User
 from apps.core.services.reminders import deliver_due_reminders
+from apps.core.tests.asgi import HttpCommunicator, WebsocketCommunicator
 from apps.core.tests.helpers import Response
-from config.asgi import application
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
@@ -53,7 +52,7 @@ def socket(session: str | None = None, origin: bytes = ORIGIN) -> WebsocketCommu
     headers = [(b"host", b"localhost:8000"), (b"origin", origin)]
     if session:
         headers.append((b"cookie", f"sessionid={session}".encode()))
-    return WebsocketCommunicator(application, "/ws/", headers=headers)
+    return WebsocketCommunicator("/ws/", headers=headers)
 
 
 async def connected(team: Team) -> WebsocketCommunicator:
@@ -241,7 +240,6 @@ async def test_bad_messages_are_answered_not_fatal(team: Team) -> None:
 async def test_caldav_is_served_through_asgi(team: Team) -> None:
     auth = base64.b64encode(b"owner@example.test:pw")
     communicator = HttpCommunicator(
-        application,
         "PROPFIND",
         "/caldav/owner@example.test/",
         body=b'<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>',
@@ -251,7 +249,7 @@ async def test_caldav_is_served_through_asgi(team: Team) -> None:
     assert response["status"] == 207
     assert f"{team['calendar'].id}/".encode() in response["body"]
 
-    communicator = HttpCommunicator(application, "GET", "/api/users/me", headers=[(b"host", b"localhost:8000")])
+    communicator = HttpCommunicator("GET", "/api/users/me", headers=[(b"host", b"localhost:8000")])
     assert (await communicator.get_response())["status"] == 401
     # Django waits for the client to go away after answering, as a real one would.
     await communicator.send_input({"type": "http.disconnect"})

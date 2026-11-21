@@ -7,7 +7,6 @@ dependencies = [
     "a2wsgi>=1.10.10",
     "channels>=4.3.2",
     "channels-redis>=4.3.0",
-    "daphne>=4.2.3",
     "django[argon2]>=6.1.3,<6.2",
     "django-allauth>=65.22.1",
     "django-ninja>=1.8.0",
@@ -51,11 +50,6 @@ addopts = "-n auto"
 # Each async test and fixture gets its own event loop (pytest-asyncio's coming default, set to keep
 # it from warning).
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = [
-    # daphne (runserver's server) sets a Windows event loop policy on import, which Python 3.14
-    # deprecates; only on Windows, and daphne's to fix before Python 3.16 removes it.
-    "ignore:'asyncio\\.(set_event_loop_policy|WindowsSelectorEventLoopPolicy)' is deprecated:DeprecationWarning:daphne",
-]
 
 [tool.ruff]
 line-length = 120
@@ -174,6 +168,6 @@ ignore_imports = ["apps.core.tests.** -> config.asgi"]
 extend_exclude = ["apps/core/tests", "scripts"]
 
 [tool.deptry.per_rule_ignores]
-# Used, but never imported: the database driver (ENGINE), the channel layer (BACKEND), daphne
-# (INSTALLED_APPS, for runserver), pydantic's EmailStr (email-validator) and the ASGI server.
-DEP002 = ["psycopg", "channels-redis", "daphne", "email-validator", "uvicorn"]
+# Used, but never imported: the database driver (ENGINE), the channel layer (BACKEND), pydantic's
+# EmailStr (email-validator) and the ASGI server.
+DEP002 = ["psycopg", "channels-redis", "email-validator", "uvicorn"]

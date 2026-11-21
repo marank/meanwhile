@@ -23,10 +23,11 @@ setup-frontend:
 
 # --- Development ----------------------------------------------------------------------
 
-# Django on :8000 (SQLite in backend/data, jobs in-process, no worker); applies migrations first
+# Django on :8000 under uvicorn like production, restarting on changes (SQLite in backend/data,
+# jobs in-process, no worker); applies migrations first
 [working-directory: 'backend']
 dev-backend: migrate
-    uv run python manage.py runserver
+    uv run uvicorn config.asgi:application --reload --port 8000
 
 # Vite on :6326, proxying the backend's paths to Django
 [working-directory: 'frontend']
@@ -127,10 +128,6 @@ check-workflows:
 docker-up $APP_IMAGE="meanwhile":
     docker build -t meanwhile .
     docker compose up -d
-
-# The whole development stack in Docker (compose.dev.yml, http://localhost:6326)
-docker-dev:
-    docker compose -f compose.dev.yml up --build
 
 # Dump the database now (the worker does it nightly)
 docker-backup:
