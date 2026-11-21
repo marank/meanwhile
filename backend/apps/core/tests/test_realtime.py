@@ -11,7 +11,8 @@ from channels.db import database_sync_to_async
 from django.db import transaction
 from django.test import Client
 
-from apps.core.models import Calendar, CalendarMember, Event, Notification, User
+from apps.core.models import AppPassword, Calendar, CalendarMember, Event, Notification, User
+from apps.core.services import app_passwords
 from apps.core.services.reminders import deliver_due_reminders
 from apps.core.tests.asgi import HttpCommunicator, WebsocketCommunicator
 from apps.core.tests.helpers import Response
@@ -33,6 +34,7 @@ class Team(TypedDict):
 def team() -> Team:
     owner = User.objects.create_user(email="owner@example.test", password="pw", display_name="Owner")
     other = User.objects.create_user(email="other@example.test", password="pw", display_name="Other")
+    AppPassword.objects.create(user=owner, label="Tests", token_hash=app_passwords.token_hash("app-token"))
     calendar = Calendar.objects.create(name="Team", owner=owner)
     CalendarMember.objects.create(calendar=calendar, user=owner, role="owner")
     private = Calendar.objects.create(name="Private", owner=other)
@@ -238,7 +240,7 @@ async def test_bad_messages_are_answered_not_fatal(team: Team) -> None:
 
 
 async def test_caldav_is_served_through_asgi(team: Team) -> None:
-    auth = base64.b64encode(b"owner@example.test:pw")
+    auth = base64.b64encode(b"owner@example.test:app-token")
     communicator = HttpCommunicator(
         "PROPFIND",
         "/caldav/owner@example.test/",

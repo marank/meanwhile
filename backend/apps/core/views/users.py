@@ -2,10 +2,8 @@
 User profile and app-password endpoints.
 """
 
-import secrets
 from typing import Any
 
-from django.contrib.auth.hashers import make_password
 from django.db.models import QuerySet
 from ninja import Router
 
@@ -21,7 +19,7 @@ from apps.core.schemas import (
     ProfileOut,
     UserUpdate,
 )
-from apps.core.services import users
+from apps.core.services import app_passwords, users
 from apps.core.views.common import AuthedRequest
 
 router = Router()
@@ -72,18 +70,8 @@ def list_app_passwords(request: AuthedRequest) -> QuerySet[AppPassword]:
 
 @router.post("/users/me/app-passwords", response=AppPasswordCreated)
 def create_app_password(request: AuthedRequest, payload: AppPasswordCreate) -> dict[str, Any]:
-    user: User = request.user
-    plaintext = secrets.token_urlsafe(32)
-    entry = AppPassword.objects.create(
-        user=user,
-        label=payload.label,
-        password_hash=make_password(plaintext),
-    )
-    return {
-        "id": entry.id,
-        "label": entry.label,
-        "password": plaintext,
-    }
+    entry, token = app_passwords.create(request.user, payload.label)
+    return {"id": entry.id, "label": entry.label, "password": token}
 
 
 @router.delete("/users/me/app-passwords/{password_id}", response=OkOut)

@@ -162,7 +162,7 @@ The SPA uses session-cookie authentication via `django-allauth` headless browser
 
 ## CalDAV
 
-CalDAV clients can connect to `/caldav`; clients that only get the server address find it via `/.well-known/caldav`. Use the email as username and either the account password or a generated app password. If any app password exists for a user, the account password is rejected for CalDAV.
+CalDAV clients can connect to `/caldav`; clients that only get the server address find it via `/.well-known/caldav`. Sign in with the email as username and an app password (created under the account settings); the account password works only in the web app, so it is never stored in a calendar client. App passwords are random tokens the app makes and keeps only as their SHA-256; revoking one locks out the client that uses it.
 
 Every calendar a user can access appears in their calendar home, shared ones included. Clients can create calendars there and their owners can delete them. Categories, the booked resource (as location) and participants are synchronized; each user's reminders appear as alarms in their own clients only. Times sent without a zone are read in the user's zone, which the web app keeps up to date from the browser.
 

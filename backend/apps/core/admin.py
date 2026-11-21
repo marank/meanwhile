@@ -123,7 +123,7 @@ class AppPasswordAdmin(admin.ModelAdmin[models.AppPassword]):
     list_select_related = ("user",)
     search_fields = ("label", "user__email", "user__display_name")
     autocomplete_fields = ("user",)
-    readonly_fields = ("password_hash", "last_used_at", "created_at")
+    readonly_fields = ("token_hash", "last_used_at", "created_at")
     date_hierarchy = "created_at"
 
 
