@@ -99,7 +99,8 @@ and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
 To run Meanwhile from source:
 
 ```bash
-cp .env.example .env && just setup
+cp .env.example .env    # then set DEBUG=true in .env
+just setup
 just dev             # backend and frontend → http://localhost:6326
 ```
 

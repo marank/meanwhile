@@ -35,7 +35,7 @@ and GNU gettext for the translation checks (`winget install mlocati.GetText`,
 `brew install gettext`, `apt install gettext`). Docker only for the image and the optional services.
 
 ```bash
-cp .env.example .env     # once, in the project root (DEBUG=true; ADMIN_* give you a user to sign in with)
+cp .env.example .env     # once, in the project root; then set DEBUG=true (ADMIN_* give you a user to sign in with)
 just setup               # uv sync + pnpm install
 just dev                 # Django on :8000 and Vite on http://localhost:6326; Ctrl+C stops both
 ```
@@ -53,7 +53,7 @@ backups) don't run. To run like CI and production, start PostgreSQL, Redis and M
 worker:
 
 ```bash
-just services           # compose.dev.yml; then in .env: DB_HOST=localhost, REDIS_URL=redis://localhost:6379/0
+just services           # compose.dev.yml; then in .env: DB_HOST=localhost, DB_PASSWORD=meanwhile, REDIS_URL=redis://localhost:6379/0
 just dev-worker         # the task queue's worker (apps/core/tasks.py)
 ```
 

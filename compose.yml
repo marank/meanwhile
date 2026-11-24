@@ -1,6 +1,5 @@
-# Production: PostgreSQL, Redis, the app and the worker. Works with a .env next to it and nothing
-# else from the repository: copy this file and .env.example (as .env) to the server, fill in .env,
-# `docker compose up -d`. The app serves the frontend and the backend on APP_BIND over HTTP; HTTPS
+# PostgreSQL, Redis, the app and the worker. Needs only a .env next to it: save .env.example as
+# .env, fill it in, `docker compose up -d`. The app serves the frontend and the backend on APP_BIND over HTTP; HTTPS
 # is terminated in front of it (see README, "Deployment with Docker").
 name: meanwhile
 
@@ -17,8 +16,7 @@ x-hardened: &hardened
 # The app and the worker: same image, same configuration.
 x-app: &app
   <<: *hardened
-  # The image CI pushes; APP_IMAGE pins a version (ghcr.io/marank/meanwhile:1.2) or points at a
-  # local build (`docker build -t meanwhile .`, APP_IMAGE=meanwhile).
+  # Published image; APP_IMAGE in .env pins a version (ghcr.io/marank/meanwhile:1.2).
   image: ${APP_IMAGE:-ghcr.io/marank/meanwhile:latest}
   restart: unless-stopped
   env_file: .env
@@ -52,9 +50,7 @@ services:
       timeout: 5s
       retries: 20
 
-  # Passes live updates between the uvicorn processes and the worker; holds no data. Redis 8 is
-  # used unmodified under its AGPLv3 option (it also offers RSALv2 and SSPLv1), a separate program
-  # the app talks to over the network: nothing of its license reaches the app's code.
+  # Passes live updates between the uvicorn processes and the worker; holds no data.
   redis:
     <<: *hardened
     image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
@@ -80,10 +76,7 @@ services:
     init: true
     volumes:
       - app_data:/data
-      # Nightly pg_dump at BACKUP_TIME (in TIME_ZONE), kept BACKUP_KEEP_DAYS days. Manual dump:
-      #   docker compose exec worker python manage.py backup_database
-      # Copy dumps off the host:  docker compose cp worker:/backups ./backups
-      # Restore (README, "Backups"): pg_restore --clean --if-exists into the db container.
+      # Nightly pg_dump at BACKUP_TIME (docs/operations.md, "Backups").
       - backups:/backups
     healthcheck:
       # The image's HTTP health check is for the app; this checks the worker's database link.
