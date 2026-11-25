@@ -3,17 +3,14 @@ Emails about accounts: the invitation into the app of an account an admin create
 set a forgotten password.
 """
 
-from datetime import timedelta
-
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import default_token_generator
 from allauth.account.utils import user_pk_to_url_str
 from django.conf import settings
-from django.utils import timezone
 
 from apps.core.models import User
 from apps.core.services import mail
-from apps.core.services.mail_texts import text
+from apps.core.services.mail_texts import duration, text
 
 
 def set_password_link(user: User) -> str:
@@ -22,13 +19,6 @@ def set_password_link(user: User) -> str:
     key = f"{user_pk_to_url_str(user)}-{default_token_generator.make_token(user)}"
     url: str = get_adapter().get_reset_password_from_key_url(key)
     return f"{url}?invite=1"
-
-
-def link_expiry(user: User, language: str, timezone_fallback: str = "") -> str:
-    """Until when a link of set_password_link, sent now, works, as the user reads times."""
-    until = timezone.now() + timedelta(seconds=settings.PASSWORD_RESET_TIMEOUT)
-    reader = mail.Reader.of(user, language, timezone_fallback or settings.TIME_ZONE)
-    return mail.format_moment(until, reader)
 
 
 def send_invitation(user: User, inviter: User) -> None:
@@ -44,9 +34,8 @@ def send_invitation(user: User, inviter: User) -> None:
         url = mail.app_link("/login")
         label = text(language, "account_invite_open", app=app)
     else:
-        # A new account has no zone yet either; the admin's is the better guess.
-        until = link_expiry(user, language, inviter.timezone)
-        paragraphs.append(text(language, "account_invite_choose_password", until=until))
+        validity = duration(language, settings.PASSWORD_RESET_TIMEOUT)
+        paragraphs.append(text(language, "account_invite_choose_password", validity=validity))
         url = set_password_link(user)
         label = text(language, "account_invite_set_password")
     mail.send(
@@ -81,7 +70,11 @@ def send_password_reset(user: User, url: str) -> None:
                 heading=text(language, "password_reset_heading"),
                 paragraphs=[
                     text(language, "password_reset_body", app=app),
-                    text(language, "password_reset_validity", until=link_expiry(user, language)),
+                    text(
+                        language,
+                        "password_reset_validity",
+                        validity=duration(language, settings.PASSWORD_RESET_TIMEOUT),
+                    ),
                 ],
                 language=language,
                 details=[(text(language, "account_invite_email"), user.email)],

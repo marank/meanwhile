@@ -26,7 +26,8 @@ FORMAL_ADDRESS = {"de_Informal": FORMAL_GERMAN}
 
 
 def _texts(entry: polib.POEntry) -> list[str]:
-    return [entry.msgstr, *entry.msgstr_plural.values()]
+    """The translation, or each of its plural forms."""
+    return list(entry.msgstr_plural.values()) if entry.msgid_plural else [entry.msgstr]
 
 
 def _key(entry: polib.POEntry) -> tuple[str | None, str]:
@@ -60,7 +61,8 @@ def problems(path: pathlib.Path) -> list[str]:
     found += [
         f"placeholders differ: {entry.msgid}"
         for entry in po.translated_entries()
-        if sorted(PLACEHOLDER.findall(entry.msgid)) != sorted(PLACEHOLDER.findall(entry.msgstr))
+        # Every form of a plural ("{n} day", "{n} days") has the singular's placeholders.
+        if any(sorted(PLACEHOLDER.findall(entry.msgid)) != sorted(PLACEHOLDER.findall(text)) for text in _texts(entry))
     ]
     return [f"{path}: {problem}" for problem in found]
 

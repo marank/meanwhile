@@ -6,7 +6,7 @@ its recipient's language, whatever language the request that causes it runs in.
 
 from django.utils import translation
 from django.utils.functional import Promise
-from django.utils.translation import pgettext_lazy
+from django.utils.translation import npgettext, pgettext_lazy
 
 # The context "email" keeps these apart from the same words elsewhere (e.g. in the Django admin).
 TEXTS: dict[str, Promise] = {
@@ -129,7 +129,7 @@ TEXTS: dict[str, Promise] = {
     "account_invite_body": pgettext_lazy("email", "{actor} invited you to {app}."),
     "account_invite_choose_password": pgettext_lazy(
         "email",
-        'To get started, set a password using the button below. For security, the link only works until {until}; you can request a new one at any time with "Forgot your password?" on the sign-in page.',
+        'To get started, set a password using the button below. For security, the link is valid for {validity}; you can request a new one at any time with "Forgot your password?" on the sign-in page.',
     ),
     "account_invite_sign_in": pgettext_lazy(
         "email", "Sign in with this email address and the password you got from {actor}."
@@ -145,7 +145,7 @@ TEXTS: dict[str, Promise] = {
     ),
     "password_reset_validity": pgettext_lazy(
         "email",
-        "For security, the link works once and only until {until}. If you didn't ask for this, ignore this email; your password stays as it is.",
+        "For security, the link is valid for {validity} and works once. If you didn't ask for this, ignore this email; your password stays as it is.",
     ),
     "password_reset_button": pgettext_lazy("email", "Choose new password"),
 }
@@ -155,3 +155,13 @@ def text(language: str, key: str, **values: object) -> str:
     """The text in `language` (English where there is no translation), with `values` filled in."""
     with translation.override(language or "en"):
         return str(TEXTS[key]).format(**values)
+
+
+def duration(language: str, seconds: int) -> str:
+    """E.g. "3 days", or "12 hours" for less than whole days."""
+    days, rest = divmod(seconds, 86400)
+    with translation.override(language or "en"):
+        if days and not rest:
+            return npgettext("email", "{n} day", "{n} days", days).format(n=days)
+        hours = max(1, -(-seconds // 3600))
+        return npgettext("email", "{n} hour", "{n} hours", hours).format(n=hours)

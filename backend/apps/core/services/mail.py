@@ -188,12 +188,6 @@ def _time(moment: datetime, reader: Reader) -> str:
     return f"{moment.hour:02d}:{moment.minute:02d}"
 
 
-def format_moment(moment: datetime, reader: Reader) -> str:
-    """E.g. "Fri, Nov 28, 2026, 12:10 PM (Europe/Berlin)"."""
-    local = moment.astimezone(zone(reader.timezone))
-    return f"{_date(local.date(), reader)}, {_time(local, reader)} ({reader.timezone})"
-
-
 def format_when(start: datetime, end: datetime, all_day: bool, reader: Reader) -> str:
     """E.g. "Mon, Jan 7, 2030, 9:00 AM – 10:00 AM (Europe/Berlin)"; all-day ends are inclusive."""
     if all_day:
