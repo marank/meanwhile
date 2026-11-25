@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
+import { nonEmpty } from '@/services/text'
 
 withDefaults(
   defineProps<{
     label: string
-    emptyLabel: string
+    /** What the app shows while none is uploaded, e.g. its own logo. */
+    defaultImage: string
+    /** Says that the default is in use. */
+    defaultLabel: string
     removeLabel: string
     size?: 'sm' | 'lg'
   }>(),
@@ -15,8 +19,9 @@ withDefaults(
 
 const labelId = useId()
 
-// Images are stored inline as data URLs.
+// Images are stored inline as data URLs; the server sends "" for none.
 const image = defineModel<string | null>({ required: true })
+const custom = computed(() => nonEmpty(image.value))
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -38,27 +43,25 @@ async function onChange(event: Event) {
     <span :id="labelId" class="mb-1 block text-sm font-medium text-gray-800">{{ label }}</span>
     <div class="flex items-center gap-4">
       <div
-        class="flex items-center justify-center overflow-hidden border border-line"
-        :class="[
-          size === 'lg' ? 'h-16 w-16 rounded-lg text-sm' : 'h-10 w-10 rounded text-xs',
-          image ? 'bg-surface' : 'bg-surface-muted text-gray-400',
-        ]"
+        class="flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-surface p-1"
+        :class="size === 'lg' ? 'h-16 w-16' : 'h-10 w-10'"
+        :data-default="!custom || undefined"
       >
-        <img v-if="image" :src="image" alt="" class="max-h-full max-w-full object-contain" />
-        <template v-else>{{ emptyLabel }}</template>
+        <img :src="custom ?? defaultImage" alt="" class="max-h-full max-w-full object-contain" />
       </div>
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <!-- A button of our own instead of the browser's file field ("Choose file / No file chosen"),
              which can't be styled; the field stays, invisible, for the keyboard and screen readers. -->
         <label
           class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-sm text-gray-700 focus-within:ring-2 focus-within:ring-blue-500 hover:bg-hover"
         >
           <input type="file" accept="image/*" :aria-labelledby="labelId" class="sr-only" @change="onChange" />
-          {{ image ? $t('app.changeImage') : $t('app.chooseImage') }}
+          {{ custom ? $t('app.changeImage') : $t('app.chooseImage') }}
         </label>
-        <button v-if="image" type="button" class="text-sm text-red-600 hover:underline" @click="image = null">
+        <button v-if="custom" type="button" class="text-sm text-red-600 hover:underline" @click="image = null">
           {{ removeLabel }}
         </button>
+        <span v-else class="basis-full text-xs text-gray-500">{{ defaultLabel }}</span>
       </div>
     </div>
   </div>

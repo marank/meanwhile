@@ -15,6 +15,8 @@ const app: Overlay<MessageSchema['app']> = {
   appPasswordsDescription:
     'CalDAV-Clients (Thunderbird, iPhone, …) melden sich mit deiner E-Mail-Adresse und einem App-Passwort an; dein Kontopasswort gilt nur hier in der Web-App.',
   appPasswordCreatedInfo: 'Dein neues App-Passwort lautet:',
+  defaultLogo: 'Bis du ein eigenes wählst, wird das Logo von Meanwhile angezeigt.',
+  defaultFavicon: 'Bis du ein eigenes wählst, wird das Icon von Meanwhile angezeigt.',
   rotateFeedText:
     'Deine Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr. Andere Mitglieder behalten ihre eigenen URLs.',
 }

@@ -38,7 +38,8 @@ describe('image upload field', () => {
         modelValue,
         size,
         label: 'Logo',
-        emptyLabel: 'No logo',
+        defaultImage: '/logo.svg',
+        defaultLabel: "Meanwhile's own logo is shown until you choose one.",
         removeLabel: 'Remove logo',
         'onUpdate:modelValue': (value: string | null) => wrapper.setProps({ modelValue: value }),
       },
@@ -54,8 +55,10 @@ describe('image upload field', () => {
     expect(wrapper.get('img').attributes('src')).toBe('data:image/png;base64,AAAA')
     await buttonNamed(wrapper, 'Remove logo').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[null]])
-    expect(wrapper.find('img').exists()).toBe(false)
-    expect(wrapper.text()).toContain('No logo')
+    // Without one, the preview shows what the app uses instead, and says so.
+    expect(wrapper.get('img').attributes('src')).toBe('/logo.svg')
+    expect(wrapper.find('[data-default]').exists()).toBe(true)
+    expect(wrapper.text()).toContain("Meanwhile's own logo is shown until you choose one.")
     expect(wrapper.find('button').exists()).toBe(false)
     // The picker is a button-like label of our own, not the browser's "No file chosen".
     expect(wrapper.get('label').text()).toBe('Choose image')
@@ -68,8 +71,16 @@ describe('image upload field', () => {
       new File(['hi'], 'logo.png', { type: 'image/png' }),
     )
     await vi.waitFor(() => expect(wrapper.emitted('update:modelValue')).toEqual([['data:image/png;base64,aGk=']]))
-    expect(wrapper.find('img').exists()).toBe(true)
+    expect(wrapper.get('img').attributes('src')).toBe('data:image/png;base64,aGk=')
+    expect(wrapper.find('[data-default]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('own logo')
     expect(wrapper.get('label').text()).toBe('Choose another')
+  })
+
+  it("takes the server's empty value for no image", () => {
+    const wrapper = render('')
+    expect(wrapper.get('img').attributes('src')).toBe('/logo.svg')
+    expect(wrapper.find('button').exists()).toBe(false)
   })
 
   it('ignores an empty pick', async () => {

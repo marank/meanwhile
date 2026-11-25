@@ -47,14 +47,16 @@ function save() {
       <ImageUploadField
         v-model="form.logo_url"
         :label="$t('app.logo')"
-        :empty-label="$t('app.noLogo')"
+        default-image="/logo.svg"
+        :default-label="$t('app.defaultLogo')"
         :remove-label="$t('app.removeLogo')"
       />
       <ImageUploadField
         v-model="form.favicon_url"
         size="sm"
         :label="$t('app.favicon')"
-        :empty-label="$t('app.noFavicon')"
+        default-image="/favicon.svg"
+        :default-label="$t('app.defaultFavicon')"
         :remove-label="$t('app.removeFavicon')"
       />
 
