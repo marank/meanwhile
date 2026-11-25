@@ -119,8 +119,8 @@ export default {
   defaultApprovers: 'Default approvers',
   defaultApproversDescription:
     'Decide on bookings of resources that require approval, unless a resource has its own approvers.',
-  noDefaultApprovers: 'No default approvers.',
-  nobody: 'nobody',
+  noDefaultApprovers: "No default approvers: the calendar's owner approves bookings.",
+  calendarOwner: "the calendar's owner",
   approvalNone: 'No approval',
   approvalDefault: 'Default',
   approvedBy: 'Approved by',

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { loginRoute } from '@/services/loginRedirect'
 import { useAuthStore } from '@/stores/auth'
 
 declare module 'vue-router' {
@@ -128,7 +129,8 @@ router.beforeEach(async (to) => {
     return
   }
   await auth.init()
-  if (!to.meta.public && !auth.isLoggedIn) return '/login'
+  // Signed in, the user lands where they were going, e.g. the request an email's link opened.
+  if (!to.meta.public && !auth.isLoggedIn) return loginRoute(to.fullPath)
   if (to.meta.public && auth.isLoggedIn) return '/calendar'
   if (to.meta.admin && !auth.isAdmin) return '/calendar'
 })

@@ -112,6 +112,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "apps.core.middleware.request_language",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -261,7 +262,8 @@ TIME_ZONE = env_str("TIME_ZONE", "UTC")
 USE_I18N = True
 # The languages emails are written in (each in its recipient's, apps.core.services.mail_texts); German in
 # locale/de. No LocaleMiddleware: the app's language is a user setting the SPA applies itself, and
-# the browser's Accept-Language must not turn the API's and allauth's messages into another one.
+# the browser's Accept-Language must not turn the API's and allauth's messages into another one;
+# the SPA names its language in X-Language instead (apps.core.middleware.request_language).
 LANGUAGES = [("en", "English"), ("de", "Deutsch")]
 LOCALE_PATHS = [BASE_DIR / "locale"]
 USE_TZ = True

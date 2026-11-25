@@ -39,13 +39,14 @@ function ok() {
     </div>
 
     <div v-if="dialog.kind === 'prompt'" class="mt-4">
-      <!-- AppModal focuses it when the dialog opens. -->
+      <!-- AppModal focuses it when the dialog opens. Enter's default is prevented: closing returns focus
+           to the button that opened the prompt, which the same key press would otherwise press again. -->
       <input
         v-model="inputValue"
         type="text"
         :aria-labelledby="messageId"
         class="w-full rounded-lg border px-3 py-2"
-        @keydown.enter="ok"
+        @keydown.enter.prevent="ok"
       />
     </div>
 

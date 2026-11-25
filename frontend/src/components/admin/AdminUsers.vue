@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Dices, EllipsisVertical, Eye, EyeOff, Pencil, Plus, X } from '@lucide/vue'
+import { Dices, EllipsisVertical, Eye, EyeOff, Pencil, X } from '@lucide/vue'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import AppModal from '@/components/AppModal.vue'
@@ -32,7 +32,6 @@ const users = ref<api.AdminUser[]>([])
 const form = ref<UserForm | null>(null)
 const showPassword = ref(false)
 const pickedGroupId = ref<string | null>(null)
-const pickedGroup = ref<api.SearchResult | null>(null)
 const generatedPassword = ref<string | null>(null)
 // The row's menu of further actions, under its button.
 const rowMenu = ref<{ userId: string; x: number; y: number; items: MenuItem[] } | null>(null)
@@ -70,11 +69,13 @@ function openForm(user: api.AdminUser | null) {
   pickedGroupId.value = null
 }
 
-function addGroup() {
-  const group = pickedGroup.value
+// Picking a group adds it; a separate add button was easy to miss, and the pick was lost on saving.
+async function onGroupPicked(_id: string | null, group: api.SearchResult | null) {
   if (form.value && group && !form.value.groups.some((g) => g.id === group.id)) {
     form.value.groups.push({ id: group.id, name: group.label })
   }
+  // Let the select show the pick for one tick before clearing it for the next search.
+  await nextTick()
   pickedGroupId.value = null
 }
 
@@ -276,26 +277,10 @@ async function resetPassword(user: api.AdminUser) {
         </ul>
         <p v-else class="mb-4 text-sm text-gray-500">{{ $t('app.noGroups') }}</p>
 
-        <div class="flex items-end gap-2">
-          <label class="flex-1">
-            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.addGroup') }}</span>
-            <SearchableSelect
-              v-model="pickedGroupId"
-              entity="groups"
-              open-on-focus
-              @select="(_id, option) => (pickedGroup = option)"
-            />
-          </label>
-          <button
-            type="button"
-            :disabled="!pickedGroupId"
-            :aria-label="$t('app.addGroup')"
-            class="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-            @click="addGroup"
-          >
-            <Plus :size="18" />
-          </button>
-        </div>
+        <label class="block">
+          <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.addGroup') }}</span>
+          <SearchableSelect v-model="pickedGroupId" entity="groups" open-on-focus @select="onGroupPicked" />
+        </label>
       </div>
       <div class="flex justify-end gap-3">
         <button type="button" class="rounded-lg border border-line px-4 py-2 hover:bg-hover" @click="form = null">

@@ -66,8 +66,11 @@ describe('DialogHost', () => {
     expect(input.value).toBe('Work')
     input.value = 'Home'
     input.dispatchEvent(new Event('input'))
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
+    input.dispatchEvent(enter)
     await expect(answer).resolves.toBe('Home')
+    // Focus goes back to the button that opened the prompt; Enter must not go on to press it again.
+    expect(enter.defaultPrevented).toBe(true)
   })
 
   it("names the prompt's field after its question", async () => {

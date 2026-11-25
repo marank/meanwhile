@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppLogo from '@/components/AppLogo.vue'
 import { errorMessage } from '@/services/errors'
+import { afterLogin } from '@/services/loginRedirect'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -12,6 +13,7 @@ const props = defineProps<{ mode?: 'login' | 'register' }>()
 const auth = useAuthStore()
 const settings = useSettingsStore()
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 
 const isRegister = computed(() => props.mode === 'register')
@@ -40,7 +42,7 @@ async function submit() {
     } else {
       await auth.login(email.value, password.value)
     }
-    await router.push('/calendar')
+    await router.push(afterLogin(route.query.redirect))
   } catch (e) {
     error.value = errorMessage(e, t('app.actionFailed'))
   } finally {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeBackend, reply } from '@/__tests__/fakeBackend'
+import { setLocale } from '@/i18n'
 import { api, ApiError, setUnauthorizedHandler } from '../client'
 
 describe('api client', () => {
@@ -27,6 +28,16 @@ describe('api client', () => {
     expect(backend.requests[0]!.headers['X-CSRFToken']).toBeUndefined()
     expect(backend.requests[0]!.headers['Content-Type']).toBeUndefined()
     expect(backend.requests[1]!.headers['X-CSRFToken']).toBe('token-123')
+  })
+
+  it('names the interface language, so the server answers in it', async () => {
+    const backend = fakeBackend({ 'GET /api/x': {}, 'POST /api/x': {} })
+    setLocale('de')
+    await api('/api/x')
+    setLocale('en')
+    await api('/api/x', { method: 'POST' })
+    expect(backend.requests[0]!.headers['X-Language']).toBe('de')
+    expect(backend.requests[1]!.headers['X-Language']).toBe('en')
   })
 
   it('sends no CSRF header without the cookie', async () => {

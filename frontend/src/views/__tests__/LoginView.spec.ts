@@ -25,13 +25,16 @@ const publicSettings = (allowRegistration = true): PublicSettings => ({
   allow_registration: allowRegistration,
 })
 
-async function render(mode?: 'login' | 'register') {
+async function render(mode?: 'login' | 'register', start?: string) {
   const page = { template: '<div />' }
   router = createRouter({
     history: createMemoryHistory(),
-    routes: ['/login', '/register', '/forgot-password', '/calendar'].map((path) => ({ path, component: page })),
+    routes: ['/login', '/register', '/forgot-password', '/calendar', '/event/:id'].map((path) => ({
+      path,
+      component: page,
+    })),
   })
-  await router.push(mode === 'register' ? '/register' : '/login')
+  await router.push(start ?? (mode === 'register' ? '/register' : '/login'))
   // As App does on start.
   await useSettingsStore().load()
   wrapper = mount(LoginView, { props: { mode }, global: { plugins: [i18n, router] } })
@@ -69,6 +72,20 @@ describe('LoginView', () => {
     })
     expect(useAuthStore().user?.email).toBe('alice@example.com')
     expect(router.currentRoute.value.path).toBe('/calendar')
+  })
+
+  it.each([
+    ['/event/e1', '/event/e1'],
+    // Only pages of the app: a redirect to another site goes to the calendar instead.
+    ['//evil.test/x', '/calendar'],
+    ['/\\evil.test', '/calendar'],
+    ['https://evil.test', '/calendar'],
+  ])('goes on to the page the login was asked for (%s)', async (redirect, expected) => {
+    backend.on('POST /api/auth/v1/auth/login', { status: 200, data: { user: makeUser() } })
+    await render(undefined, `/login?redirect=${encodeURIComponent(redirect)}`)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe(expected)
   })
 
   it("shows the server's explanation when signing in fails", async () => {

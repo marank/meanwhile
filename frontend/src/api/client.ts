@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`
   const parts = value.split(`; ${name}=`)
@@ -31,7 +33,8 @@ export function setUnauthorizedHandler(handler: () => void) {
 
 export async function api<T = unknown>(path: string, options: FetchOptions = {}): Promise<T> {
   const method = options.method ?? 'GET'
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  // The server answers in the interface's language (its errors, password rules), not the browser's.
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-Language': i18n.global.locale.value }
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && method !== 'HEAD') {
     const csrf = getCookie('csrftoken')

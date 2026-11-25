@@ -84,8 +84,9 @@ describe('calendar resources: list and editing', () => {
     backend.on('GET /api/calendars/cal/resources', [resource('r1', 'Room', { requires_approval: true })])
     backend.on('GET /api/calendars/cal/approvers', [])
     const { wrapper } = await render()
-    expect(wrapper.text()).toContain('Default (nobody)')
-    expect(wrapper.text()).toContain('No default approvers')
+    // Without approvers the owner decides, which the list says rather than "nobody".
+    expect(wrapper.text()).toContain("Default (the calendar's owner)")
+    expect(wrapper.text()).toContain("No default approvers: the calendar's owner approves bookings.")
 
     backend.on('GET /api/calendars/cal/resources', [])
     const empty = await render()

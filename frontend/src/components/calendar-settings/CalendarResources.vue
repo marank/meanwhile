@@ -105,7 +105,7 @@ onDeactivated(() => {
 function approvalLabel(resource: api.Resource) {
   if (!resource.requires_approval) return t('app.approvalNone')
   if (resource.approvers.length) return resource.approvers.map((a) => a.display_name).join(', ')
-  return `${t('app.approvalDefault')} (${defaultApproverNames.value || t('app.nobody')})`
+  return `${t('app.approvalDefault')} (${defaultApproverNames.value || t('app.calendarOwner')})`
 }
 
 // Default approvers
@@ -377,7 +377,7 @@ async function remove(id: string) {
           <label class="flex items-center gap-2 text-sm">
             <input v-model="form.approval_mode" type="radio" value="default" />
             <span class="font-medium text-gray-800">{{ $t('app.useDefaultApprovers') }}</span>
-            <span class="text-gray-500">({{ defaultApproverNames || $t('app.nobody') }})</span>
+            <span class="text-gray-500">({{ defaultApproverNames || $t('app.calendarOwner') }})</span>
           </label>
           <label class="flex items-center gap-2 text-sm">
             <input v-model="form.approval_mode" type="radio" value="custom" />

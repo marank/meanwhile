@@ -7,6 +7,7 @@ import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
 import { setUnauthorizedHandler } from './api'
+import { loginRoute } from './services/loginRedirect'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 
@@ -23,7 +24,7 @@ setUnauthorizedHandler(() => {
   const auth = useAuthStore()
   if (!auth.isLoggedIn) return
   auth.clearSession()
-  void router.push('/login')
+  void router.push(loginRoute(router.currentRoute.value.fullPath))
 })
 
 app.mount('#app')

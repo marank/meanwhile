@@ -39,18 +39,19 @@ describe('router', () => {
   describe('signed out', () => {
     beforeEach(() => session(null))
 
-    it.each([
-      '/',
-      '/calendar',
-      '/calendar/c1',
-      '/event/e1',
-      '/notifications',
-      '/calendar/c1/settings',
-      '/account',
-      '/admin',
-    ])('sends %s to the login', async (path) => {
+    it.each(['/', '/calendar'])('sends %s to the login', async (path) => {
       expect(await visit(path)).toBe('/login')
     })
+
+    // E.g. the link in an approval request's email: once signed in, the user lands there.
+    it.each(['/calendar/c1', '/event/e1', '/notifications', '/calendar/c1/settings', '/account', '/admin'])(
+      'sends %s to the login, remembering where it was going',
+      async (path) => {
+        await visit(path)
+        expect(router.currentRoute.value.path).toBe('/login')
+        expect(router.currentRoute.value.query.redirect).toBe(path)
+      },
+    )
 
     it.each(['/login', '/register', '/forgot-password'])('shows %s', async (path) => {
       expect(await visit(path)).toBe(path)

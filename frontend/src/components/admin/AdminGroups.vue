@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pencil, Plus, Trash2, X } from '@lucide/vue'
+import { Pencil, Trash2, X } from '@lucide/vue'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
@@ -23,7 +23,6 @@ const groups = ref<api.UserGroup[]>([])
 // null while the list is shown
 const form = ref<GroupForm | null>(null)
 const pickedUserId = ref<string | null>(null)
-const pickedUser = ref<api.SearchResult | null>(null)
 
 const { loading } = useLoader(load)
 
@@ -52,11 +51,13 @@ async function startEdit(group: api.UserGroup) {
   )
 }
 
-function addMember() {
-  const user = pickedUser.value
+// Picking a user adds them; a separate add button was easy to miss, and the pick was lost on saving.
+async function onUserPicked(_id: string | null, user: api.SearchResult | null) {
   if (form.value && user && !form.value.members.some((m) => m.id === user.id)) {
     form.value.members.push({ id: user.id, display_name: user.label, email: user.subtitle ?? '' })
   }
+  // Let the select show the pick for one tick before clearing it for the next search.
+  await nextTick()
   pickedUserId.value = null
 }
 
@@ -183,27 +184,16 @@ async function remove(group: api.UserGroup) {
         </ul>
         <p v-else class="mb-4 text-sm text-gray-500">{{ $t('app.noMembers') }}</p>
 
-        <div class="flex items-end gap-2">
-          <label class="flex-1">
-            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.addMember') }}</span>
-            <SearchableSelect
-              v-model="pickedUserId"
-              entity="users"
-              :min-search-length="2"
-              :placeholder="$t('app.searchUsers')"
-              @select="(_id, option) => (pickedUser = option)"
-            />
-          </label>
-          <button
-            type="button"
-            :disabled="!pickedUserId"
-            :aria-label="$t('app.addMember')"
-            class="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-            @click="addMember"
-          >
-            <Plus :size="18" />
-          </button>
-        </div>
+        <label class="block">
+          <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.addMember') }}</span>
+          <SearchableSelect
+            v-model="pickedUserId"
+            entity="users"
+            :min-search-length="2"
+            :placeholder="$t('app.searchUsers')"
+            @select="onUserPicked"
+          />
+        </label>
       </div>
 
       <div class="flex justify-end gap-3 border-t border-line pt-4">

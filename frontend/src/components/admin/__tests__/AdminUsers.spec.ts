@@ -142,11 +142,8 @@ describe('admin users', () => {
     await wrapper.findAll('[role="switch"]')[0]!.trigger('click') // admin
     expect(wrapper.text()).toContain('No groups yet.')
     await pickGroup(wrapper, 'g1', 'Sales')
-    await buttonNamed(wrapper, 'Add group').trigger('click')
     await pickGroup(wrapper, 'g1', 'Sales')
-    await buttonNamed(wrapper, 'Add group').trigger('click')
     await pickGroup(wrapper, 'g2', 'Ops')
-    await buttonNamed(wrapper, 'Add group').trigger('click')
     expect(wrapper.findAll('li').map((li) => li.text())).toEqual(['Sales', 'Ops'])
     await wrapper.findAll('li button')[1]!.trigger('click')
 

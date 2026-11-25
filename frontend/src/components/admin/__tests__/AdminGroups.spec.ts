@@ -67,17 +67,14 @@ describe('admin groups', () => {
     await buttonNamed(wrapper, 'Add group').trigger('click')
     expect(wrapper.find('h2').text()).toBe('Add group')
     expect(wrapper.text()).toContain('No members yet.')
-    const add = () => wrapper.get('button[aria-label="Add member"]')
-    expect(add().attributes('disabled')).toBeDefined()
 
     await wrapper.get('input:not([type])').setValue('Leads')
+    // Picking someone adds them: saving right after keeps them, without a separate add button.
     await pickUser(wrapper, 'kim', 'Kim')
-    await add().trigger('click')
+    expect(wrapper.findComponent(SearchableSelect).props('modelValue')).toBeNull()
     // Someone in the group already isn't added twice.
     await pickUser(wrapper, 'kim', 'Kim')
-    await add().trigger('click')
     await pickUser(wrapper, 'max', 'Max')
-    await add().trigger('click')
     expect(wrapper.findAll('li').map((li) => li.text())).toEqual(['Kimkim@example.test', 'Maxmax@example.test'])
     await wrapper.findAll('li button[aria-label="Remove member"]')[1]!.trigger('click')
 

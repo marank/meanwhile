@@ -122,8 +122,8 @@ const app: MessageSchema['app'] = {
   defaultApprovers: 'Standard-Genehmiger',
   defaultApproversDescription:
     'Entscheiden über Buchungen genehmigungspflichtiger Ressourcen, sofern eine Ressource keine eigenen Genehmiger hat.',
-  noDefaultApprovers: 'Keine Standard-Genehmiger.',
-  nobody: 'niemand',
+  noDefaultApprovers: 'Keine Standard-Genehmiger: Buchungen genehmigt der Eigentümer des Kalenders.',
+  calendarOwner: 'Eigentümer des Kalenders',
   approvalNone: 'Keine Genehmigung',
   approvalDefault: 'Standard',
   approvedBy: 'Genehmigt von',
