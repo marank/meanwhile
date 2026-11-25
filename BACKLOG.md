@@ -18,35 +18,33 @@ Features and improvements proposed for future releases.
 ### Events and recurrence
 
 9. **Reminder defaults** — per-user and per-calendar default reminders for new events (in-app and email reminders and CalDAV alarms exist).
-10. **Event attachments** — documents or links, with storage limits and file validation.
-11. **Event templates** — presets for duration, category, resource and recurrence.
-12. **Duplicate / copy event** — copy an event to another date or calendar.
-13. **Show as: free / busy / tentative / out of office** — a field on the event (like Outlook's "Show as"). Read and write `TRANSP` and `X-MICROSOFT-CDO-BUSYSTATUS` over CalDAV and in the feed, so a "free" event set in Thunderbird, Apple Calendar or Outlook is no longer lost. Availability then ignores free events (and "working elsewhere"), counts tentative ones as tentative, and could show out of office distinctly; resources always block. Start with the organizer's own status; a status per participant (their own answer on the event) and the Outlook-only values "out of office" and "working elsewhere" can follow.
+10. **Event templates** — presets for duration, category, resource and recurrence.
+11. **Show as per participant** — each participant's own "show as" for an event they take part in (Outlook asks every invitee); now the organizer's value counts for everyone's availability. Read it from the participant's own copy over CalDAV and from answers by email.
 
 ### Collaboration
 
-14. **Invite/accept flow** — added members accept or decline membership, with expiration and resend.
-15. **Free/busy across days** — a week view of the availability of members and resources, and suggestions of free times (the event dialog shows one day).
+12. **Invite/accept flow** — added members accept or decline membership, with expiration and resend.
+13. **Free/busy across days** — a week view of the availability of members and resources, and suggestions of free times (the event dialog shows one day).
 
 ### Resource booking
 
-16. **Resource booking limits** — max duration, minimum notice, max days ahead, prevent past bookings.
-17. **Resource availability schedules** — weekday availability, maintenance periods, capacity for concurrent bookings.
-18. **Flexible approval policies** — any one approver vs. all approvers; conditional or automatic approval.
-19. **Resource utilization reports** — usage, peak periods, rejected requests; CSV export.
+14. **Resource booking limits** — max duration, minimum notice, max days ahead, prevent past bookings.
+15. **Resource availability schedules** — weekday availability, maintenance periods, capacity for concurrent bookings.
+16. **Flexible approval policies** — any one approver vs. all approvers; conditional or automatic approval.
+17. **Resource utilization reports** — usage, peak periods, rejected requests; CSV export.
 
 ### Administration and reliability
 
-20. **Audit log** — administrative, membership, calendar and approval changes, filterable by actor, calendar, action and date.
-21. **Data export and backup** — user/calendar export, admin backup and restore workflow.
-22. **Admin dashboard** — users, active calendars, pending approvals, resource usage, recent activity.
-23. **Soft deletion and trash** — recover deleted events and calendars for a configurable period.
-24. **Rate-limit failed CalDAV logins** — Radicale waits about a second after every failed login. Since the move to ASGI, CalDAV requests run in their own thread pool (20 threads per process), so they no longer hold up the app and API, but a flood of wrong logins can still occupy that pool. Rate-limit `/caldav` in the reverse proxy (e.g. nginx `limit_req`, or fail2ban on 401 answers).
-25. **Approvers who lose access through a group** — removing a member removes them as an approver unless they keep access some other way. Losing access *through a group* (the group link removed, or the user taken out of the group) doesn't: the user stays listed as approver of the calendar and its resources, although they can no longer decide on bookings, and are notified of requests. Clean up the approver entries when a group link or a group membership ends, for those who then have no access left.
+18. **Audit log** — administrative, membership, calendar and approval changes, filterable by actor, calendar, action and date.
+19. **Data export and backup** — user/calendar export, admin backup and restore workflow; the nightly backup could take the attached files (`/data/attachments`) along with the database dump, which doesn't hold them.
+20. **Admin dashboard** — users, active calendars, pending approvals, resource usage, recent activity.
+21. **Soft deletion and trash** — recover deleted events and calendars for a configurable period.
+22. **Rate-limit failed CalDAV logins** — Radicale waits about a second after every failed login. Since the move to ASGI, CalDAV requests run in their own thread pool (20 threads per process), so they no longer hold up the app and API, but a flood of wrong logins can still occupy that pool. Rate-limit `/caldav` in the reverse proxy (e.g. nginx `limit_req`, or fail2ban on 401 answers).
+23. **Approvers who lose access through a group** — removing a member removes them as an approver unless they keep access some other way. Losing access *through a group* (the group link removed, or the user taken out of the group) doesn't: the user stays listed as approver of the calendar and its resources, although they can no longer decide on bookings, and are notified of requests. Clean up the approver entries when a group link or a group membership ends, for those who then have no access left.
 
 ### Code quality
 
-26. **Operator docs** — operation is documented in `docs/operations.md` and the settings in `.env.example`; a VitePress site (English and German) would give operators and users a place of their own.
+24. **Operator docs** — operation is documented in `docs/operations.md` and the settings in `.env.example`; a VitePress site (English and German) would give operators and users a place of their own.
 
 ## Known v1 limitations
 
@@ -56,4 +54,5 @@ Features and improvements proposed for future releases.
 - An answer by email or link counts for the whole series; answers for single occurrences are only taken from mail programs for occurrences that were changed. Taking someone off a single occurrence sends nothing.
 - No separate admin role; calendar owners manage their calendars.
 - Outlook does not support native CalDAV; use iCal subscription or the Outlook CalDav Synchronizer plugin on classic Outlook.
+- Attached files are added and removed in the app; CalDAV clients see them as links and change only links.
 - Bookings are made, rescheduled and decided in the app; CalDAV clients see the booked resource as location and pending bookings not at all.

@@ -18,6 +18,7 @@ from apps.core.models import (
     CalendarMember,
     DeletedEvent,
     Event,
+    EventAttachment,
     EventParticipant,
     Folder,
     Notification,
@@ -26,7 +27,7 @@ from apps.core.models import (
 )
 from apps.core.models.base import AnyId
 from apps.core.realtime import broadcast
-from apps.core.services import memberships, reminders
+from apps.core.services import attachments, memberships, reminders
 
 # CalDAV clients that haven't synced for longer than this start over with a full sync.
 DELETED_EVENT_RETENTION = timedelta(days=90)
@@ -83,6 +84,12 @@ def forget_deleted_events_of_calendar(sender: object, instance: Calendar, **kwar
 @receiver(post_delete, sender=Event)
 def announce_event_change(sender: object, instance: Event, **kwargs: Any) -> None:
     broadcast.calendar_changed(instance.calendar_id)
+
+
+@receiver(post_delete, sender=EventAttachment)
+def delete_attachment_file(sender: object, instance: EventAttachment, **kwargs: Any) -> None:
+    # Also for attachments deleted along with their event or calendar.
+    attachments.delete_file_later(instance)
 
 
 @receiver(post_save, sender=EventParticipant)

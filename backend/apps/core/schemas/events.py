@@ -3,12 +3,13 @@ Events, their participants, occurrences, comments, activity and approvals.
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from ninja import Field
-from pydantic import model_validator
+from pydantic import AfterValidator, model_validator
 
-from apps.core.models.base import EventStatus, ParticipantStatus
+from apps.core.models.base import AttachmentKind, EventStatus, ParticipantStatus, ShowAs
 from apps.core.schemas.common import EmailAddress, Id, RRule, Schema, Text, TimeZoneName
 from apps.core.schemas.resources import ApproverOut
 
@@ -43,6 +44,7 @@ class EventCreate(Schema):
     rrule: RRule | None = None
     category_id: Id | None = None
     resource_id: Id | None = None
+    show_as: ShowAs = ShowAs.BUSY
     participants: list[EventParticipantCreate] | None = None
 
 
@@ -59,6 +61,7 @@ class EventUpdate(Schema):
     rrule: RRule | None = None
     category_id: Id | None = None
     resource_id: Id | None = None
+    show_as: ShowAs | None = None
 
 
 class EventRemindersIn(Schema):
@@ -114,6 +117,7 @@ class EventOut(Schema):
     resource_id: Id | None
     resource_name: str | None
     status: EventStatus
+    show_as: ShowAs
     # Names of the booked resources a pending event still waits to have approved.
     awaiting_approval: list[str] = []
     decided_by: str | None
@@ -139,6 +143,7 @@ class OccurrenceOut(Schema):
     all_day: bool
     recurrence_count: int | None
     status: EventStatus
+    show_as: ShowAs
     category_id: Id | None
     category_name: str | None
     category_color: str | None
@@ -155,6 +160,50 @@ class OccurrenceOut(Schema):
     # identify it in /events/{series_id}/occurrences/{recurrence_id}.
     series_id: Id | None = None
     recurrence_id: datetime | None = None
+
+
+class EventDuplicate(Schema):
+    """Where a copy of an event goes: its calendar and start (it lasts as long as the original)."""
+
+    calendar_id: Id
+    start: datetime
+    # Invites the original's participants to the copy (they're sent invitations).
+    invite_participants: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Attachments
+# ---------------------------------------------------------------------------
+
+
+def _web_address(value: str) -> str:
+    # Other schemes (javascript:, file:, data:) aren't links one should be sent to.
+    parts = urlsplit(value.strip())
+    if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
+        raise ValueError("Only http and https links can be attached")
+    return value.strip()
+
+
+WebAddress = Annotated[str, Field(max_length=2000), AfterValidator(_web_address)]
+
+
+class AttachmentLinkCreate(Schema):
+    url: WebAddress
+    # Shown instead of the address; the address when empty.
+    name: str = Field(default="", max_length=255)
+
+
+class AttachmentOut(Schema):
+    id: Id
+    kind: AttachmentKind
+    name: str
+    # Where it is opened: a link's address, or where a file is downloaded.
+    url: str
+    # A file's type and size in bytes; empty and 0 for links.
+    content_type: str
+    size: int
+    added_by_name: str | None
+    created_at: datetime
 
 
 # ---------------------------------------------------------------------------

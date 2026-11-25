@@ -2419,6 +2419,51 @@
         ]
       }
     },
+    "/api/events/{event_id}/duplicate": {
+      "post": {
+        "operationId": "apps_core_views_events_duplicate_event",
+        "summary": "Duplicate Event",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "A copy of the event at another time or in another calendar (one the user may add events to).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventDuplicate"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
     "/api/events/{event_id}": {
       "get": {
         "operationId": "apps_core_views_events_get_event",
@@ -3105,6 +3150,214 @@
             }
           }
         },
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
+    "/api/events/{event_id}/attachments": {
+      "get": {
+        "operationId": "apps_core_views_attachments_list_attachments",
+        "summary": "List Attachments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AttachmentOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
+    "/api/events/{event_id}/attachments/files": {
+      "post": {
+        "operationId": "apps_core_views_attachments_add_file",
+        "summary": "Add File",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "title": "File",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "title": "FileParams",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
+    "/api/events/{event_id}/attachments/links": {
+      "post": {
+        "operationId": "apps_core_views_attachments_add_link",
+        "summary": "Add Link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
+    "/api/events/{event_id}/attachments/{attachment_id}": {
+      "delete": {
+        "operationId": "apps_core_views_attachments_remove_attachment",
+        "summary": "Remove Attachment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "schema": {
+              "title": "Attachment Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionAuth": []
+          }
+        ]
+      }
+    },
+    "/api/attachments/{attachment_id}/download": {
+      "get": {
+        "operationId": "apps_core_views_attachments_download",
+        "summary": "Download",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "schema": {
+              "title": "Attachment Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "A file attachment's content, for everyone who may see its event; always as a download.",
         "security": [
           {
             "SessionAuth": []
@@ -6643,6 +6896,9 @@
           "status": {
             "$ref": "#/components/schemas/EventStatus"
           },
+          "show_as": {
+            "$ref": "#/components/schemas/ShowAs"
+          },
           "category_id": {
             "anyOf": [
               {
@@ -6775,6 +7031,7 @@
           "all_day",
           "recurrence_count",
           "status",
+          "show_as",
           "category_id",
           "category_name",
           "category_color",
@@ -6792,6 +7049,18 @@
         ],
         "title": "OccurrenceOut",
         "type": "object"
+      },
+      "ShowAs": {
+        "description": "How an event shows its organizer's time to others (Outlook's \"Show as\"); iCalendar's TRANSP and\nMicrosoft's X-MICROSOFT-CDO-BUSYSTATUS.",
+        "enum": [
+          "busy",
+          "free",
+          "tentative",
+          "out_of_office",
+          "working_elsewhere"
+        ],
+        "title": "ShowAs",
+        "type": "string"
       },
       "EventOut": {
         "properties": {
@@ -6999,6 +7268,9 @@
           "status": {
             "$ref": "#/components/schemas/EventStatus"
           },
+          "show_as": {
+            "$ref": "#/components/schemas/ShowAs"
+          },
           "awaiting_approval": {
             "default": [],
             "items": {
@@ -7078,6 +7350,7 @@
           "resource_id",
           "resource_name",
           "status",
+          "show_as",
           "awaiting_approval",
           "decided_by",
           "decided_at",
@@ -7205,6 +7478,14 @@
             ],
             "title": "Resource Id"
           },
+          "show_as": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShowAs"
+              }
+            ],
+            "default": "busy"
+          },
           "participants": {
             "anyOf": [
               {
@@ -7277,6 +7558,32 @@
         ],
         "title": "ParticipantStatus",
         "type": "string"
+      },
+      "EventDuplicate": {
+        "description": "Where a copy of an event goes: its calendar and start (it lasts as long as the original).",
+        "properties": {
+          "calendar_id": {
+            "format": "uuid",
+            "title": "Calendar Id",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "invite_participants": {
+            "default": false,
+            "title": "Invite Participants",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "calendar_id",
+          "start"
+        ],
+        "title": "EventDuplicate",
+        "type": "object"
       },
       "EventUpdate": {
         "properties": {
@@ -7419,6 +7726,16 @@
               }
             ],
             "title": "Resource Id"
+          },
+          "show_as": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShowAs"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "EventUpdate",
@@ -7658,6 +7975,90 @@
           "created_at"
         ],
         "title": "ActivityOut",
+        "type": "object"
+      },
+      "AttachmentKind": {
+        "enum": [
+          "file",
+          "link"
+        ],
+        "title": "AttachmentKind",
+        "type": "string"
+      },
+      "AttachmentOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AttachmentKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "added_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added By Name"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "url",
+          "content_type",
+          "size",
+          "added_by_name",
+          "created_at"
+        ],
+        "title": "AttachmentOut",
+        "type": "object"
+      },
+      "AttachmentLinkCreate": {
+        "properties": {
+          "url": {
+            "maxLength": 2000,
+            "title": "Url",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "AttachmentLinkCreate",
         "type": "object"
       },
       "NotificationOut": {
@@ -8041,6 +8442,9 @@
           "status": {
             "$ref": "#/components/schemas/EventStatus"
           },
+          "show_as": {
+            "$ref": "#/components/schemas/ShowAs"
+          },
           "awaiting_approval": {
             "default": [],
             "items": {
@@ -8127,6 +8531,7 @@
           "resource_id",
           "resource_name",
           "status",
+          "show_as",
           "awaiting_approval",
           "decided_by",
           "decided_at",
@@ -8223,12 +8628,18 @@
           "tentative": {
             "title": "Tentative",
             "type": "boolean"
+          },
+          "out_of_office": {
+            "default": false,
+            "title": "Out Of Office",
+            "type": "boolean"
           }
         },
         "required": [
           "start",
           "end",
-          "tentative"
+          "tentative",
+          "out_of_office"
         ],
         "title": "BusyPeriod",
         "type": "object"

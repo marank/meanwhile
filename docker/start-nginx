@@ -31,8 +31,18 @@ case "$(echo "${ADMIN_ENABLED:-${DEBUG:-false}}" | tr '[:upper:]' '[:lower:]')" 
   *)             ADMIN_LOCATION='    location ~ ^/django-admin(/|$) { return 404; }' ;;
 esac
 
-export TRUSTED_GEO REAL_IP_CONFIG ADMIN_LOCATION
-envsubst '${TRUSTED_GEO} ${REAL_IP_CONFIG} ${ADMIN_LOCATION}' \
+# Requests up to the largest attachment (ATTACHMENT_MAX_SIZE_MB) and a megabyte for the rest; at
+# least 10 MB, which everything else stays far below.
+attachment_mb="${ATTACHMENT_MAX_SIZE_MB:-10}"
+case "$attachment_mb" in
+  ''|*[!0-9]*) echo "ATTACHMENT_MAX_SIZE_MB: not a whole number: $attachment_mb" >&2; exit 1 ;;
+esac
+body_mb=$((attachment_mb + 1))
+[ "$body_mb" -lt 10 ] && body_mb=10
+CLIENT_MAX_BODY_SIZE="${body_mb}m"
+
+export TRUSTED_GEO REAL_IP_CONFIG ADMIN_LOCATION CLIENT_MAX_BODY_SIZE
+envsubst '${TRUSTED_GEO} ${REAL_IP_CONFIG} ${ADMIN_LOCATION} ${CLIENT_MAX_BODY_SIZE}' \
   < /etc/nginx/app.conf.template > "$conf_dir/app.conf"
 
 nginx -e /dev/stderr -t -q

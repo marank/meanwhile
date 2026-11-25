@@ -12,6 +12,7 @@ export type GrantableRole = Schemas['CalendarGroupLinkOut']['role']
 /** What everyone gets in a public calendar: never managing it. */
 export type PublicRole = Schemas['CalendarOut']['public_role']
 export type EventStatus = Schemas['EventStatus']
+export type ShowAs = Schemas['ShowAs']
 
 /** Which occurrences of a series a change applies to. */
 export type OccurrenceScope = NonNullable<
@@ -79,6 +80,10 @@ export type Occurrence = Schemas['OccurrenceOut']
 export type EventInput = Schemas['EventCreate']
 export type EventUpdate = Schemas['EventUpdate']
 export type EventReminders = Schemas['EventRemindersOut']
+/** Where a copy of an event goes; it lasts as long as the original. */
+export type EventDuplicate = Schemas['EventDuplicate']
+export type Attachment = Schemas['AttachmentOut']
+export type AttachmentLinkInput = Schemas['AttachmentLinkCreate']
 
 export type EventComment = Schemas['CommentOut']
 
@@ -88,6 +93,8 @@ interface ActivityDetails {
   status?: string
   note?: string
   occurrence?: string
+  /** The attachment added or removed. */
+  name?: string
 }
 
 export type EventActivity = Omit<Schemas['ActivityOut'], 'details'> & { details: ActivityDetails | null }

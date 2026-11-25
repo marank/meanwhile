@@ -12,6 +12,8 @@ const activity: MessageSchema['activity'] = {
   occurrenceChanged: '{name} hat den Termin am {date} geändert',
   occurrenceDeleted: '{name} hat den Termin am {date} aus der Serie gelöscht',
   seriesEnded: '{name} hat die Serie ab {date} beendet',
+  attachmentAdded: '{name} hat {attachment} angehängt',
+  attachmentRemoved: '{name} hat den Anhang {attachment} entfernt',
   empty: 'Noch keine Aktivitäten.',
   comment: 'Kommentieren',
   commentPlaceholder: 'Kommentar schreiben…',
@@ -27,6 +29,7 @@ const activity: MessageSchema['activity'] = {
     category: 'Kategorie',
     resource: 'Ressource',
     show_recurrence_count: 'Wiederholungszähler',
+    show_as: 'Anzeigen als',
   },
 }
 

@@ -102,9 +102,23 @@ CalDAV clients connect to `/caldav`; clients that only get the server address fi
 `/.well-known/caldav`. Users sign in with their email address and an app password made in the
 account settings; the app keeps only a hash of it, and revoking one locks out that client.
 
-Each calendar also has a read-only iCal feed at `/ics/<token>.ics`. It carries no participants or
-reminders, since anyone with the link can read it; the token can be renewed in the calendar
-settings.
+Each calendar also has a read-only iCal feed at `/ics/<token>.ics`. It carries no participants,
+reminders or attachments, since anyone with the link can read it; the token can be renewed in the
+calendar settings.
+
+Attachments reach calendar apps as links (`ATTACH`): links as they are, files as their download
+address in the app, which opens for a signed-in member. Links added in a calendar app become the
+event's attachments; files are added and removed in the app only. Invitations to participants
+carry only the links.
+
+## Attachments
+
+Files attached to events are kept in the data volume under `/data/attachments` (`app_data` in
+`compose.yml`), named by their id; the database holds their names and sizes. Only common
+documents, images, text and ZIP files are taken, and only when their content matches their name;
+they're always served as downloads, never shown in the browser. `ATTACHMENT_MAX_SIZE_MB` limits
+each file (nginx takes requests that big; 0 allows links only) and
+`ATTACHMENT_CALENDAR_QUOTA_MB` the files of one calendar together.
 
 ## Superusers
 
@@ -121,7 +135,10 @@ docker compose exec app python manage.py set_superuser someone@example.com --rev
 
 The worker dumps the database every night at `BACKUP_TIME` (in `TIME_ZONE`) into the `backups`
 volume and keeps `BACKUP_KEEP_DAYS` days. Dumps on the same host don't protect against losing the
-host, so copy them off regularly (or point the host's backup at the volume):
+host, so copy them off regularly (or point the host's backup at the volume). Attached files aren't
+in the dumps: back up `/data/attachments` (the `app_data` volume) along with them, e.g.
+`docker compose cp app:/data/attachments ./attachments`; restored without them, events list
+attachments whose download says the file is gone.
 
 ```bash
 docker compose exec worker python manage.py backup_database                  # a dump right now, e.g. before an update

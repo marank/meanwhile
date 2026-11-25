@@ -47,7 +47,8 @@ export function fakeBackend(routes: Record<string, Answer> = {}) {
       path: decodeURIComponent(url.pathname),
       query: url.searchParams,
       headers: (init.headers ?? {}) as Record<string, string>,
-      body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined,
+      // JSON as the value it encodes; FormData (uploads) as it is.
+      body: typeof init.body === 'string' ? JSON.parse(init.body) : (init.body ?? undefined),
     }
     requests.push(request)
     // The latest route wins, so a test can override what beforeEach set up.

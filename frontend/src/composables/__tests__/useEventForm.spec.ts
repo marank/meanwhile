@@ -10,7 +10,7 @@ const place = (requiresApproval: boolean) =>
 describe('useEventForm', () => {
   it('gives an event back as it was loaded', () => {
     const f = useEventForm()
-    f.fillFromEvent(event({ category_id: 'k1', resource_id: 'r1', location: 'Room 1' }), false)
+    f.fillFromEvent(event({ category_id: 'k1', resource_id: 'r1', location: 'Room 1', show_as: 'tentative' }), false)
     expect(f.form.startTime).toBe(new Date('2026-03-10T09:00:00.000Z').toTimeString().slice(0, 5))
     expect(f.eventInput()).toEqual({
       title: 'Planning',
@@ -25,6 +25,7 @@ describe('useEventForm', () => {
       resource_id: 'r1',
       location: 'Room 1',
       location_resource_id: null,
+      show_as: 'tentative',
     })
     expect(f.bookedResourceIds.value).toEqual(['r1'])
   })

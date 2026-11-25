@@ -6,6 +6,7 @@ import type { Occurrence } from '@/api'
 import { groupByDay, isPast, matchesSearch, type AgendaDay, type AgendaEntry } from '@/services/agenda'
 import { dayKey } from '@/services/days'
 import { formatTime, monthName, newEventStart } from '@/services/datetime'
+import { takesNoTime } from '@/services/occurrences'
 import { resourceIcon } from '@/services/resourceIcons'
 
 const props = defineProps<{
@@ -237,7 +238,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                   'agenda-entry-past': isPast(entry.occurrence, now),
                   'agenda-entry-pending': entry.occurrence.status === 'pending',
                   'agenda-entry-declined': isDeclined(entry.occurrence),
+                  'agenda-entry-free': takesNoTime(entry.occurrence),
                 }"
+                :data-show-as="entry.occurrence.show_as"
                 :style="entryStyle(entry.occurrence)"
                 @click="emit('open', entry.occurrence)"
               >
@@ -522,6 +525,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .agenda-bar {
   border-radius: 9999px;
   background-color: var(--agenda-event-color);
+}
+
+.agenda-entry-free .agenda-bar {
+  opacity: 0.35;
 }
 
 .agenda-entry-pending .agenda-bar {

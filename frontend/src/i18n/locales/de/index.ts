@@ -17,6 +17,8 @@ import palette from './palette'
 import emailNotifications from './emailNotifications'
 import unsubscribe from './unsubscribe'
 import rsvp from './rsvp'
+import attachments from './attachments'
+import duplicate from './duplicate'
 
 // Typed against the English messages, so a missing or misspelled key fails the type check.
 const de: MessageSchema = {
@@ -38,6 +40,8 @@ const de: MessageSchema = {
   emailNotifications,
   unsubscribe,
   rsvp,
+  attachments,
+  duplicate,
 }
 
 export default de

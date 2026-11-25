@@ -26,6 +26,7 @@ import { contrastColor } from '@/services/color'
 import { hour12, newEventStart } from '@/services/datetime'
 import { eventLabel, eventParts, renderEventContent } from '@/services/eventContent'
 import { moveEvent } from '@/services/eventMove'
+import { takesNoTime } from '@/services/occurrences'
 
 /** The month and week grid (FullCalendar), with the events in their colors and labels. */
 const props = defineProps<{
@@ -78,6 +79,7 @@ const fcEvents = computed(() =>
         categoryColor: occ.category_color,
         parts,
         status: occ.status,
+        free: takesNoTime(occ),
       },
     }
   }),
@@ -120,8 +122,16 @@ const calendarOptions = computed(() => ({
   firstDay: props.display.first_weekday,
   viewClass: 'calendar-view',
   dayHeaderClass: 'calendar-header',
-  eventClass: (info: { event: { extendedProps: Record<string, unknown> } }) =>
-    info.event.extendedProps.status === 'pending' ? 'calendar-event calendar-event-pending' : 'calendar-event',
+  eventClass: (info: { event: { extendedProps: Record<string, unknown> } }) => {
+    const extended = info.event.extendedProps
+    return [
+      'calendar-event',
+      extended.status === 'pending' && 'calendar-event-pending',
+      extended.free === true && 'calendar-event-free',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  },
   slotMinHeight: SLOT_HEIGHT,
   slotHeaderInnerClass: 'calendar-axis-label',
   allDayHeaderInnerClass: 'calendar-axis-label',
@@ -278,6 +288,12 @@ html.dark .calendar-root .calendar-now-dot {
   line-height: 1.1rem;
   background-color: var(--calendar-accent-color);
   color: var(--calendar-accent-text-color);
+}
+
+/* Events shown as free: the calendar's color only as a tint, as Outlook shows them. */
+.calendar-root .calendar-event-free {
+  background-color: color-mix(in srgb, var(--fc-event-color) 35%, var(--app-surface)) !important;
+  color: var(--app-text) !important;
 }
 
 /* Bookings awaiting approval: striped and with a dashed outline. */

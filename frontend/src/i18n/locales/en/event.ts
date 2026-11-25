@@ -40,4 +40,13 @@ export default {
   statusDeclined: 'Declined',
   statusTentative: 'Tentative',
   approvalRequired: 'Approval required',
+  showAs: 'Show as',
+  showAsHint: 'For everyone in the event. Free and working elsewhere don’t count as busy in their availability.',
+  showAsOption: {
+    busy: 'Busy',
+    free: 'Free',
+    tentative: 'Tentative',
+    out_of_office: 'Out of office',
+    working_elsewhere: 'Working elsewhere',
+  },
 }

@@ -118,6 +118,28 @@ describe('CalendarWeekStack', () => {
     expect(tiles[4]!.find('.week-stack-meta').text()).toBe('Park')
   })
 
+  it('shows events that leave the time free lighter, and says how each one shows', () => {
+    const wrapper = render([
+      occurrence({ event_id: 'a', show_as: 'free', start: at(2026, 10, 13, 9), end: at(2026, 10, 13, 10) }),
+      occurrence({
+        event_id: 'b',
+        show_as: 'working_elsewhere',
+        start: at(2026, 10, 14, 9),
+        end: at(2026, 10, 14, 10),
+      }),
+      occurrence({ event_id: 'c', show_as: 'out_of_office', start: at(2026, 10, 15, 9), end: at(2026, 10, 15, 10) }),
+      occurrence({ event_id: 'd', start: at(2026, 10, 16, 9), end: at(2026, 10, 16, 10) }),
+    ])
+    const tiles = wrapper.findAll('.week-stack-event')
+    expect(tiles.map((tile) => tile.attributes('data-show-as'))).toEqual([
+      'free',
+      'working_elsewhere',
+      'out_of_office',
+      'busy',
+    ])
+    expect(tiles.map((tile) => tile.classes().includes('week-stack-event-free'))).toEqual([true, true, false, false])
+  })
+
   it('opens an event when its tile is tapped', async () => {
     const occ = occurrence({ start: at(2026, 10, 13, 9), end: at(2026, 10, 13, 10) })
     const wrapper = render([occ])

@@ -11,13 +11,24 @@ from django.conf import settings
 from icalendar import Calendar as ICalCalendar
 from icalendar import Event as ICalEvent
 
-from apps.core.models.base import EventStatus
+from apps.core.models.base import FREE_TIME, AttachmentKind, EventStatus, ShowAs
 from apps.core.models.calendars import Calendar
 from apps.core.models.events import Event, EventParticipant
 from apps.core.models.users import User
+from apps.core.services.attachments import download_path
 from apps.core.services.recurrence import as_utc, is_series, normalized_rrule, parse_exdates, zone
 
 PRODID = "-//Meanwhile//EN"
+
+# Outlook's "Show as", which TRANSP alone can't tell (tentative, out of office, working elsewhere).
+BUSYSTATUS = "X-MICROSOFT-CDO-BUSYSTATUS"
+_BUSYSTATUS_OF = {
+    ShowAs.BUSY: "BUSY",
+    ShowAs.FREE: "FREE",
+    ShowAs.TENTATIVE: "TENTATIVE",
+    ShowAs.OUT_OF_OFFICE: "OOF",
+    ShowAs.WORKING_ELSEWHERE: "WORKINGELSEWHERE",
+}
 
 # What others see of a calendar (feed, CalDAV): pending, rejected and cancelled bookings stay out.
 SHARED_STATUSES = {EventStatus.CONFIRMED, EventStatus.APPROVED}
@@ -43,11 +54,13 @@ _OWN_PROPERTIES = (
     "ORGANIZER",
     "ATTENDEE",
     "SEQUENCE",
+    "TRANSP",
+    BUSYSTATUS,
 )
 
 # What the feed keeps of the properties clients sent besides those the app writes: plain event data.
 # Everything else (COMMENT, CONTACT, ATTACH, X-...) may name people or carry notes for the members.
-_FEED_PROPERTIES = ("CREATED", "LAST-MODIFIED", "CLASS", "TRANSP", "PRIORITY", "URL", "GEO")
+_FEED_PROPERTIES = ("CREATED", "LAST-MODIFIED", "CLASS", "PRIORITY", "URL", "GEO")
 
 PARTSTAT = {
     "needs_action": "NEEDS-ACTION",
@@ -210,6 +223,7 @@ def build_event_ical(
     if sequence or (raw is not None and "SEQUENCE" in raw):
         vevent.add("sequence", sequence)
     vevent.add("status", _map_status(event.status))
+    _add_show_as(vevent, ShowAs(event.show_as))
     _add_recurrence(vevent, event, exdates)
 
     # The category first, then those of the client that aren't categories of the calendar.
@@ -226,6 +240,7 @@ def build_event_ical(
 
     if audience.people:
         _add_people(vevent, event, organizer, audience.scheduling)
+        _add_attachments(vevent, event, audience)
     if audience.viewer is not None:
         _add_alarms(vevent, _reminder_minutes(event.parent or event, audience.viewer))
     return vevent
@@ -239,6 +254,8 @@ def _client_properties(raw: ICalEvent | None, audience: Audience) -> ICalEvent:
     for name, value in raw.property_items(recursive=False):
         if name in ("BEGIN", "END") or name in _OWN_PROPERTIES:
             continue
+        if name == "ATTACH" and not _is_inline(value):
+            continue  # links are the event's own attachments now (stored from what the client sent)
         if audience.people or name in _FEED_PROPERTIES:
             vevent.add(name, value, encode=False)
     for sub in raw.subcomponents:
@@ -246,6 +263,41 @@ def _client_properties(raw: ICalEvent | None, audience: Audience) -> ICalEvent:
         if sub.name != "VALARM" and audience.people:
             vevent.add_component(sub)
     return vevent
+
+
+def _add_show_as(vevent: ICalEvent, show_as: ShowAs) -> None:
+    """TRANSP, which every client reads, and for what it can't tell Outlook's BUSYSTATUS."""
+    vevent.add("transp", "TRANSPARENT" if show_as in FREE_TIME else "OPAQUE")
+    if show_as not in {ShowAs.BUSY, ShowAs.FREE}:
+        vevent.add(BUSYSTATUS, _BUSYSTATUS_OF[show_as])
+
+
+def _is_inline(attach: object) -> bool:
+    """Whether an ATTACH carries its file itself (base64) rather than a link to it."""
+    params = getattr(attach, "params", {})
+    return str(params.get("VALUE", "")).upper() == "BINARY" or str(params.get("ENCODING", "")).upper() == "BASE64"
+
+
+def _add_attachments(vevent: ICalEvent, event: Event, audience: Audience) -> None:
+    """The event's attachments as ATTACH links (RFC 8607's parameters); written on the series, not on
+    its changed occurrences. Files need a signed-in member to download them, so participants'
+    invitations carry only the links."""
+    if event.parent_id is not None:
+        return
+    for attachment in event.attachments.all():
+        if attachment.kind == AttachmentKind.LINK:
+            params = {"FILENAME": attachment.name} if attachment.name != attachment.url else {}
+            vevent.add("attach", attachment.url, parameters=params)
+        elif not audience.scheduling:
+            vevent.add(
+                "attach",
+                f"{settings.APP_URL}{download_path(attachment)}",
+                parameters={
+                    "FMTTYPE": attachment.content_type,
+                    "FILENAME": attachment.name,
+                    "SIZE": str(attachment.size),
+                },
+            )
 
 
 def _add_times(vevent: ICalEvent, event: Event) -> None:

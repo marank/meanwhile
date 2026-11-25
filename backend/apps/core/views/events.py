@@ -13,9 +13,10 @@ from ninja import Query, Router
 from ninja.errors import HttpError
 
 from apps.core.models import Calendar, Event, EventParticipant, User
-from apps.core.models.base import EventStatus, Role
+from apps.core.models.base import EventStatus, Role, ShowAs
 from apps.core.schemas import (
     EventCreate,
+    EventDuplicate,
     EventOut,
     EventParticipantCreate,
     EventParticipantOut,
@@ -27,7 +28,7 @@ from apps.core.schemas import (
     OccurrenceScope,
     OkOut,
 )
-from apps.core.services import events, occurrences, participants
+from apps.core.services import duplicates, events, occurrences, participants
 from apps.core.services.bookings import decidable_resources, is_in_approver_pool
 from apps.core.services.itip import record_answer
 from apps.core.services.permissions import (
@@ -71,6 +72,7 @@ def _occurrences(
             end=occ_end,
             all_day=event.all_day,
             status=EventStatus(event.status),
+            show_as=ShowAs(event.show_as),
             location=event.location,
             creator_id=str(event.creator_id),
             can_edit=can_modify_event(event, user_id, memberships[event.calendar_id].role),
@@ -166,11 +168,25 @@ def list_events(request: AuthedRequest, calendar_id: str, start: datetime, end: 
 @router.post("/calendars/{calendar_id}/events", response=EventOut)
 def create_event(request: AuthedRequest, calendar_id: str, payload: EventCreate) -> EventOut:
     calendar, _ = get_member_calendar(
-        calendar_id, request.user, Role.OWN, "You do not have permission to create events"
+        calendar_id, request.user, Role.OWN, gettext("You do not have permission to create events")
     )
     with transaction.atomic():
         event = events.create_event(request.user, calendar, payload)
     return EventOut.model_validate(serialize_event(event))
+
+
+@router.post("/events/{event_id}/duplicate", response=EventOut)
+def duplicate_event(request: AuthedRequest, event_id: str, payload: EventDuplicate) -> EventOut:
+    """A copy of the event at another time or in another calendar (one the user may add events to)."""
+    source, _ = get_visible_event(event_id, request.user)
+    calendar, _ = get_member_calendar(
+        payload.calendar_id, request.user, Role.OWN, gettext("You do not have permission to create events")
+    )
+    with transaction.atomic():
+        copy = duplicates.duplicate_event(
+            request.user, source, calendar, payload.start, invite=payload.invite_participants
+        )
+    return EventOut.model_validate(serialize_event(copy))
 
 
 @router.get("/events/{event_id}", response=EventOut)

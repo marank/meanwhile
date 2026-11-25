@@ -160,6 +160,23 @@ function saved() {
   nav.reload(true)
 }
 
+/** A copy was made: it opens in place of the original, at its date, to be adjusted; the calendar
+ * switches to the copy's where what is shown doesn't have it. */
+function duplicated(copy: api.Event) {
+  toast.success(i18n.global.t('duplicate.done'))
+  const shown =
+    calendarStore.selectedCalendarIds.includes(copy.calendar_id) || !calendarStore.canSelect(copy.calendar_id)
+  // The URL decides what is shown (and an event's URL gives way to the calendar's).
+  if (!shown || props.eventId) {
+    void router.replace(calendarStore.selectionPath(shown ? calendarStore.selectedId : copy.calendar_id))
+  }
+  nav.gotoDate(startDay(copy))
+  nav.reload(true)
+  modalEventId.value = copy.id
+  modalOccurrence.value = null
+  showModal.value = true
+}
+
 watch(
   () => calendarStore.canCreateInSelected,
   (canCreate) => {
@@ -243,8 +260,10 @@ const calendarStyle = computed(() => ({
       </div>
     </div>
 
+    <!-- Keyed by the event, so a copy opened right after its original is loaded afresh. -->
     <EventModal
       v-if="showModal"
+      :key="modalEventId ?? 'new'"
       :calendar-id="calendarStore.selectedCalendar?.id"
       :event-id="modalEventId"
       :occurrence="modalOccurrence"
@@ -254,6 +273,7 @@ const calendarStyle = computed(() => ({
       @saved="saved"
       @cancel="closeModal"
       @deleted="saved"
+      @duplicated="duplicated"
     />
   </div>
 </template>

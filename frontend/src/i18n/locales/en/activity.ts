@@ -10,6 +10,8 @@ export default {
   occurrenceChanged: '{name} changed the occurrence on {date}',
   occurrenceDeleted: '{name} removed the occurrence on {date} from the series',
   seriesEnded: '{name} ended the series as of {date}',
+  attachmentAdded: '{name} attached {attachment}',
+  attachmentRemoved: '{name} removed the attachment {attachment}',
   empty: 'No activity yet.',
   comment: 'Comment',
   commentPlaceholder: 'Write a comment…',
@@ -25,5 +27,6 @@ export default {
     category: 'category',
     resource: 'resource',
     show_recurrence_count: 'recurrence count',
+    show_as: 'show as',
   },
 }

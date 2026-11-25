@@ -42,6 +42,7 @@ _TRACKED_FIELDS = {
     "resource": "resource_id",
     "location_resource": "location_resource_id",
     "show_recurrence_count": "show_recurrence_count",
+    "show_as": "show_as",
 }
 
 # Invitations go out by email to any address, from the app's mail server: no user sends more than this
@@ -74,6 +75,7 @@ def create_event(user: User, calendar: Calendar, payload: EventCreate) -> Event:
         category=category,
         resource=resource,
         location_resource=location_resource,
+        show_as=payload.show_as,
     )
     event.uid = str(event.id)
     update_booking_status(event, user, booked_resources(event))
@@ -223,6 +225,8 @@ def _apply_fields(
     for field in ("all_day", "show_recurrence_count", "rrule"):
         if field in data:
             setattr(event, field, data[field])
+    if data.get("show_as") is not None:
+        event.show_as = data["show_as"]
 
 
 def _move_start(event: Event, start: datetime) -> None:

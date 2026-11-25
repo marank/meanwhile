@@ -8,10 +8,11 @@ import EventAvailabilityTab from '../EventAvailabilityTab.vue'
 import { signIn } from './helpers'
 
 const local = (time: string, day = '2026-03-10') => new Date(`${day}T${time}`)
-const period = (from: string, to: string, tentative = false, day = '2026-03-10') => ({
+const period = (from: string, to: string, tentative = false, day = '2026-03-10', outOfOffice = false) => ({
   start: local(from, day).toISOString(),
   end: local(to, day).toISOString(),
   tentative,
+  out_of_office: outOfOffice,
 })
 
 const people = [
@@ -93,6 +94,23 @@ describe('EventAvailabilityTab', () => {
     expect(wrapper.get('[role="img"][aria-label^="Room 1"]').findAll('[title="Busy"]')).toHaveLength(1)
     // Tentative bookings don't count as conflicts.
     expect(status(wrapper)).toBe('Everyone is free at this time.')
+  })
+
+  it('tells time out of office apart, and counts it as a conflict', async () => {
+    fakeBackend({
+      'POST /api/availability': {
+        users: [{ id: 'u1', name: 'Anna', busy: [period('08:00', '12:00', false, '2026-03-10', true)] }],
+        resources: [],
+      },
+    })
+    const wrapper = render()
+    await flushPromises()
+    const anna = wrapper.get('[role="img"][aria-label^="Anna"]')
+    const away = anna.get('[data-kind="outOfOffice"]')
+    expect(away.attributes('title')).toBe('Out of office')
+    expect(anna.findAll('[title="Busy"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('Out of office')
+    expect(status(wrapper)).toBe('Busy at this time: Anna')
   })
 
   it('names those who are busy at the time of the event', async () => {

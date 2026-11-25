@@ -78,6 +78,8 @@ const activityTexts: Record<string, (entry: api.EventActivity, name: string) => 
   occurrence_changed: (entry, name) => t('activity.occurrenceChanged', { name, date: occurrenceDate(entry) }),
   occurrence_deleted: (entry, name) => t('activity.occurrenceDeleted', { name, date: occurrenceDate(entry) }),
   series_ended: (entry, name) => t('activity.seriesEnded', { name, date: occurrenceDate(entry) }),
+  attachment_added: (entry, name) => t('activity.attachmentAdded', { name, attachment: entry.details?.name ?? '' }),
+  attachment_removed: (entry, name) => t('activity.attachmentRemoved', { name, attachment: entry.details?.name ?? '' }),
 }
 
 function activityText(entry: api.EventActivity): string {

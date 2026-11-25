@@ -60,6 +60,7 @@ def conflict(request: HttpRequest, exc: IntegrityError) -> HttpResponse:
 from apps.core.views import (  # noqa: E402
     admin,
     approvals,
+    attachments,
     availability,
     calendars,
     categories,
@@ -87,6 +88,7 @@ api.add_router("", categories.router)
 api.add_router("", resources.router)
 api.add_router("", events.router)
 api.add_router("", comments.router)
+api.add_router("", attachments.router)
 api.add_router("", notifications.router)
 api.add_router("", approvals.router)
 api.add_router("", availability.router)

@@ -1,0 +1,15 @@
+export default {
+  title: 'Attachments',
+  none: 'No attachments yet.',
+  addFiles: 'Add files',
+  linkUrl: 'Link',
+  linkUrlPlaceholder: 'https://…',
+  linkName: 'Title (optional)',
+  addLink: 'Add link',
+  invalidUrl: 'Enter an address that starts with http:// or https://.',
+  pending: 'added when the event is saved',
+  remove: 'Remove',
+  removeNamed: 'Remove {name}',
+  addedBy: 'Added by {name}',
+  hint: 'PDFs, images, office documents, text and ZIP files. They are saved with the event.',
+}

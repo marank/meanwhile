@@ -7,7 +7,7 @@ import { calendar, event } from '@/components/event/__tests__/helpers'
 import { i18n } from '@/i18n'
 import { dialog, submitDialog } from '@/services/dialog'
 import type { OccurrenceRef } from '@/services/occurrences'
-import { useEventParticipants, useEventReminders } from '../useEventExtras'
+import { useEventAttachments, useEventParticipants, useEventReminders } from '../useEventExtras'
 import { useEventSave } from '../useEventSave'
 
 const INPUT = { title: 'Planning', rrule: null } as api.EventInput
@@ -25,6 +25,7 @@ function setup(
   } = {},
 ) {
   const participants = useEventParticipants()
+  const attachments = useEventAttachments()
   const reminders = useEventReminders()
   const current = ref(options.event ?? null)
   const onSaved = vi.fn()
@@ -43,6 +44,7 @@ function setup(
           valid: () => options.valid ?? true,
           eventInput: () => options.input ?? INPUT,
           participants,
+          attachments,
           reminders,
           onSaved,
           onDeleted,
@@ -52,7 +54,7 @@ function setup(
     }),
     { global: { plugins: [i18n] } },
   )
-  return { ...save, event: current, participants, reminders, onSaved, onDeleted }
+  return { ...save, event: current, participants, attachments, reminders, onSaved, onDeleted }
 }
 
 /** Answers the dialog that opened. */
@@ -102,6 +104,47 @@ describe('useEventSave', () => {
     expect(backend.calls('POST /api/calendars/cal1/events')).toHaveLength(1)
     expect(backend.calls('PATCH /api/events/new1')).toHaveLength(1)
     expect(s.onSaved).toHaveBeenCalledOnce()
+  })
+
+  it('sends the attachments of a new event once it is created, and only those not sent yet', async () => {
+    const s = setup()
+    const file = new File(['%PDF-1.7'], 'Agenda.pdf', { type: 'application/pdf' })
+    s.attachments.pending.value = [
+      { tempId: 'f', kind: 'file', name: 'Agenda.pdf', file },
+      { tempId: 'l', kind: 'link', name: 'Slides', url: 'https://example.org/slides' },
+    ]
+    backend.on('POST /api/events/new1/attachments/files', { id: 'a1' })
+    backend.on('POST /api/events/new1/attachments/links', reply(422, { detail: 'Only http and https links' }))
+    await s.save()
+    expect(s.error.value).toBe('Only http and https links')
+    const upload = backend.calls('POST /api/events/new1/attachments/files')[0]!.body as FormData
+    expect((upload.get('file') as File).name).toBe('Agenda.pdf')
+    // The file was sent; the link that failed is still waiting.
+    expect(s.attachments.pending.value.map((a) => a.tempId)).toEqual(['l'])
+
+    backend.on('POST /api/events/new1/attachments/links', { id: 'a2' })
+    await s.save()
+    expect(s.error.value).toBe('')
+    expect(backend.calls('POST /api/events/new1/attachments/files')).toHaveLength(1)
+    expect(backend.calls('POST /api/events/new1/attachments/links')[1]!.body).toEqual({
+      url: 'https://example.org/slides',
+      name: 'Slides',
+    })
+    expect(s.attachments.pending.value).toEqual([])
+  })
+
+  it('removes attachments of an existing event, also when one occurrence of a series was changed', async () => {
+    const s = setup({ event: event({ rrule: 'FREQ=WEEKLY' }), occurrence: OCCURRENCE })
+    s.attachments.removedIds.value = ['a1', 'a2']
+    backend.on('DELETE /api/events/ev1/attachments/*', undefined)
+    const saving = s.save()
+    await answer('this')
+    await saving
+    expect(backend.calls('DELETE /api/events/ev1/attachments/*').map((r) => r.path)).toEqual([
+      '/api/events/ev1/attachments/a1',
+      '/api/events/ev1/attachments/a2',
+    ])
+    expect(s.attachments.removedIds.value).toEqual([])
   })
 
   it('sends nothing while what is entered is invalid', async () => {

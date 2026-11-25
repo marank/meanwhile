@@ -4,7 +4,7 @@ import * as api from '@/api'
 import { confirm } from '@/services/dialog'
 import { bookingErrorMessage } from '@/services/errors'
 import { chooseScope, type OccurrenceRef } from '@/services/occurrences'
-import type { useEventParticipants, useEventReminders } from './useEventExtras'
+import type { useEventAttachments, useEventParticipants, useEventReminders } from './useEventExtras'
 
 /**
  * What the event dialog sends: saving (with its participants and reminders, of a series asking which
@@ -27,11 +27,12 @@ export function useEventSave(options: {
   valid: () => boolean
   eventInput: () => api.EventInput
   participants: ReturnType<typeof useEventParticipants>
+  attachments: ReturnType<typeof useEventAttachments>
   reminders: ReturnType<typeof useEventReminders>
   onSaved: () => void
   onDeleted: () => void
 }) {
-  const { event, participants, reminders } = options
+  const { event, participants, attachments, reminders } = options
   const { t } = useI18n()
   const busy = ref(false)
   const error = ref('')
@@ -68,6 +69,8 @@ export function useEventSave(options: {
       await submit(async () => {
         await api.updateOccurrence(existing.id, occurrence.recurrenceId, scope, input)
         await participants.save(existing.id)
+        // Attachments hang on the series, whichever occurrences the change was for.
+        await attachments.save(existing.id)
         await reminders.save(existing.id)
       }, options.onSaved)
       return
@@ -76,6 +79,7 @@ export function useEventSave(options: {
       if (existing) {
         await api.updateEvent(existing.id, options.eventInput())
         await participants.save(existing.id)
+        await attachments.save(existing.id)
         await reminders.save(existing.id)
       } else {
         const created = await api.createEvent(target.id, {
@@ -86,6 +90,7 @@ export function useEventSave(options: {
         // below doesn't create it twice.
         event.value = created
         participants.pending.value = []
+        await attachments.save(created.id)
         await reminders.save(created.id)
       }
     }, options.onSaved)

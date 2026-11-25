@@ -191,6 +191,22 @@ const cases: Case[] = [
   ],
   ['getReminders', () => api.getReminders('e'), 'GET', '/api/events/e/reminders'],
   ['setReminders', () => api.setReminders('e', [10]), 'PUT', '/api/events/e/reminders', { minutes: [10] }],
+  [
+    'duplicateEvent',
+    () => api.duplicateEvent('e', { calendar_id: 'c', start: 'S', invite_participants: true }),
+    'POST',
+    '/api/events/e/duplicate',
+    { calendar_id: 'c', start: 'S', invite_participants: true },
+  ],
+  ['listAttachments', () => api.listAttachments('e'), 'GET', '/api/events/e/attachments'],
+  [
+    'addAttachmentLink',
+    () => api.addAttachmentLink('e', { url: 'https://x.org', name: 'X' }),
+    'POST',
+    '/api/events/e/attachments/links',
+    { url: 'https://x.org', name: 'X' },
+  ],
+  ['removeAttachment', () => api.removeAttachment('e', 'a'), 'DELETE', '/api/events/e/attachments/a'],
   ['listComments', () => api.listComments('e'), 'GET', '/api/events/e/comments'],
   ['addComment', () => api.addComment('e', 'Hi'), 'POST', '/api/events/e/comments', { body: 'Hi' }],
   ['deleteComment', () => api.deleteComment('e', 'k'), 'DELETE', '/api/events/e/comments/k'],
@@ -327,6 +343,16 @@ describe('api endpoints', () => {
     const { query } = backend.requests[0]!
     expect(query.getAll('calendar_ids')).toEqual(['a', 'b'])
     expect([query.get('start'), query.get('end')]).toEqual(['S', 'E'])
+  })
+
+  it('uploads a file as multipart, the way a browser sends a form', async () => {
+    const backend = fakeBackend({ 'POST /api/events/e/attachments/files': {} })
+    const file = new File(['%PDF-1.7'], 'Agenda.pdf')
+    await api.uploadAttachment('e', file)
+    const [request] = backend.requests
+    expect((request!.body as FormData).get('file')).toBe(file)
+    // The browser sets the type, with the boundary it chose.
+    expect(request!.headers['Content-Type']).toBeUndefined()
   })
 
   it('lists notifications of a group, or all', async () => {

@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n'
 import * as api from '@/api'
 import AppModal from '@/components/AppModal.vue'
 import TabBar from '@/components/TabBar.vue'
+import DuplicateEventDialog from './DuplicateEventDialog.vue'
 import EventActivityTab from './EventActivityTab.vue'
+import EventAttachmentsTab from './EventAttachmentsTab.vue'
 import EventAvailabilityTab from './EventAvailabilityTab.vue'
 import EventBookingStatus from './EventBookingStatus.vue'
 import EventDetailsTab from './EventDetailsTab.vue'
@@ -16,14 +18,15 @@ import { formatDateTime } from '@/services/datetime'
 import { errorMessage } from '@/services/errors'
 import { hasRole } from '@/services/roles'
 import { useAuthStore } from '@/stores/auth'
+import { useCalendarStore } from '@/stores/calendars'
 import { useCalendarChoices } from '@/composables/useCalendarChoices'
 import { useEventAvailability } from '@/composables/useEventAvailability'
-import { useEventParticipants, useEventReminders } from '@/composables/useEventExtras'
+import { useEventAttachments, useEventParticipants, useEventReminders } from '@/composables/useEventExtras'
 import { useEventForm } from '@/composables/useEventForm'
 import { useEventSave } from '@/composables/useEventSave'
 import { useTallestHeight } from '@/composables/useTallestHeight'
 
-type Tab = 'details' | 'recurrence' | 'reminders' | 'participants' | 'availability' | 'activity'
+type Tab = 'details' | 'recurrence' | 'reminders' | 'participants' | 'attachments' | 'availability' | 'activity'
 
 const props = defineProps<{
   /** Target calendar for new events; existing events are loaded from their own calendar. */
@@ -40,9 +43,12 @@ const emit = defineEmits<{
   saved: []
   cancel: []
   deleted: []
+  /** A copy of the event was made; the dialog is done with the original. */
+  duplicated: [copy: api.Event]
 }>()
 
 const auth = useAuthStore()
+const calendarStore = useCalendarStore()
 const { t } = useI18n()
 
 const statusLabels: Partial<Record<api.EventStatus, string>> = {
@@ -82,6 +88,8 @@ const {
 } = useEventForm()
 const participants = useEventParticipants()
 const { saved: savedParticipants, pending: pendingParticipants, removedIds: removedParticipantIds } = participants
+const attachments = useEventAttachments()
+const { saved: savedAttachments, pending: pendingAttachments, removedIds: removedAttachmentIds } = attachments
 const reminders = useEventReminders()
 const { minutes: reminderMinutes, valid: remindersValid, changed: remindersChanged } = reminders
 const availability = useEventAvailability({
@@ -112,12 +120,13 @@ const tabLabels: Record<Tab, () => string> = {
   recurrence: () => t('event.recurrence'),
   reminders: () => t('reminders.title'),
   participants: () => t('event.participants'),
+  attachments: () => t('attachments.title'),
   availability: () => t('availability.title'),
   activity: () => t('event.activity'),
 }
 
 const tabs = computed(() =>
-  (['details', 'recurrence', 'reminders', 'participants', 'availability', 'activity'] as const)
+  (['details', 'recurrence', 'reminders', 'participants', 'attachments', 'availability', 'activity'] as const)
     .filter((id) => id !== 'activity' || props.eventId)
     .filter((id) => id !== 'recurrence' || !isException.value)
     .map((id) => ({ id, label: tabLabels[id]() })),
@@ -133,6 +142,11 @@ const canModify = computed(
     (hasRole(myRole.value, 'own') && event.value.creator_id === auth.user?.id),
 )
 const forceAllDay = computed(() => !!calendar.value?.force_all_day)
+// A saved event can be copied by everyone who sees it, into a calendar they may add events to.
+const canDuplicate = computed(
+  () => !!event.value && calendarStore.items.some((item) => hasRole(item.membership.role, 'own')),
+)
+const duplicating = ref(false)
 // Only bookings (events with a resource) go through approval, so only they show a status.
 const bookingStatus = computed(() => {
   const booking = event.value?.resource_id ?? event.value?.location_resource_id
@@ -150,6 +164,7 @@ const { busy, error, save, remove, decide } = useEventSave({
   valid: () => !endBeforeStart.value && remindersValid.value,
   eventInput,
   participants,
+  attachments,
   reminders,
   onSaved: () => emit('saved'),
   onDeleted: () => emit('deleted'),
@@ -194,7 +209,7 @@ onMounted(async () => {
   if (event.value?.rrule) loadRrule(event.value.rrule)
   if (event.value) {
     const eventId = event.value.id
-    await Promise.all([reminders.load(eventId), participants.load(eventId)])
+    await Promise.all([reminders.load(eventId), participants.load(eventId), attachments.load(eventId)])
   }
   if (form.startDate) availability.preload(event.value?.id)
 })
@@ -302,6 +317,16 @@ onMounted(async () => {
           v-model:pending="pendingParticipants"
           v-model:removed="removedParticipantIds"
           v-model:participants="savedParticipants"
+          v-model:show-as="form.showAs"
+          :event-id="eventId"
+          :can-manage="canModify"
+        />
+
+        <EventAttachmentsTab
+          v-else-if="activeTab === 'attachments'"
+          v-model:saved="savedAttachments"
+          v-model:pending="pendingAttachments"
+          v-model:removed="removedAttachmentIds"
           :event-id="eventId"
           :can-manage="canModify"
         />
@@ -322,16 +347,26 @@ onMounted(async () => {
 
     <template #footer>
       <div class="flex items-center justify-between">
-        <button
-          v-if="event && canModify"
-          type="button"
-          :disabled="busy"
-          class="text-sm text-red-600 hover:underline"
-          @click="remove"
-        >
-          {{ $t('app.delete') }}
-        </button>
-        <span v-else></span>
+        <div class="flex items-center gap-4">
+          <button
+            v-if="event && canModify"
+            type="button"
+            :disabled="busy"
+            class="text-sm text-red-600 hover:underline"
+            @click="remove"
+          >
+            {{ $t('app.delete') }}
+          </button>
+          <button
+            v-if="canDuplicate"
+            type="button"
+            :disabled="busy"
+            class="text-sm text-gray-700 hover:underline"
+            @click="duplicating = true"
+          >
+            {{ $t('duplicate.action') }}
+          </button>
+        </div>
         <div class="flex gap-3">
           <button type="button" class="rounded-lg border border-line px-4 py-2 hover:bg-hover" @click="emit('cancel')">
             {{ $t('app.cancel') }}
@@ -348,5 +383,14 @@ onMounted(async () => {
         </div>
       </div>
     </template>
+
+    <DuplicateEventDialog
+      v-if="duplicating && event"
+      :event="event"
+      :occurrence="seriesOccurrence"
+      :has-participants="!!savedParticipants?.length"
+      @cancel="duplicating = false"
+      @done="emit('duplicated', $event)"
+    />
   </AppModal>
 </template>

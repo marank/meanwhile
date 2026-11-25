@@ -37,6 +37,7 @@ from apps.core.models import (
 )
 from apps.core.models.base import EventStatus, Role
 from apps.core.realtime import broadcast
+from apps.core.services import attachments
 from apps.core.services.activity import record_activity
 from apps.core.services.bookings import booked_resources, find_booking_conflicts
 from apps.core.services.calendars import create_calendar
@@ -102,6 +103,7 @@ def _fields(event: Event) -> dict[str, object]:
         "rrule": event.rrule,
         "location": event.location,
         "category": event.category_id,
+        "show_as": event.show_as,
     }
 
 
@@ -322,6 +324,7 @@ class Collection(storage.BaseCollection):
                 ),
                 "participants__user",
                 "overrides__participants__user",
+                "attachments",
                 Prefetch(
                     "reminders",
                     queryset=EventReminder.objects.filter(user=viewer) if viewer else EventReminder.objects.none(),
@@ -419,6 +422,7 @@ class Collection(storage.BaseCollection):
             removed, changed = self._store_exceptions(event, data, overrides, actor)
             self._store_participants(event, data, actor)
             self._store_reminders(event, actor, data["alarms"])
+            attachments.sync_links(event, actor, data["links"])
 
             if existing is None:
                 record_activity(event, str(actor.id), "created")
@@ -504,6 +508,7 @@ class Collection(storage.BaseCollection):
 
     def _apply(self, event: Event, data: EventData) -> None:
         event.title = data["title"]
+        event.show_as = data["show_as"]
         event.description = data["description"]
         event.start = data["start"]
         event.end = data["end"]

@@ -124,6 +124,22 @@ def normalized_rrule(event: Event) -> str | None:
     return format_rrule(parts)
 
 
+def moved_rrule(event: Event, by: timedelta) -> str | None:
+    """The event's rule for a copy that starts `by` later: its end (UNTIL) moves along, so the copy has
+    as many occurrences as the original."""
+    rule = normalized_rrule(event)
+    if rule is None:
+        return None
+    parts = rrule_parts(rule)
+    if "UNTIL" in parts:
+        until = _parse_until(parts["UNTIL"])
+        if isinstance(until, datetime):
+            parts["UNTIL"] = (until + by).strftime("%Y%m%dT%H%M%SZ")
+        else:
+            parts["UNTIL"] = (until + timedelta(days=by.days)).strftime("%Y%m%d")
+    return format_rrule(parts)
+
+
 class _UtcRule:
     """All-day series repeat on floating dates; their occurrences are reported as UTC midnights."""
 

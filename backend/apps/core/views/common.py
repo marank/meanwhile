@@ -61,6 +61,7 @@ def serialize_event(event: Event) -> dict[str, Any]:
         "resource_id": str(event.resource_id) if event.resource_id else None,
         "resource_name": event.resource.name if event.resource else None,
         "status": event.status,
+        "show_as": event.show_as,
         "awaiting_approval": [r.name for r in awaiting_resources(event)],
         "decided_by": str(event.decided_by_id) if event.decided_by_id else None,
         "decided_at": event.decided_at,

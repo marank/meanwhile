@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import AppSelect from '@/components/AppSelect.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import * as api from '@/api'
 import { participantStatusLabel, participantStatuses } from '@/services/labels'
@@ -28,6 +29,11 @@ const props = defineProps<{
 }>()
 
 const pending = defineModel<PendingParticipant[]>('pending', { required: true })
+/** How the event takes up the time of those in it (the organizer's choice, for everyone's availability). */
+const showAs = defineModel<api.ShowAs>('showAs', { required: true })
+
+// In Outlook's order: from not taking up any time to being away.
+const SHOW_AS: api.ShowAs[] = ['free', 'working_elsewhere', 'tentative', 'busy', 'out_of_office']
 /** Saved participants removed in the dialog; they are removed when the event is saved. */
 const removed = defineModel<string[]>('removed', { required: true })
 /** The saved participants of an existing event, loaded by the dialog; null while loading. */
@@ -99,6 +105,19 @@ function add(value: string | null, user: api.SearchResult | null) {
 
 <template>
   <div class="space-y-4 pb-4">
+    <div class="space-y-1 border-b border-line pb-4">
+      <label class="block sm:w-1/2">
+        <span class="block text-sm font-medium text-gray-700">{{ $t('event.showAs') }}</span>
+        <AppSelect
+          v-model="showAs"
+          :disabled="!canManage"
+          :options="SHOW_AS.map((value) => ({ value, label: $t(`event.showAsOption.${value}`) }))"
+          class="mt-1"
+        />
+      </label>
+      <p class="text-xs text-gray-500">{{ $t('event.showAsHint') }}</p>
+    </div>
+
     <label v-if="canManage" class="block text-xs font-medium text-gray-700">
       {{ $t('event.addParticipant') }}
       <SearchableSelect

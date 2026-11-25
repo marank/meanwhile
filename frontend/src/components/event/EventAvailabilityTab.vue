@@ -108,6 +108,20 @@ const conflicts = computed(() =>
 )
 
 const dayLength = DAY_MS
+
+type PeriodKind = 'busy' | 'tentative' | 'outOfOffice'
+const periodClasses: Record<PeriodKind, string> = {
+  busy: 'bg-red-500/70',
+  tentative: 'availability-tentative',
+  outOfOffice: 'bg-purple-600/70',
+}
+function periodKind(period: api.BusyPeriod): PeriodKind {
+  if (period.out_of_office) return 'outOfOffice'
+  return period.tentative ? 'tentative' : 'busy'
+}
+function periodClass(period: api.BusyPeriod): string {
+  return periodClasses[periodKind(period)]
+}
 </script>
 
 <template>
@@ -153,9 +167,10 @@ const dayLength = DAY_MS
             <div
               v-if="placement(new Date(period.start), new Date(period.end))"
               class="absolute inset-y-1 rounded-sm"
-              :class="period.tentative ? 'availability-tentative' : 'bg-red-500/70'"
+              :class="periodClass(period)"
+              :data-kind="periodKind(period)"
               :style="placement(new Date(period.start), new Date(period.end))!"
-              :title="period.tentative ? $t('availability.tentative') : $t('availability.busy')"
+              :title="$t(`availability.${periodKind(period)}`)"
             ></div>
           </template>
         </div>
@@ -175,6 +190,10 @@ const dayLength = DAY_MS
       >
       <span class="inline-flex items-center gap-1.5"
         ><span class="availability-tentative h-3 w-3 rounded-sm"></span>{{ $t('availability.tentative') }}</span
+      >
+      <span class="inline-flex items-center gap-1.5"
+        ><span :class="periodClasses.outOfOffice" class="h-3 w-3 rounded-sm"></span
+        >{{ $t('availability.outOfOffice') }}</span
       >
       <span class="inline-flex items-center gap-1.5"
         ><span class="h-3 w-3 border-x-2 border-blue-600 bg-blue-500/15"></span>{{ $t('availability.thisEvent') }}</span

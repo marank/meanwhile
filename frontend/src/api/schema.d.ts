@@ -687,6 +687,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/events/{event_id}/duplicate': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Duplicate Event
+     * @description A copy of the event at another time or in another calendar (one the user may add events to).
+     */
+    post: operations['apps_core_views_events_duplicate_event']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/events/{event_id}': {
     parameters: {
       query?: never
@@ -854,6 +874,94 @@ export interface paths {
     }
     /** List Activity */
     get: operations['apps_core_views_comments_list_activity']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/events/{event_id}/attachments': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Attachments */
+    get: operations['apps_core_views_attachments_list_attachments']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/events/{event_id}/attachments/files': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Add File */
+    post: operations['apps_core_views_attachments_add_file']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/events/{event_id}/attachments/links': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Add Link */
+    post: operations['apps_core_views_attachments_add_link']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/events/{event_id}/attachments/{attachment_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Remove Attachment */
+    delete: operations['apps_core_views_attachments_remove_attachment']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/attachments/{attachment_id}/download': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Download
+     * @description A file attachment's content, for everyone who may see its event; always as a download.
+     */
+    get: operations['apps_core_views_attachments_download']
     put?: never
     post?: never
     delete?: never
@@ -2171,6 +2279,7 @@ export interface components {
       /** Recurrence Count */
       recurrence_count: number | null
       status: components['schemas']['EventStatus']
+      show_as: components['schemas']['ShowAs']
       /** Category Id */
       category_id: string | null
       /** Category Name */
@@ -2212,6 +2321,13 @@ export interface components {
       /** Recurrence Id */
       recurrence_id: string | null
     }
+    /**
+     * ShowAs
+     * @description How an event shows its organizer's time to others (Outlook's "Show as"); iCalendar's TRANSP and
+     *     Microsoft's X-MICROSOFT-CDO-BUSYSTATUS.
+     * @enum {string}
+     */
+    ShowAs: 'busy' | 'free' | 'tentative' | 'out_of_office' | 'working_elsewhere'
     /** EventOut */
     EventOut: {
       /**
@@ -2289,6 +2405,7 @@ export interface components {
       /** Resource Name */
       resource_name: string | null
       status: components['schemas']['EventStatus']
+      show_as: components['schemas']['ShowAs']
       /**
        * Awaiting Approval
        * @default []
@@ -2360,6 +2477,8 @@ export interface components {
       category_id?: string | null
       /** Resource Id */
       resource_id?: string | null
+      /** @default busy */
+      show_as?: components['schemas']['ShowAs']
       /** Participants */
       participants?: components['schemas']['EventParticipantCreate'][] | null
     }
@@ -2377,6 +2496,27 @@ export interface components {
      * @enum {string}
      */
     ParticipantStatus: 'needs_action' | 'accepted' | 'declined' | 'tentative'
+    /**
+     * EventDuplicate
+     * @description Where a copy of an event goes: its calendar and start (it lasts as long as the original).
+     */
+    EventDuplicate: {
+      /**
+       * Calendar Id
+       * Format: uuid
+       */
+      calendar_id: string
+      /**
+       * Start
+       * Format: date-time
+       */
+      start: string
+      /**
+       * Invite Participants
+       * @default false
+       */
+      invite_participants?: boolean
+    }
     /** EventUpdate */
     EventUpdate: {
       /** Title */
@@ -2406,6 +2546,7 @@ export interface components {
       category_id?: string | null
       /** Resource Id */
       resource_id?: string | null
+      show_as?: components['schemas']['ShowAs'] | null
     }
     /** EventRemindersOut */
     EventRemindersOut: {
@@ -2510,6 +2651,45 @@ export interface components {
        * Format: date-time
        */
       created_at: string
+    }
+    /**
+     * AttachmentKind
+     * @enum {string}
+     */
+    AttachmentKind: 'file' | 'link'
+    /** AttachmentOut */
+    AttachmentOut: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string
+      kind: components['schemas']['AttachmentKind']
+      /** Name */
+      name: string
+      /** Url */
+      url: string
+      /** Content Type */
+      content_type: string
+      /** Size */
+      size: number
+      /** Added By Name */
+      added_by_name: string | null
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+    }
+    /** AttachmentLinkCreate */
+    AttachmentLinkCreate: {
+      /** Url */
+      url: string
+      /**
+       * Name
+       * @default
+       */
+      name?: string
     }
     /** NotificationOut */
     NotificationOut: {
@@ -2650,6 +2830,7 @@ export interface components {
       /** Resource Name */
       resource_name: string | null
       status: components['schemas']['EventStatus']
+      show_as: components['schemas']['ShowAs']
       /**
        * Awaiting Approval
        * @default []
@@ -2723,6 +2904,11 @@ export interface components {
       end: string
       /** Tentative */
       tentative: boolean
+      /**
+       * Out Of Office
+       * @default false
+       */
+      out_of_office: boolean
     }
     /**
      * AvailabilityIn
@@ -4329,6 +4515,32 @@ export interface operations {
       }
     }
   }
+  apps_core_views_events_duplicate_event: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        event_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EventDuplicate']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EventOut']
+        }
+      }
+    }
+  }
   apps_core_views_events_get_event: {
     parameters: {
       query?: never
@@ -4715,6 +4927,129 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ActivityOut'][]
         }
+      }
+    }
+  }
+  apps_core_views_attachments_list_attachments: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        event_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AttachmentOut'][]
+        }
+      }
+    }
+  }
+  apps_core_views_attachments_add_file: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        event_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          /**
+           * File
+           * Format: binary
+           */
+          file: string
+        }
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AttachmentOut']
+        }
+      }
+    }
+  }
+  apps_core_views_attachments_add_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        event_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AttachmentLinkCreate']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AttachmentOut']
+        }
+      }
+    }
+  }
+  apps_core_views_attachments_remove_attachment: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        event_id: string
+        attachment_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['OkOut']
+        }
+      }
+    }
+  }
+  apps_core_views_attachments_download: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        attachment_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

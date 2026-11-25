@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -27,6 +28,14 @@ def own_cache(settings: Settings) -> None:
     from django.core.cache import cache
 
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def attachment_dir(settings: Settings, tmp_path: Path) -> Path:
+    """Attached files go to the test's own directory, never into the development data."""
+    directory = tmp_path / "attachments"
+    settings.ATTACHMENT_DIR = directory
+    return directory
 
 
 @pytest.fixture(autouse=True)

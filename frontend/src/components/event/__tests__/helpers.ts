@@ -65,6 +65,7 @@ export function event(extra: Partial<api.Event> = {}): api.Event {
     resource_id: null,
     resource_name: null,
     status: 'approved',
+    show_as: 'busy',
     awaiting_approval: [],
     decided_by: null,
     decided_at: null,

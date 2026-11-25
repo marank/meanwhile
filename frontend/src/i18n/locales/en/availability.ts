@@ -6,6 +6,7 @@ export default {
   nextDay: 'Next day',
   busy: 'Busy',
   tentative: 'Tentatively busy',
+  outOfOffice: 'Out of office',
   thisEvent: 'This event',
   allFree: 'Everyone is free at this time.',
   conflicts: 'Busy at this time: {names}',

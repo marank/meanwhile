@@ -18,6 +18,7 @@ export function occurrence(overrides: Partial<Occurrence> = {}): Occurrence {
     all_day: false,
     recurrence_count: null,
     status: 'confirmed',
+    show_as: 'busy',
     category_id: null,
     category_name: null,
     category_color: null,

@@ -7,6 +7,8 @@ import { browserTimeZone, toDateInputValue, toTimeInputValue } from '@/services/
 import { dialog, submitDialog } from '@/services/dialog'
 import type { OccurrenceRef } from '@/services/occurrences'
 import EventModal from '../EventModal.vue'
+import { useCalendarStore } from '@/stores/calendars'
+import { calendarItem } from '@/components/calendar/__tests__/calendarFixtures'
 import { calendar, event, me, participant, signIn } from './helpers'
 
 const search = (id: string, label: string, type: string, meta: Record<string, unknown> | null = null) => ({
@@ -34,6 +36,7 @@ function serve(cal: api.Calendar = calendar(), ev: api.Event = event(), extra: R
     'GET /api/events/ev1': ev,
     'GET /api/events/ev1/reminders': { minutes: [] },
     'GET /api/events/ev1/participants': [],
+    'GET /api/events/ev1/attachments': [],
     'GET /api/search': (request: FakeRequest) => searchResults[request.query.get('entity')!] ?? [],
     'POST /api/availability': { users: [], resources: [] },
     ...extra,
@@ -128,7 +131,7 @@ describe('EventModal', () => {
       serve()
       await openNew()
       expect(page().get('h3').text()).toBe('Add event')
-      expect(tabs()).toEqual(['Details', 'Recurrence', 'Reminders', 'Participants', 'Availability'])
+      expect(tabs()).toEqual(['Details', 'Recurrence', 'Reminders', 'Participants', 'Attachments', 'Availability'])
       expect((field('Start').element as HTMLInputElement).value).toBe('2026-03-10')
       expect((timeField('Start').element as HTMLInputElement).value).toBe('09:00')
       expect((field('End').element as HTMLInputElement).value).toBe('2026-03-10')
@@ -160,6 +163,7 @@ describe('EventModal', () => {
         resource_id: null,
         location: null,
         location_resource_id: null,
+        show_as: 'busy',
         participants: [],
       })
       // Reminders unchanged: nothing more to save.
@@ -367,6 +371,67 @@ describe('EventModal', () => {
       await flushPromises()
       expect(text()).toContain('Loading…')
       expect(backend.requests.filter((r) => r.path !== '/api/search')).toHaveLength(0)
+    })
+  })
+
+  describe('show as', () => {
+    const showAs = () => page().get('label:has([role="combobox"]) [role="combobox"]')
+    /** It belongs to who takes part, so it is under "Participants", not with the details. */
+    async function openParticipants() {
+      expect(page().find('label:has([role="combobox"])').exists()).toBe(false)
+      await tab('Participants')!.trigger('click')
+      await flushPromises()
+    }
+    async function pickShowAs(label: string) {
+      await showAs().trigger('click')
+      const list = document.getElementById(showAs().attributes('aria-controls')!)!
+      ;[...list.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent.trim() === label)!.click()
+      await flushPromises()
+    }
+
+    it('starts as busy and offers Outlook’s choices in its order', async () => {
+      serve()
+      await openNew()
+      await openParticipants()
+      expect(showAs().text()).toBe('Busy')
+      expect(text()).toContain('Free and working elsewhere don’t count as busy')
+      await showAs().trigger('click')
+      const list = document.getElementById(showAs().attributes('aria-controls')!)!
+      expect([...list.querySelectorAll('[role="option"]')].map((o) => o.textContent.trim())).toEqual([
+        'Free',
+        'Working elsewhere',
+        'Tentative',
+        'Busy',
+        'Out of office',
+      ])
+    })
+
+    it('is sent with a new event', async () => {
+      serve(calendar(), event(), { 'POST /api/calendars/cal1/events': event({ id: 'new1' }) })
+      await openNew()
+      await openParticipants()
+      await pickShowAs('Out of office')
+      await click('Save')
+      expect(body('POST /api/calendars/cal1/events').show_as).toBe('out_of_office')
+    })
+
+    it('shows what an event was saved with and sends a change', async () => {
+      serve(calendar(), event({ show_as: 'free' }), { 'PATCH /api/events/ev1': event() })
+      await openExisting()
+      await openParticipants()
+      expect(showAs().text()).toBe('Free')
+      await pickShowAs('Tentative')
+      await click('Save')
+      expect(body('PATCH /api/events/ev1').show_as).toBe('tentative')
+    })
+
+    it('can’t be changed without the right to change the event', async () => {
+      serve(calendar('read'), event({ creator_id: 'someone-else', show_as: 'working_elsewhere' }))
+      await openExisting()
+      await openParticipants()
+      expect(showAs().text()).toBe('Working elsewhere')
+      // Inside the dialog's disabled fieldset, as every field of the event.
+      expect(showAs().element.matches(':disabled')).toBe(true)
     })
   })
 
@@ -616,6 +681,185 @@ describe('EventModal', () => {
       await openExisting()
       expect(page().get('fieldset').attributes('disabled')).toBeUndefined()
       expect(button('Delete')).toBeDefined()
+    })
+  })
+
+  describe('attachments', () => {
+    const saved: api.Attachment = {
+      id: 'a1',
+      kind: 'file',
+      name: 'Agenda.pdf',
+      url: '/api/attachments/a1/download',
+      content_type: 'application/pdf',
+      size: 2048,
+      added_by_name: 'Anna',
+      created_at: '2026-03-01T08:00:00Z',
+    }
+
+    it('shows those of the event and sends what was added and removed with the event', async () => {
+      serve(calendar(), event(), {
+        'GET /api/events/ev1/attachments': [saved],
+        'PATCH /api/events/ev1': event(),
+        'DELETE /api/events/ev1/attachments/a1': undefined,
+        'POST /api/events/ev1/attachments/links': { ...saved, id: 'a2', kind: 'link' },
+      })
+      await openExisting()
+      await tab('Attachments')!.trigger('click')
+      await flushPromises()
+      expect(page().get('li[data-kind="file"] a').attributes('href')).toBe('/api/attachments/a1/download')
+      await page().get('button[aria-label="Remove Agenda.pdf"]').trigger('click')
+      const [url] = page().findAll('form input')
+      await url!.setValue('https://example.org/plan')
+      await page().get('form').trigger('submit')
+      // Nothing is sent before the event is saved.
+      expect(backend.calls('DELETE /api/events/ev1/attachments/a1')).toHaveLength(0)
+      await click('Save')
+      expect(backend.calls('DELETE /api/events/ev1/attachments/a1')).toHaveLength(1)
+      expect(body('POST /api/events/ev1/attachments/links')).toEqual({
+        url: 'https://example.org/plan',
+        name: 'https://example.org/plan',
+      })
+      expect(wrapper.emitted('saved')).toHaveLength(1)
+    })
+
+    it('are sent once a new event is created', async () => {
+      serve(calendar(), event(), {
+        'POST /api/calendars/cal1/events': event({ id: 'new1' }),
+        'POST /api/events/new1/attachments/links': { ...saved, kind: 'link' },
+      })
+      await openNew()
+      await tab('Attachments')!.trigger('click')
+      await page().findAll('form input')[0]!.setValue('https://example.org/plan')
+      await page().get('form').trigger('submit')
+      await click('Save')
+      expect(backend.calls('POST /api/events/new1/attachments/links')).toHaveLength(1)
+      expect(wrapper.emitted('saved')).toHaveLength(1)
+    })
+
+    it('can only be looked at without the right to change the event', async () => {
+      serve(calendar('read'), event({ creator_id: 'u1' }), { 'GET /api/events/ev1/attachments': [saved] })
+      await openExisting()
+      await tab('Attachments')!.trigger('click')
+      expect(page().get('li[data-kind="file"] a').text()).toBe('Agenda.pdf')
+      expect(page().find('input[type="file"]').exists()).toBe(false)
+    })
+  })
+
+  describe('duplicating', () => {
+    function mayAddTo(...calendars: [string, api.CalendarRole][]) {
+      useCalendarStore().items = calendars.map(([id, role]) =>
+        calendarItem(id, { role, calendar: { name: `Cal ${id}` } }),
+      )
+    }
+    const dialogTitle = () =>
+      page()
+        .findAll('h3')
+        .map((h) => h.text())
+    const duplicateButton = () =>
+      page()
+        .findAll('button')
+        .filter((b) => b.text() === 'Duplicate')
+
+    it('is offered for saved events where one may add events somewhere', async () => {
+      serve()
+      mayAddTo(['cal1', 'read'])
+      await openExisting()
+      expect(duplicateButton()).toHaveLength(0)
+      wrapper.unmount()
+
+      serve()
+      mayAddTo(['cal1', 'read'], ['mine', 'own'])
+      await openNew()
+      expect(duplicateButton()).toHaveLength(0)
+      wrapper.unmount()
+
+      serve(calendar('read'), event({ creator_id: 'u1' }))
+      mayAddTo(['cal1', 'read'], ['mine', 'own'])
+      await openExisting()
+      // A reader copies into a calendar of their own.
+      expect(duplicateButton()).toHaveLength(1)
+    })
+
+    it('copies the event to the day and calendar chosen and hands the copy on', async () => {
+      const copy = event({ id: 'copy1', calendar_id: 'mine' })
+      serve(calendar(), event(), { 'POST /api/events/ev1/duplicate': copy })
+      mayAddTo(['cal1', 'owner'], ['mine', 'own'], ['theirs', 'read'])
+      await openExisting()
+      await duplicateButton()[0]!.trigger('click')
+      expect(dialogTitle()).toContain('Duplicate event')
+      // The calendar the event is in, among those one may add to.
+      const select = page().get('#duplicate-event [role="combobox"]')
+      expect(select.text()).toBe('Cal cal1')
+      await select.trigger('click')
+      const list = document.getElementById(select.attributes('aria-controls')!)!
+      const options = [...list.querySelectorAll<HTMLElement>('[role="option"]')]
+      expect(options.map((o) => o.textContent.trim())).toEqual(['Cal cal1', 'Cal mine'])
+      options[1]!.click()
+      await flushPromises()
+      expect(text()).toContain('Resources stay behind')
+
+      const date = page().get<HTMLInputElement>('#duplicate-event input[type="date"]')
+      expect(date.element.value).toBe('2026-03-10')
+      await date.setValue('2026-03-24')
+      await page().get('#duplicate-event').trigger('submit')
+      await flushPromises()
+      expect(body('POST /api/events/ev1/duplicate')).toEqual({
+        calendar_id: 'mine',
+        start: new Date(`2026-03-24T${toTimeInputValue(new Date('2026-03-10T09:00:00.000Z'))}`).toISOString(),
+        invite_participants: false,
+      })
+      expect(wrapper.emitted('duplicated')).toEqual([[copy]])
+    })
+
+    it('copies all-day events by their date, and asks about participants when there are any', async () => {
+      serve(calendar(), event({ all_day: true, start: '2026-03-10T00:00:00Z', end: '2026-03-10T00:00:00Z' }), {
+        'GET /api/events/ev1/participants': [participant()],
+        'POST /api/events/ev1/duplicate': event({ id: 'copy1' }),
+      })
+      mayAddTo(['cal1', 'owner'])
+      await openExisting()
+      await duplicateButton()[0]!.trigger('click')
+      expect(page().find('#duplicate-event input[type="time"]').exists()).toBe(false)
+      await page().get('#duplicate-event [role="switch"]').trigger('click')
+      await page().get('#duplicate-event').trigger('submit')
+      await flushPromises()
+      expect(body('POST /api/events/ev1/duplicate')).toEqual({
+        calendar_id: 'cal1',
+        start: '2026-03-10T00:00:00.000Z',
+        invite_participants: true,
+      })
+    })
+
+    it('starts a copy of a series on the day of the occurrence opened, and says what it copies', async () => {
+      serve(calendar(), event({ rrule: 'FREQ=WEEKLY' }), { 'POST /api/events/ev1/duplicate': event({ id: 'c' }) })
+      mayAddTo(['cal1', 'owner'])
+      await openExisting({
+        occurrence: { recurrenceId: '2026-03-17T09:00:00.000Z', start: '2026-03-17T09:00:00.000Z', end: '' },
+      })
+      await duplicateButton()[0]!.trigger('click')
+      expect(page().get<HTMLInputElement>('#duplicate-event input[type="date"]').element.value).toBe('2026-03-17')
+      expect(text()).toContain('Copies the whole series')
+      expect(page().find('#duplicate-event [role="switch"]').exists()).toBe(false)
+    })
+
+    it('shows why a copy failed and can be closed again', async () => {
+      serve(calendar(), event(), {
+        'POST /api/events/ev1/duplicate': reply(409, {
+          detail: { message: 'This booking conflicts with an approved booking', conflicts: ['x'] },
+        }),
+      })
+      mayAddTo(['cal1', 'owner'])
+      await openExisting()
+      await duplicateButton()[0]!.trigger('click')
+      await page().get('#duplicate-event').trigger('submit')
+      await flushPromises()
+      expect(page().get('#duplicate-event [role="alert"]').text()).not.toBe('')
+      expect(wrapper.emitted('duplicated')).toBeUndefined()
+      const cancel = page()
+        .findAll('button')
+        .filter((b) => b.text() === 'Cancel')
+      await cancel[cancel.length - 1]!.trigger('click')
+      expect(dialogTitle()).not.toContain('Duplicate event')
     })
   })
 

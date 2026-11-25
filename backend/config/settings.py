@@ -189,6 +189,14 @@ BACKUP_DIR = env_str("BACKUP_DIR", "")
 BACKUP_TIME = time.fromisoformat(env_str("BACKUP_TIME", "01:30"))
 BACKUP_KEEP_DAYS = env_int("BACKUP_KEEP_DAYS", 14)
 
+# Files attached to events (apps/core/services/attachments.py), in DATA_DIR; not in the database dump.
+ATTACHMENT_DIR = DATA_DIR / "attachments"
+_MB = 1024 * 1024
+# Largest file one may attach; 0 allows links only. nginx (docker/start-nginx) takes requests this big.
+ATTACHMENT_MAX_SIZE = env_int("ATTACHMENT_MAX_SIZE_MB", 10) * _MB
+# Room for the files of all events of one calendar together.
+ATTACHMENT_CALENDAR_QUOTA = env_int("ATTACHMENT_CALENDAR_QUOTA_MB", 500) * _MB
+
 
 # ---------------------------------------------------------------------------
 # Auth / users

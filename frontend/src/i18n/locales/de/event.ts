@@ -42,6 +42,16 @@ const event: MessageSchema['event'] = {
   statusDeclined: 'Abgelehnt',
   statusTentative: 'Vorläufig',
   approvalRequired: 'Genehmigung erforderlich',
+  showAs: 'Anzeigen als',
+  showAsHint: 'Gilt für alle im Termin. Frei und An anderem Ort tätig zählen in ihrer Verfügbarkeit nicht als belegt.',
+  // Outlooks Bezeichnungen, die viele schon kennen.
+  showAsOption: {
+    busy: 'Gebucht',
+    free: 'Frei',
+    tentative: 'Mit Vorbehalt',
+    out_of_office: 'Abwesend',
+    working_elsewhere: 'An anderem Ort tätig',
+  },
 }
 
 export default event

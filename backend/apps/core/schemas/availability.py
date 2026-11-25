@@ -21,8 +21,10 @@ class AvailabilityIn(Schema):
 class BusyPeriod(Schema):
     start: datetime
     end: datetime
-    # Pending bookings and invitations not answered yet.
+    # Pending bookings, invitations not answered yet and events shown as tentative.
     tentative: bool
+    # Taken by an event shown as "out of office".
+    out_of_office: bool = False
 
 
 class AvailabilityEntry(Schema):

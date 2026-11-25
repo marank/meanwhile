@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: meanwhile\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-25 13:19+0000\n"
+"POT-Creation-Date: 2026-11-25 14:24+0000\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -100,6 +100,32 @@ msgstr "Sie können diesen Termin nicht absagen"
 
 msgid "Approver must be a calendar member"
 msgstr "Genehmigende müssen Zugriff auf den Kalender haben"
+
+msgid "Files of this type can't be attached"
+msgstr "Dateien dieser Art können nicht angehängt werden"
+
+msgid "The file's content doesn't match its type"
+msgstr "Der Inhalt der Datei passt nicht zu ihrer Art"
+
+#, python-format
+msgid "An event can have at most %(count)d attachments"
+msgstr "Ein Termin kann höchstens %(count)d Anhänge haben"
+
+msgid "There's no room left for files in this calendar"
+msgstr "In diesem Kalender ist kein Platz mehr für Dateien"
+
+msgid "Files can't be attached here, only links"
+msgstr "Hier können keine Dateien angehängt werden, nur Links"
+
+msgid "The file needs a name"
+msgstr "Die Datei braucht einen Namen"
+
+msgid "The file is empty"
+msgstr "Die Datei ist leer"
+
+#, python-format
+msgid "Files may be at most %(size)d MB"
+msgstr "Dateien dürfen höchstens %(size)d MB groß sein"
 
 msgid "This calendar URL is reserved"
 msgstr "Diese Kalender-Adresse ist reserviert"
@@ -735,6 +761,12 @@ msgstr "Sie können sich nicht selbst deaktivieren"
 msgid "Cannot delete yourself"
 msgstr "Sie können sich nicht selbst löschen"
 
+msgid "You do not have permission to edit this event"
+msgstr "Sie dürfen diesen Termin nicht bearbeiten"
+
+msgid "The file is no longer there"
+msgstr "Die Datei ist nicht mehr vorhanden"
+
 msgid "end must be after start and at most 62 days later"
 msgstr "Das Ende muss nach dem Beginn und höchstens 62 Tage später liegen"
 
@@ -759,8 +791,8 @@ msgstr "Dafür sind Admin-Rechte nötig"
 msgid "end must be after start"
 msgstr "Das Ende muss nach dem Beginn liegen"
 
-msgid "You do not have permission to edit this event"
-msgstr "Sie dürfen diesen Termin nicht bearbeiten"
+msgid "You do not have permission to create events"
+msgstr "Sie dürfen hier keine Termine hinzufügen"
 
 msgid "A changed occurrence of a series can't repeat itself"
 msgstr ""

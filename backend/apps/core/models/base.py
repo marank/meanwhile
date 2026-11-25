@@ -81,6 +81,26 @@ class EventStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
+class ShowAs(models.TextChoices):
+    """How an event shows its organizer's time to others (Outlook's "Show as"); iCalendar's TRANSP and
+    Microsoft's X-MICROSOFT-CDO-BUSYSTATUS."""
+
+    BUSY = "busy", "Busy"
+    FREE = "free", "Free"
+    TENTATIVE = "tentative", "Tentative"
+    OUT_OF_OFFICE = "out_of_office", "Out of office"
+    WORKING_ELSEWHERE = "working_elsewhere", "Working elsewhere"
+
+
+# What doesn't take up its people's time: left out of their availability, TRANSP:TRANSPARENT in iCalendar.
+FREE_TIME = frozenset({ShowAs.FREE, ShowAs.WORKING_ELSEWHERE})
+
+
+class AttachmentKind(models.TextChoices):
+    FILE = "file", "File"
+    LINK = "link", "Link"
+
+
 class ParticipantStatus(models.TextChoices):
     NEEDS_ACTION = "needs_action", "Needs action"
     ACCEPTED = "accepted", "Accepted"

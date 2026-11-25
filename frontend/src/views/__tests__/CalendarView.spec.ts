@@ -45,11 +45,23 @@ const EventModal = defineComponent({
     defaultEnd: { type: Date, default: undefined },
     defaultAllDay: { type: Boolean, default: undefined },
   },
-  emits: ['saved', 'cancel', 'deleted'],
+  emits: ['saved', 'cancel', 'deleted', 'duplicated'],
   setup(_, { emit }) {
     return () =>
       h('div', { class: 'event-modal' }, [
         h('button', { class: 'modal-save', onClick: () => emit('saved') }, 'save'),
+        h(
+          'button',
+          {
+            class: 'modal-duplicate',
+            onClick: () =>
+              emit(
+                'duplicated',
+                event({ id: 'copy1', calendar_id: 'c2', start: '2027-02-15T09:00:00', all_day: false }),
+              ),
+          },
+          'duplicate',
+        ),
         h('button', { class: 'modal-cancel', onClick: () => emit('cancel') }, 'cancel'),
         h('button', { class: 'modal-delete', onClick: () => emit('deleted') }, 'delete'),
       ])
@@ -276,8 +288,8 @@ describe('CalendarView', () => {
         }),
         occurrence({ event_id: 'b', title: 'Room', status: 'pending', calendar_id: 'c2', can_edit: false }),
         occurrence({ event_id: 'c', title: 'Lunch', status: 'rejected' }),
-        occurrence({ event_id: 'd', title: 'Party', status: 'cancelled' }),
-        allDay('2026-10-20', '2026-10-21', { event_id: 'e', title: 'Fair' }),
+        occurrence({ event_id: 'd', title: 'Party', status: 'cancelled', show_as: 'free' }),
+        allDay('2026-10-20', '2026-10-21', { event_id: 'e', title: 'Fair', show_as: 'working_elsewhere' }),
       ]
       await open('/calendar/all')
       expect(fcEvents().map((event) => event.title)).toEqual([
@@ -293,6 +305,9 @@ describe('CalendarView', () => {
       expect(fcEvents()[4]).toMatchObject({ start: '2026-10-20', end: '2026-10-21', allDay: true })
       expect(fullCalendar.options!.eventClass({ event: fcEvents()[1] })).toBe('calendar-event calendar-event-pending')
       expect(fullCalendar.options!.eventClass({ event: fcEvents()[0] })).toBe('calendar-event')
+      // Events that leave the time free are shown lighter.
+      expect(fullCalendar.options!.eventClass({ event: fcEvents()[3] })).toBe('calendar-event calendar-event-free')
+      expect(fullCalendar.options!.eventClass({ event: fcEvents()[4] })).toBe('calendar-event calendar-event-free')
     })
 
     it('shows all events in the overview color when the overview asks for it, and dark colors in the dark', async () => {
@@ -404,6 +419,19 @@ describe('CalendarView', () => {
       expect(monthShown(wrapper)).toBe(`Month of ${new Date(2026, 10, 1).toDateString()}`)
       await click(wrapper, '.modal-save')
       expect(router.currentRoute.value.fullPath).toBe('/calendar/work')
+    })
+
+    it('opens the copy of a duplicated event at its date, in its calendar', async () => {
+      toasts.splice(0)
+      localStorage.setItem('calendar-selection', 'c1')
+      backend.on('GET /api/events/e9', event({ id: 'e9', calendar_id: 'c1', start: '2026-12-03T10:00:00' }))
+      const wrapper = await open('/event/e9')
+      await click(wrapper, '.modal-duplicate')
+      expect(toasts.map((t) => t.message)).toEqual(['Event duplicated'])
+      expect(modal(wrapper).props()).toMatchObject({ eventId: 'copy1', occurrence: null })
+      expect(monthShown(wrapper)).toBe(`Month of ${new Date(2027, 1, 1).toDateString()}`)
+      // The copy's calendar is shown, as it wasn't before.
+      expect(eventRequests().at(-1)!.ids).toEqual(['c2'])
     })
 
     it('opens one followed from the calendar over it', async () => {

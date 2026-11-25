@@ -13,6 +13,8 @@ import type {
   AppPasswordCreated,
   AppSettings,
   AppSettingsUpdate,
+  Attachment,
+  AttachmentLinkInput,
   PublicSettings,
   Approver,
   Calendar,
@@ -28,6 +30,7 @@ import type {
   Event,
   EventActivity,
   EventComment,
+  EventDuplicate,
   EventInput,
   EventParticipant,
   EventParticipantCreate,
@@ -324,6 +327,25 @@ export const setReminders = (eventId: string, minutes: number[]) =>
 
 export const deleteOccurrence = (seriesId: string, recurrenceId: string, scope: OccurrenceScope) =>
   api<void>(occurrencePath(seriesId, recurrenceId, scope), { method: 'DELETE' })
+
+/** A copy of the event (as saved) in a calendar at a start; returns the copy. */
+export const duplicateEvent = (eventId: string, data: EventDuplicate) =>
+  api<Event>(`/api/events/${eventId}/duplicate`, { method: 'POST', body: data })
+
+// Attachments (of a series: of all its occurrences)
+export const listAttachments = (eventId: string) => api<Attachment[]>(`/api/events/${eventId}/attachments`)
+
+export function uploadAttachment(eventId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return api<Attachment>(`/api/events/${eventId}/attachments/files`, { method: 'POST', body })
+}
+
+export const addAttachmentLink = (eventId: string, data: AttachmentLinkInput) =>
+  api<Attachment>(`/api/events/${eventId}/attachments/links`, { method: 'POST', body: data })
+
+export const removeAttachment = (eventId: string, attachmentId: string) =>
+  api<void>(`/api/events/${eventId}/attachments/${attachmentId}`, { method: 'DELETE' })
 
 // Comments & activity
 export const listComments = (eventId: string) => api<EventComment[]>(`/api/events/${eventId}/comments`)

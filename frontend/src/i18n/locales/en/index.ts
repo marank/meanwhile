@@ -16,6 +16,8 @@ import palette from './palette'
 import emailNotifications from './emailNotifications'
 import unsubscribe from './unsubscribe'
 import rsvp from './rsvp'
+import attachments from './attachments'
+import duplicate from './duplicate'
 
 // One file per area; the German messages are typed against these.
 const en = {
@@ -37,6 +39,8 @@ const en = {
   emailNotifications,
   unsubscribe,
   rsvp,
+  attachments,
+  duplicate,
 }
 
 export type MessageSchema = typeof en

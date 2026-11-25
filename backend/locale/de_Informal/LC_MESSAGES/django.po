@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: meanwhile\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-25 13:19+0000\n"
+"POT-Creation-Date: 2026-11-25 14:24+0000\n"
 "Language: de_Informal\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -99,6 +99,32 @@ msgid "You cannot cancel this event"
 msgstr "Du kannst diesen Termin nicht absagen"
 
 msgid "Approver must be a calendar member"
+msgstr ""
+
+msgid "Files of this type can't be attached"
+msgstr ""
+
+msgid "The file's content doesn't match its type"
+msgstr ""
+
+#, python-format
+msgid "An event can have at most %(count)d attachments"
+msgstr ""
+
+msgid "There's no room left for files in this calendar"
+msgstr ""
+
+msgid "Files can't be attached here, only links"
+msgstr ""
+
+msgid "The file needs a name"
+msgstr ""
+
+msgid "The file is empty"
+msgstr ""
+
+#, python-format
+msgid "Files may be at most %(size)d MB"
 msgstr ""
 
 msgid "This calendar URL is reserved"
@@ -731,6 +757,12 @@ msgstr "Du kannst dich nicht selbst deaktivieren"
 msgid "Cannot delete yourself"
 msgstr "Du kannst dich nicht selbst löschen"
 
+msgid "You do not have permission to edit this event"
+msgstr "Du darfst diesen Termin nicht bearbeiten"
+
+msgid "The file is no longer there"
+msgstr ""
+
 msgid "end must be after start and at most 62 days later"
 msgstr ""
 
@@ -755,8 +787,8 @@ msgstr ""
 msgid "end must be after start"
 msgstr ""
 
-msgid "You do not have permission to edit this event"
-msgstr "Du darfst diesen Termin nicht bearbeiten"
+msgid "You do not have permission to create events"
+msgstr "Du darfst hier keine Termine hinzufügen"
 
 msgid "A changed occurrence of a series can't repeat itself"
 msgstr ""

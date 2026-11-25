@@ -55,7 +55,7 @@ describe('EventActivityTab', () => {
       'GET /api/events/ev1/comments': [],
       'GET /api/events/ev1/activity': [
         entry('created', null, null),
-        entry('updated', { fields: ['title', 'start'] }),
+        entry('updated', { fields: ['title', 'start', 'show_as'] }),
         entry('updated', { fields: ['resource'], status: 'pending' }),
         entry('approved'),
         entry('approved', { note: 'Fine' }),
@@ -73,7 +73,7 @@ describe('EventActivityTab', () => {
     await flushPromises()
     expect(lines(wrapper)).toEqual([
       'Someone created this event',
-      'Ben changed title, start',
+      'Ben changed title, start, show as',
       'Ben changed resource — approval required again',
       'Ben approved this event',
       'Ben approved: Fine',

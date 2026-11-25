@@ -11,6 +11,8 @@ import vobject
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
+from apps.core.models.base import FREE_TIME, ShowAs
+from apps.core.services.attachments import is_download_url
 from apps.core.services.recurrence import iana_zone_name, validate_rrule, zone
 from apps.core.services.reminders import allowed_minutes
 
@@ -18,6 +20,15 @@ from apps.core.services.reminders import allowed_minutes
 TITLE_MAX_LENGTH = 255
 
 # vobject ships no types: its components and properties are Any here.
+
+# Outlook's "Show as" (X-MICROSOFT-CDO-BUSYSTATUS).
+_SHOW_AS_OF = {
+    "BUSY": ShowAs.BUSY,
+    "FREE": ShowAs.FREE,
+    "TENTATIVE": ShowAs.TENTATIVE,
+    "OOF": ShowAs.OUT_OF_OFFICE,
+    "WORKINGELSEWHERE": ShowAs.WORKING_ELSEWHERE,
+}
 
 PARTSTATS = {
     "NEEDS-ACTION": "needs_action",
@@ -145,6 +156,9 @@ class EventData(TypedDict):
     # (email, status) of each participant.
     attendees: list[tuple[str, str]]
     alarms: list[int] | None
+    show_as: ShowAs
+    # (address, name) of each attached link; files the app serves and files sent inline aside.
+    links: list[tuple[str, str]]
 
 
 def _span(vevent: Any, floating: str) -> tuple[datetime, datetime, bool]:
@@ -224,6 +238,38 @@ def _text(vevent: Any, name: str) -> str | None:
     return str(getattr(vevent, name).value) if hasattr(vevent, name) else None
 
 
+def _param(line: Any, name: str) -> str:
+    return str((line.params.get(name) or [""])[0])
+
+
+def _links(vevent: Any) -> list[tuple[str, str]]:
+    """The http(s) links among the ATTACH properties, by address once, with their names (RFC 8607's
+    FILENAME, Apple's X-APPLE-FILENAME)."""
+    links: dict[str, str] = {}
+    for line in vevent.contents.get("attach", []):
+        if _param(line, "VALUE").upper() == "BINARY" or _param(line, "ENCODING").upper() == "BASE64":
+            continue
+        url = str(line.value).strip()
+        if not url.lower().startswith(("http://", "https://")) or len(url) > 2000 or is_download_url(url):
+            continue
+        name = _param(line, "FILENAME") or _param(line, "X-APPLE-FILENAME") or _param(line, "X-FILENAME")
+        links.setdefault(url, name.strip()[:255])
+    return list(links.items())
+
+
+def _show_as(vevent: Any) -> ShowAs:
+    """Outlook's BUSYSTATUS where it agrees with TRANSP, else TRANSP: a client that only knows TRANSP
+    (Thunderbird, Apple) changes that and sends the BUSYSTATUS it was given back unchanged."""
+    status = _SHOW_AS_OF.get((_text(vevent, "x_microsoft_cdo_busystatus") or "").strip().upper())
+    transp = (_text(vevent, "transp") or "").strip().upper()
+    if transp not in {"TRANSPARENT", "OPAQUE"}:
+        return status or ShowAs.BUSY
+    transparent = transp == "TRANSPARENT"
+    if status is not None and (status in FREE_TIME) == transparent:
+        return status
+    return ShowAs.FREE if transparent else ShowAs.BUSY
+
+
 def component_data(vevent: Any, floating: str) -> EventData:
     """The fields of one VEVENT, with ends stored the way the app does (inclusive for all-day events).
 
@@ -254,6 +300,8 @@ def component_data(vevent: Any, floating: str) -> EventData:
         "organizer": organizer,
         "attendees": attendees,
         "alarms": _alarm_minutes(vevent, start, end),
+        "show_as": _show_as(vevent),
+        "links": _links(vevent),
     }
 
 

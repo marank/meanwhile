@@ -86,6 +86,17 @@ describe('CalendarAgenda', () => {
     expect(wrapper.text()).toContain('2 events')
   })
 
+  it('shows events that leave the time free lighter, and says how each one shows', () => {
+    const wrapper = render([
+      occurrence({ event_id: 'a', show_as: 'free', start: at(2026, 10, 15, 9) }),
+      occurrence({ event_id: 'b', show_as: 'tentative', start: at(2026, 10, 16, 9) }),
+      occurrence({ event_id: 'c', show_as: 'working_elsewhere', start: at(2026, 10, 17, 9) }),
+    ])
+    const entries = wrapper.findAll('.agenda-entry')
+    expect(entries.map((entry) => entry.attributes('data-show-as'))).toEqual(['free', 'tentative', 'working_elsewhere'])
+    expect(entries.map((entry) => entry.classes().includes('agenda-entry-free'))).toEqual([true, false, true])
+  })
+
   it('marks past events, pending and declined ones, series and categories', () => {
     const wrapper = render([
       occurrence({ event_id: 'p', title: 'Past', start: at(2026, 10, 2, 9), end: at(2026, 10, 2, 10) }),

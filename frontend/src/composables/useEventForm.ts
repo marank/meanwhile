@@ -6,6 +6,8 @@ import { buildRrule, parseRrule, recurrenceDefaults, type RecurrenceRule } from 
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
+/** New events take up their time unless said otherwise. */
+const BUSY: api.ShowAs = 'busy'
 
 /** The fields of the event dialog: filled from an event, an occurrence or defaults, and turned into what is saved. */
 export function useEventForm() {
@@ -22,6 +24,7 @@ export function useEventForm() {
     /** Free text, or the name of the booked place in locationResourceId. */
     location: '',
     locationResourceId: null as string | null,
+    showAs: BUSY,
   })
   const selectedResource = ref<api.SearchResult | null>(null)
   const selectedLocation = ref<api.SearchResult | null>(null)
@@ -128,6 +131,7 @@ export function useEventForm() {
     form.resourceId = value.resource_id
     form.location = value.location
     form.locationResourceId = value.location_resource_id
+    form.showAs = value.show_as
     showRecurrenceCount.value = value.show_recurrence_count
   }
 
@@ -194,6 +198,7 @@ export function useEventForm() {
       resource_id: form.resourceId,
       location: form.location || null,
       location_resource_id: form.locationResourceId,
+      show_as: form.showAs,
     }
   }
 

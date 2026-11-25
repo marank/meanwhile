@@ -18,6 +18,10 @@ informal "du").
 - **Recurring events** with exceptions: change or delete a single occurrence or all following ones.
 - **Folders** to arrange your own calendar list.
 - **Reminders** per event and person; they pop up in every open tab.
+- **Attachments**: files and links on events, for everyone who sees them.
+- **Show as** free, busy, tentative, out of office or working elsewhere, as in Outlook; free
+  time stays free in everyone's availability.
+- **Duplicate** an event to another day or calendar.
 - **Live updates**: calendars, lists and notifications refresh by themselves when someone else
   changes something, in the browser or from a phone.
 
@@ -87,8 +91,9 @@ For real use, put a TLS proxy in front and set `TRUSTED_PROXIES`, see
 - **Email and invitations:** an SMTP server for sending; an IMAP mailbox if answers from mail
   programs should count, see [docs/operations.md](docs/operations.md#email-and-invitations).
 - **Backups:** the worker dumps the database nightly into the `backups` volume;
-  `docker compose exec worker python manage.py backup_database` dumps right away. Restoring and
-  updating: [docs/operations.md](docs/operations.md#backups).
+  `docker compose exec worker python manage.py backup_database` dumps right away. Attached files
+  are in the `app_data` volume; back that up too. Restoring and updating:
+  [docs/operations.md](docs/operations.md#backups).
 - **Calendar apps:** CalDAV is served under `/caldav` (found via `/.well-known/caldav`); users
   create app passwords in their account settings.
 

@@ -9,7 +9,7 @@ from typing import Any
 from django.db.models import Q, QuerySet
 
 from apps.core.models import Event, EventParticipant, Resource, User
-from apps.core.models.base import EventStatus, ParticipantStatus
+from apps.core.models.base import FREE_TIME, EventStatus, ParticipantStatus, ShowAs
 from apps.core.services.recurrence import expand_events
 
 _TAKEN = {EventStatus.CONFIRMED, EventStatus.APPROVED}
@@ -37,18 +37,22 @@ def _periods(
     start: datetime,
     end: datetime,
     tentative: Callable[[Event], bool],
+    away: Callable[[Event], bool] = lambda _event: False,
 ) -> list[dict[str, Any]]:
-    """Busy and tentative periods, each merged; a busy time hides a tentative one at the same time."""
-    busy: list[tuple[datetime, datetime]] = []
-    maybe: list[tuple[datetime, datetime]] = []
+    """Out-of-office, busy and tentative periods, each merged; a time of the kinds before hides one of
+    the kinds after it within it."""
+    kinds: dict[str, list[tuple[datetime, datetime]]] = {"away": [], "busy": [], "maybe": []}
     for event, begin, finish in occurrences:
-        period = (max(begin, start), min(finish, end))
-        (maybe if tentative(event) else busy).append(period)
-    busy = _merge(busy)
-    result = [{"start": b, "end": f, "tentative": False} for b, f in busy]
-    for b, f in _merge(maybe):
-        if not any(b >= bb and f <= ff for bb, ff in busy):
-            result.append({"start": b, "end": f, "tentative": True})
+        kind = "away" if away(event) else "maybe" if tentative(event) else "busy"
+        kinds[kind].append((max(begin, start), min(finish, end)))
+    result: list[dict[str, Any]] = []
+    shown: list[tuple[datetime, datetime]] = []
+    for kind, intervals in kinds.items():
+        merged = [(b, f) for b, f in _merge(intervals) if not any(b >= sb and f <= sf for sb, sf in shown)]
+        result += [
+            {"start": b, "end": f, "tentative": kind == "maybe", "out_of_office": kind == "away"} for b, f in merged
+        ]
+        shown += merged
     return sorted(result, key=lambda p: p["start"])
 
 
@@ -62,14 +66,16 @@ def _without(events: QuerySet[Event], exclude_event_id: str | None) -> QuerySet[
 def user_periods(
     user: User, start: datetime, end: datetime, exclude_event_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """When the user is taken: by events they created or take part in (declined ones aside).
+    """When the user is taken: by events they created or take part in (declined ones aside), unless
+    those are shown as free or "working elsewhere".
 
-    Pending bookings and invitations not yet accepted count as tentative.
+    Pending bookings, invitations not yet accepted and events shown as tentative count as tentative.
     """
     attending = Q(participants__user=user) | Q(participants__email__iexact=user.email)
     events = _overlapping(
         Event.objects.filter(Q(creator=user) | attending)
         .exclude(status__in={EventStatus.REJECTED, EventStatus.CANCELLED})
+        .exclude(show_as__in=FREE_TIME)
         .distinct(),
         start,
         end,
@@ -87,9 +93,15 @@ def user_periods(
     unsure = {ParticipantStatus.NEEDS_ACTION, ParticipantStatus.TENTATIVE}
 
     def tentative(event: Event) -> bool:
-        return event.status == EventStatus.PENDING or answers.get(event.id) in unsure
+        return (
+            event.status == EventStatus.PENDING or event.show_as == ShowAs.TENTATIVE or answers.get(event.id) in unsure
+        )
 
-    return _periods(occurrences, start, end, tentative)
+    def away(event: Event) -> bool:
+        # Who hasn't said yet whether they come isn't away because of it.
+        return event.show_as == ShowAs.OUT_OF_OFFICE and not tentative(event)
+
+    return _periods(occurrences, start, end, tentative, away)
 
 
 def resource_periods(

@@ -6,6 +6,7 @@ import type { Occurrence } from '@/api'
 import { groupByDay, isPast, type AgendaEntry } from '@/services/agenda'
 import { dayKey } from '@/services/days'
 import { formatTime, newEventStart } from '@/services/datetime'
+import { takesNoTime } from '@/services/occurrences'
 import { resourceIcon } from '@/services/resourceIcons'
 
 /**
@@ -127,7 +128,9 @@ function create(date: Date) {
             'week-stack-event-past': isPast(entry.occurrence, now),
             'week-stack-event-pending': entry.occurrence.status === 'pending',
             'week-stack-event-declined': isDeclined(entry.occurrence),
+            'week-stack-event-free': takesNoTime(entry.occurrence),
           }"
+          :data-show-as="entry.occurrence.show_as"
           :style="{ '--week-stack-color': colorOf(entry.occurrence) }"
           @click="emit('open', entry.occurrence)"
         >
@@ -301,6 +304,11 @@ function create(date: Date) {
 
 .week-stack-event-past {
   opacity: 0.55;
+}
+
+/* Shown as free: only a tint of the color, as in the other views. */
+.week-stack-event-free {
+  background-color: color-mix(in srgb, var(--week-stack-color) 12%, var(--app-surface));
 }
 
 /* Bookings awaiting approval: dashed, as in the other views. */

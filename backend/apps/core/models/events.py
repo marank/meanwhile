@@ -7,7 +7,7 @@ import secrets
 from django.db import models
 from django.utils import timezone
 
-from apps.core.models.base import EventStatus, ParticipantStatus, TimestampedModel, UUIDModel
+from apps.core.models.base import AttachmentKind, EventStatus, ParticipantStatus, ShowAs, TimestampedModel, UUIDModel
 from apps.core.models.calendars import Calendar
 from apps.core.models.resources import Resource
 from apps.core.models.users import User
@@ -65,6 +65,9 @@ class Event(UUIDModel, TimestampedModel):
         null=True,
     )
     status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.CONFIRMED)
+    # Whether the event takes up its people's time: free and "working elsewhere" don't, tentative only maybe.
+    # Resources it books are taken either way.
+    show_as = models.CharField(max_length=20, choices=ShowAs.choices, default=ShowAs.BUSY)
     # Ids of the booked resources whose approval a pending event still waits for.
     awaiting_approval = models.JSONField(default=list, blank=True)
     decided_by = models.ForeignKey(
@@ -183,6 +186,29 @@ class EventEmailMute(UUIDModel):
     class Meta:
         db_table = "event_email_mutes"
         constraints = [models.UniqueConstraint(fields=["user", "event"], name="uq_event_email_mute")]
+
+
+class EventAttachment(UUIDModel):
+    """A file or a link attached to an event; of a series, to all its occurrences (it hangs on the series).
+
+    A file's content is kept under ATTACHMENT_DIR (apps.core.services.attachments.file_path), not here.
+    """
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="attachments")
+    kind = models.CharField(max_length=10, choices=AttachmentKind.choices)
+    # The file's name as uploaded (without directories), or a link's title.
+    name = models.CharField(max_length=255)
+    # A link's address; empty for files.
+    url = models.URLField(max_length=2000, blank=True, default="")
+    # A file's type, by what the app found it to be, and its size in bytes.
+    content_type = models.CharField(max_length=100, blank=True, default="")
+    size = models.PositiveBigIntegerField(default=0)
+    added_by = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="+", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "event_attachments"
+        ordering = ["created_at", "id"]
 
 
 class EventComment(UUIDModel):

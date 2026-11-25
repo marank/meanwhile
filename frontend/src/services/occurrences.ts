@@ -3,6 +3,11 @@ import { i18n } from '@/i18n'
 import { choose } from './dialog'
 
 /** One occurrence of a series as the calendar shows it; `recurrenceId` is its original start. */
+/** Whether the occurrence leaves its people's time free ("free", "working elsewhere"); shown lighter. */
+export function takesNoTime(occ: Pick<Occurrence, 'show_as'>): boolean {
+  return occ.show_as === 'free' || occ.show_as === 'working_elsewhere'
+}
+
 export interface OccurrenceRef {
   recurrenceId: string
   start: string

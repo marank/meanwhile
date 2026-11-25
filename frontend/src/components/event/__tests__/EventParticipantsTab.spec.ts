@@ -19,6 +19,7 @@ function render(
     participants: api.EventParticipant[] | null
     pending: PendingParticipant[]
     removed: string[]
+    showAs: api.ShowAs
   }> = {},
 ) {
   wrapper = mount(EventParticipantsTab, {
@@ -28,6 +29,8 @@ function render(
       participants: [anna, ben],
       pending: [],
       removed: [],
+      showAs: 'busy',
+      'onUpdate:showAs': (value: api.ShowAs) => wrapper.setProps({ showAs: value }),
       'onUpdate:pending': (value: PendingParticipant[]) => wrapper.setProps({ pending: value }),
       'onUpdate:removed': (value: string[]) => wrapper.setProps({ removed: value }),
       ...props,
@@ -156,8 +159,24 @@ describe('EventParticipantsTab', () => {
   })
 
   it('only shows the participants to those who may not change them', () => {
-    render({ canManage: false })
+    render({ canManage: false, showAs: 'out_of_office' })
     expect(wrapper.find('input').exists()).toBe(false)
-    expect(wrapper.find('button').exists()).toBe(false)
+    // Only the show-as select, shut.
+    const buttons = wrapper.findAll('button')
+    expect(buttons.map((b) => b.attributes('role'))).toEqual(['combobox'])
+    expect(buttons[0]!.text()).toBe('Out of office')
+    expect(buttons[0]!.attributes('disabled')).toBeDefined()
+  })
+
+  it('sets how the event shows its people’s time', async () => {
+    render()
+    const select = wrapper.get('[role="combobox"]')
+    expect(select.text()).toBe('Busy')
+    await select.trigger('click')
+    const list = document.getElementById(select.attributes('aria-controls')!)!
+    ;[...list.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent.trim() === 'Free')!.click()
+    await flushPromises()
+    expect(wrapper.emitted('update:showAs')).toEqual([['free']])
+    expect(wrapper.text()).toContain('Free and working elsewhere don’t count as busy in their availability.')
   })
 })

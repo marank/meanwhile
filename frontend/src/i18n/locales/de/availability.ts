@@ -8,6 +8,7 @@ const availability: MessageSchema['availability'] = {
   nextDay: 'Nächster Tag',
   busy: 'Belegt',
   tentative: 'Vorläufig belegt',
+  outOfOffice: 'Abwesend',
   thisEvent: 'Dieser Termin',
   allFree: 'Alle sind zu dieser Zeit frei.',
   conflicts: 'Zu dieser Zeit belegt: {names}',
