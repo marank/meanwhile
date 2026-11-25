@@ -49,6 +49,7 @@ function save() {
         :label="$t('app.logo')"
         default-image="/logo.svg"
         :default-label="$t('app.defaultLogo')"
+        :hint="$t('app.logoHint')"
         :remove-label="$t('app.removeLogo')"
       />
       <ImageUploadField
@@ -57,6 +58,7 @@ function save() {
         :label="$t('app.favicon')"
         default-image="/favicon.svg"
         :default-label="$t('app.defaultFavicon')"
+        :hint="$t('app.faviconHint')"
         :remove-label="$t('app.removeFavicon')"
       />
 

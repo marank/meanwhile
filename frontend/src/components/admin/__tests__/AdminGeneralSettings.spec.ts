@@ -41,6 +41,7 @@ describe('image upload field', () => {
         defaultImage: '/logo.svg',
         defaultLabel: "Meanwhile's own logo is shown until you choose one.",
         removeLabel: 'Remove logo',
+        hint: 'Best square.',
         'onUpdate:modelValue': (value: string | null) => wrapper.setProps({ modelValue: value }),
       },
       global: { plugins: [i18n] },
@@ -75,6 +76,21 @@ describe('image upload field', () => {
     expect(wrapper.find('[data-default]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('own logo')
     expect(wrapper.get('label').text()).toBe('Choose another')
+  })
+
+  it('tells the best size, and refuses a file larger than the server takes', async () => {
+    const wrapper = render(null)
+    const input = wrapper.get('input[type="file"]')
+    expect(wrapper.get(`[id="${input.attributes('aria-describedby')}"]`).text()).toBe('Best square.')
+
+    pickFile(input.element as HTMLInputElement, new File([new Uint8Array(701 * 1024)], 'huge.png'))
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe('This image is too large; it can be at most 700 KB.')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+
+    pickFile(input.element as HTMLInputElement, new File(['hi'], 'logo.png', { type: 'image/png' }))
+    await vi.waitFor(() => expect(wrapper.emitted('update:modelValue')).toHaveLength(1))
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 
   it("takes the server's empty value for no image", () => {

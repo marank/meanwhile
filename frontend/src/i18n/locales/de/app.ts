@@ -159,6 +159,10 @@ const app: MessageSchema['app'] = {
   logo: 'Logo',
   favicon: 'Favicon',
   defaultLogo: 'Bis Sie ein eigenes wählen, wird das Logo von Meanwhile angezeigt.',
+  logoHint:
+    'Am besten quadratisch, 256 × 256 Pixel, als PNG bis 200 KB: E-Mails zeigen kein SVG und keine größeren Bilder.',
+  faviconHint: 'Am besten quadratisch, 64 × 64 Pixel oder größer, als PNG oder SVG.',
+  imageTooLarge: 'Dieses Bild ist zu groß; es darf höchstens 700 KB haben.',
   defaultFavicon: 'Bis Sie ein eigenes wählen, wird das Icon von Meanwhile angezeigt.',
   removeLogo: 'Logo entfernen',
   removeFavicon: 'Favicon entfernen',
