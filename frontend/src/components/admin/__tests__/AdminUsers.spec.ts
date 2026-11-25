@@ -117,6 +117,40 @@ describe('admin users', () => {
     wrapper.unmount()
   })
 
+  it('sorts by name, then by the column whose header is clicked, and marks who has yet to accept', async () => {
+    backend.on('GET /api/admin/users', [
+      adminUser('zoe', 'Zoe', { email: 'a@example.test' }),
+      adminUser('cy', 'Cy', { has_password: false }),
+      adminUser('bob', 'Bob', { is_active: false }),
+      adminUser('al', 'Al', { is_admin: true, email: 'z@example.test' }),
+    ])
+    const wrapper = await render()
+    const names = () => wrapper.findAll('tbody tr td:first-child').map((td) => td.text())
+    const header = (label: string) => wrapper.findAll('thead th').find((th) => th.text() === label)!
+    const statuses = () => wrapper.findAll('[data-status]').map((s) => `${s.text()}:${s.attributes('data-status')}`)
+
+    expect(names()).toEqual(['Al', 'Bob', 'Cy', 'Zoe'])
+    expect(header('Name').attributes('aria-sort')).toBe('ascending')
+    expect(header('Email').attributes('aria-sort')).toBe('none')
+    // Without a password yet, an active user is still invited.
+    expect(statuses()).toEqual(['Active:active', 'Inactive:inactive', 'Invited:invited', 'Active:active'])
+    expect(wrapper.get('[data-status="invited"]').attributes('title')).toBe(
+      "Hasn't chosen a password from the invitation yet",
+    )
+
+    await header('Name').get('button').trigger('click')
+    expect(names()).toEqual(['Zoe', 'Cy', 'Bob', 'Al'])
+    expect(header('Name').attributes('aria-sort')).toBe('descending')
+
+    await header('Email').get('button').trigger('click')
+    expect(names()).toEqual(['Zoe', 'Bob', 'Cy', 'Al'])
+    await header('Status').get('button').trigger('click')
+    expect(names()).toEqual(['Zoe', 'Al', 'Cy', 'Bob'])
+    await header('Role').get('button').trigger('click')
+    expect(names()[0]).toBe('Al')
+    wrapper.unmount()
+  })
+
   it('says so when there are none', async () => {
     backend.on('GET /api/admin/users', [])
     const wrapper = await render()

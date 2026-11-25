@@ -232,6 +232,9 @@ ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
 ACCOUNT_SIGNUP_FORM_CLASS = "apps.core.forms.SignupForm"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = "none"
+# Who sets a password from an emailed link (an invitation or a reset) is signed in with it right away,
+# replacing whatever session the browser had: the link names the account, not who was signed in.
+ACCOUNT_LOGIN_ON_PASSWORD_RESET = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_RATE_LIMITS = {
     "login_failed": "10/5m",

@@ -220,7 +220,7 @@ describe('CalendarAgenda', () => {
     expect(wrapper.findAll('button').some((b) => b.text() === 'Show all')).toBe(false)
   })
 
-  it('adds an event today in the current month, and on the first day in other months', async () => {
+  it('adds an event today at the next hour in the current month, and on the first day in other months', async () => {
     const wrapper = render([])
     const create = () =>
       wrapper
@@ -228,11 +228,11 @@ describe('CalendarAgenda', () => {
         .find((b) => b.text() === 'New event')!
         .trigger('click')
     await create()
-    expect(wrapper.emitted('create')![0]).toEqual([new Date(2026, 9, 14)])
+    expect(wrapper.emitted('create')![0]).toEqual([new Date(2026, 9, 14, 13)])
 
     await wrapper.setProps({ rangeStart: new Date(2026, 11, 1), rangeEnd: new Date(2027, 0, 1) })
     await create()
-    expect(wrapper.emitted('create')![1]).toEqual([new Date(2026, 11, 1)])
+    expect(wrapper.emitted('create')![1]).toEqual([new Date(2026, 11, 1, 9)])
   })
 
   it('offers no new event to those who may not add any', () => {

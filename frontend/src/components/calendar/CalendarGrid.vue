@@ -22,7 +22,7 @@ import type { Occurrence } from '@/api'
 import type { GridRange, GridViewType } from '@/composables/useCalendarNavigation'
 import { SLOT_HEIGHT } from '@/composables/useCalendarDisplay'
 import { contrastColor } from '@/services/color'
-import { hour12 } from '@/services/datetime'
+import { hour12, newEventStart } from '@/services/datetime'
 import { eventLabel, eventParts, renderEventContent } from '@/services/eventContent'
 import { moveEvent } from '@/services/eventMove'
 
@@ -141,7 +141,8 @@ const calendarOptions = computed(() => ({
   dayCellClass,
   dayLaneClass: (info: { dow: number; isToday: boolean }) => `${dayCellClass(info)} calendar-day-lane`,
   datesSet: handleDatesSet,
-  dateClick: (info: DateClickInfo) => emit('create', info.date),
+  // A day of the month view comes at midnight; a slot of the week view at its time.
+  dateClick: (info: DateClickInfo) => emit('create', info.allDay ? newEventStart(info.date) : info.date),
   selectable: props.canCreate,
   selectMirror: props.canCreate,
   select: (info: DateSelectInfo) => {

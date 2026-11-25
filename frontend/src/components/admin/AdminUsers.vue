@@ -9,8 +9,10 @@ import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
+import SortableHeader from '@/components/SortableHeader.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useTableSort } from '@/composables/useTableSort'
 import { confirm } from '@/services/dialog'
 import { useAuthStore } from '@/stores/auth'
 
@@ -37,6 +39,33 @@ const generatedPassword = ref<string | null>(null)
 const rowMenu = ref<{ userId: string; x: number; y: number; items: MenuItem[] } | null>(null)
 
 const { loading } = useLoader(load)
+
+type UserStatus = 'active' | 'invited' | 'inactive'
+
+/** Invited: active, but without a password until they choose one from the invitation's link. */
+function statusOf(user: api.AdminUser): UserStatus {
+  if (!user.is_active) return 'inactive'
+  return user.has_password ? 'active' : 'invited'
+}
+
+const STATUS_ORDER: Record<UserStatus, number> = { active: 0, invited: 1, inactive: 2 }
+const STATUS_CLASS: Record<UserStatus, string> = {
+  active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  invited: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+  inactive: 'bg-surface-muted text-gray-800',
+}
+
+const { sorted, sortBy, sortOf } = useTableSort(
+  users,
+  {
+    name: (user) => user.display_name,
+    email: (user) => user.email,
+    // Admins first.
+    role: (user) => !user.is_admin,
+    status: (user) => STATUS_ORDER[statusOf(user)],
+  },
+  'name',
+)
 
 async function load() {
   users.value = await api.listAdminUsers()
@@ -170,15 +199,15 @@ async function resetPassword(user: api.AdminUser) {
       <table class="stacked-table w-full text-sm">
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
-            <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
-            <th class="px-4 py-2">{{ $t('auth.email') }}</th>
-            <th class="px-4 py-2">{{ $t('app.role') }}</th>
-            <th class="px-4 py-2">{{ $t('app.status') }}</th>
+            <SortableHeader :sort="sortOf('name')" @sort="sortBy('name')">{{ $t('app.nameLabel') }}</SortableHeader>
+            <SortableHeader :sort="sortOf('email')" @sort="sortBy('email')">{{ $t('auth.email') }}</SortableHeader>
+            <SortableHeader :sort="sortOf('role')" @sort="sortBy('role')">{{ $t('app.role') }}</SortableHeader>
+            <SortableHeader :sort="sortOf('status')" @sort="sortBy('status')">{{ $t('app.status') }}</SortableHeader>
             <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-line">
-          <tr v-for="user in users" :key="user.id" class="group hover:bg-hover">
+          <tr v-for="user in sorted" :key="user.id" class="group hover:bg-hover">
             <td class="px-4 py-2 font-medium text-gray-800">{{ user.display_name }}</td>
             <td class="px-4 py-2 text-gray-600">{{ user.email }}</td>
             <td class="px-4 py-2">
@@ -193,13 +222,11 @@ async function resetPassword(user: api.AdminUser) {
             <td class="px-4 py-2">
               <span
                 class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
-                :class="
-                  user.is_active
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                    : 'bg-surface-muted text-gray-800'
-                "
+                :class="STATUS_CLASS[statusOf(user)]"
+                :data-status="statusOf(user)"
+                :title="statusOf(user) === 'invited' ? $t('app.invitedHint') : undefined"
               >
-                {{ user.is_active ? $t('app.active') : $t('app.inactive') }}
+                {{ $t(`app.${statusOf(user)}`) }}
               </span>
             </td>
             <td class="px-4 py-2" data-actions>
@@ -225,7 +252,9 @@ async function resetPassword(user: api.AdminUser) {
       </table>
     </div>
 
-    <div v-else class="space-y-4 p-6">
+    <form v-else class="space-y-4 p-6" @submit.prevent>
+      <!-- A form, so that Enter in a field saves: it clicks the submit button, whose handler saves and
+           cancels the submission. Comboboxes keep Enter for their options. -->
       <label class="block">
         <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('auth.displayName') }}</span>
         <input v-model="form.display_name" class="w-full rounded-lg border border-line px-3 py-2" />
@@ -287,15 +316,15 @@ async function resetPassword(user: api.AdminUser) {
           {{ $t('app.cancel') }}
         </button>
         <button
-          type="button"
+          type="submit"
           :disabled="!form.email || !form.display_name || busy"
           class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-          @click="save"
+          @click.prevent="save"
         >
           {{ $t('app.save') }}
         </button>
       </div>
-    </div>
+    </form>
   </SettingsPanel>
 
   <ContextMenu v-if="rowMenu" :x="rowMenu.x" :y="rowMenu.y" :items="rowMenu.items" align-end @close="rowMenu = null" />

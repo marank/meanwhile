@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import * as api from '@/api'
 import AppLogo from '@/components/AppLogo.vue'
 import { errorMessage } from '@/services/errors'
+import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 
 /**
@@ -13,6 +15,8 @@ import { useSettingsStore } from '@/stores/settings'
 const props = defineProps<{ resetKey?: string; invite?: boolean }>()
 
 const settings = useSettingsStore()
+const auth = useAuthStore()
+const router = useRouter()
 const { t } = useI18n()
 
 const settingNew = computed(() => !!props.resetKey)
@@ -28,8 +32,13 @@ async function submit() {
   error.value = ''
   busy.value = true
   try {
-    if (settingNew.value) await api.resetPassword(props.resetKey!, password.value)
-    else await api.requestPasswordReset(email.value)
+    if (settingNew.value && (await api.resetPassword(props.resetKey!, password.value))) {
+      // Signed in with the new password, in place of anyone who was signed in in this browser before.
+      auth.clearSession()
+      await router.push('/calendar')
+      return
+    }
+    if (!settingNew.value) await api.requestPasswordReset(email.value)
     done.value = true
   } catch (e) {
     // allauth answers an unknown, used or expired key with an error on the field "key".

@@ -94,6 +94,21 @@ export function toTimeInputValue(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+const WORKDAY_START_HOUR = 9
+const LAST_START_HOUR = 23
+
+/**
+ * When a new event on `day` starts if only the day was picked (a click on it in the month view, the
+ * agenda's "new event"): at the start of the working day, or today at the next full hour after that.
+ */
+export function newEventStart(day: Date, now = new Date()): Date {
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), WORKDAY_START_HOUR)
+  if (toDateInputValue(day) === toDateInputValue(now)) {
+    start.setHours(Math.min(Math.max(WORKDAY_START_HOUR, now.getHours() + 1), LAST_START_HOUR))
+  }
+  return start
+}
+
 /** Whole calendar days from `value` back to `now`, in local time: 0 today, 1 yesterday. */
 export function daysAgo(value: string | Date, now = new Date()): number {
   const day = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())

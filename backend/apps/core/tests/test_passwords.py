@@ -57,13 +57,16 @@ def test_a_forgotten_password_is_set_anew_from_the_link_on_any_device(settings: 
     assert mail.outbox[0].to == ["someone@example.test"]
     assert settings.HEADLESS_FRONTEND_URLS["account_reset_password_from_key"].split("{")[0] in mail.outbox[0].body
 
-    # In another browser than the one that asked for it.
+    # In another browser than the one that asked for it, where someone else is signed in.
     other = Client()
+    other.force_login(make_user("colleague"))
     assert other.get("/api/auth/v1/auth/password/reset", HTTP_X_PASSWORD_RESET_KEY=key).status_code == 200
     res = post(other, "/api/auth/v1/auth/password/reset", {"key": key, "password": "N3w-secret!"})
-    assert res.status_code in (200, 401), res.content  # 401: done, now sign in
+    assert res.status_code == 200, res.content
     user.refresh_from_db()
     assert user.check_password("N3w-secret!")
+    # Signed in with it, in place of the colleague.
+    assert other.get("/api/users/me").json()["email"] == user.email
     # The link works once.
     assert (
         post(Client(), "/api/auth/v1/auth/password/reset", {"key": key, "password": "An0ther-one!"}).status_code == 400

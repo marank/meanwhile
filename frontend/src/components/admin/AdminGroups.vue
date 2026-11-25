@@ -6,8 +6,10 @@ import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import SortableHeader from '@/components/SortableHeader.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useTableSort } from '@/composables/useTableSort'
 import { confirm } from '@/services/dialog'
 
 interface GroupForm {
@@ -25,6 +27,11 @@ const form = ref<GroupForm | null>(null)
 const pickedUserId = ref<string | null>(null)
 
 const { loading } = useLoader(load)
+const { sorted, sortBy, sortOf } = useTableSort(groups, {
+  name: (group) => group.name,
+  description: (group) => group.description,
+  members: (group) => group.member_count,
+})
 
 async function load() {
   groups.value = await api.listUserGroups()
@@ -117,14 +124,16 @@ async function remove(group: api.UserGroup) {
       <table class="stacked-table w-full text-sm">
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
-            <th class="px-4 py-2">{{ $t('app.groupName') }}</th>
-            <th class="px-4 py-2">{{ $t('app.groupDescription') }}</th>
-            <th class="px-4 py-2">{{ $t('app.members') }}</th>
+            <SortableHeader :sort="sortOf('name')" @sort="sortBy('name')">{{ $t('app.groupName') }}</SortableHeader>
+            <SortableHeader :sort="sortOf('description')" @sort="sortBy('description')">{{
+              $t('app.groupDescription')
+            }}</SortableHeader>
+            <SortableHeader :sort="sortOf('members')" @sort="sortBy('members')">{{ $t('app.members') }}</SortableHeader>
             <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-line">
-          <tr v-for="group in groups" :key="group.id" class="group hover:bg-hover">
+          <tr v-for="group in sorted" :key="group.id" class="group hover:bg-hover">
             <td class="px-4 py-2 font-medium text-gray-800">{{ group.name }}</td>
             <td class="px-4 py-2 text-gray-600" :data-empty="!group.description || undefined">
               <span v-if="group.description" class="line-clamp-1">{{ group.description }}</span>
@@ -149,7 +158,9 @@ async function remove(group: api.UserGroup) {
       </table>
     </div>
 
-    <div v-else class="space-y-6 p-6">
+    <form v-else class="space-y-6 p-6" @submit.prevent>
+      <!-- A form, so that Enter in a field saves: it clicks the submit button, whose handler saves and
+           cancels the submission. Comboboxes keep Enter for their options. -->
       <div class="space-y-4">
         <label class="block">
           <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.groupName') }}</span>
@@ -201,14 +212,14 @@ async function remove(group: api.UserGroup) {
           {{ $t('app.cancel') }}
         </button>
         <button
-          type="button"
+          type="submit"
           :disabled="!form.name || busy"
           class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-          @click="save"
+          @click.prevent="save"
         >
           {{ $t('app.save') }}
         </button>
       </div>
-    </div>
+    </form>
   </SettingsPanel>
 </template>

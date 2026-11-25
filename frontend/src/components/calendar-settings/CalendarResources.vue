@@ -10,8 +10,10 @@ import SettingsPanel from '@/components/SettingsPanel.vue'
 import ResourceIcon from '@/components/ResourceIcon.vue'
 import ResourceIconPicker from '@/components/ResourceIconPicker.vue'
 import SettingsToggle from '@/components/SettingsToggle.vue'
+import SortableHeader from '@/components/SortableHeader.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useTableSort } from '@/composables/useTableSort'
 import { useCalendarSettingsSync } from '@/composables/useCalendarSettingsSync'
 import { confirm } from '@/services/dialog'
 
@@ -107,6 +109,14 @@ function approvalLabel(resource: api.Resource) {
   if (resource.approvers.length) return resource.approvers.map((a) => a.display_name).join(', ')
   return `${t('app.approvalDefault')} (${defaultApproverNames.value || t('app.calendarOwner')})`
 }
+
+const { sorted, sortBy, sortOf } = useTableSort(resources, {
+  name: (resource) => resource.name,
+  description: (resource) => resource.description,
+  approval: (resource) => approvalLabel(resource),
+  // Active ones first.
+  status: (resource) => !resource.is_active,
+})
 
 // Default approvers
 
@@ -275,16 +285,20 @@ async function remove(id: string) {
           <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
             <tr>
               <th class="w-16 px-4 py-2">{{ $t('app.color') }}</th>
-              <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
-              <th class="px-4 py-2">{{ $t('event.description') }}</th>
-              <th class="px-4 py-2">{{ $t('app.approval') }}</th>
-              <th class="px-4 py-2">{{ $t('app.status') }}</th>
+              <SortableHeader :sort="sortOf('name')" @sort="sortBy('name')">{{ $t('app.nameLabel') }}</SortableHeader>
+              <SortableHeader :sort="sortOf('description')" @sort="sortBy('description')">{{
+                $t('event.description')
+              }}</SortableHeader>
+              <SortableHeader :sort="sortOf('approval')" @sort="sortBy('approval')">{{
+                $t('app.approval')
+              }}</SortableHeader>
+              <SortableHeader :sort="sortOf('status')" @sort="sortBy('status')">{{ $t('app.status') }}</SortableHeader>
               <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-line">
             <tr
-              v-for="resource in resources"
+              v-for="resource in sorted"
               :key="resource.id"
               class="group hover:bg-hover"
               :class="{ 'opacity-60': !resource.is_active }"
@@ -342,7 +356,9 @@ async function remove(id: string) {
       <div class="border-b border-line px-6 py-4">
         <h3 class="font-semibold text-gray-700">{{ form.id ? $t('app.editResource') : $t('app.addResource') }}</h3>
       </div>
-      <div class="space-y-4 p-6">
+      <!-- A form, so that Enter in a field saves: it clicks the submit button, whose handler saves and
+           cancels the submission. Comboboxes keep Enter for their options. -->
+      <form class="space-y-4 p-6" @submit.prevent>
         <label class="block">
           <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.nameLabel') }}</span>
           <input v-model="form.name" class="w-full rounded-lg border border-line px-3 py-2" />
@@ -413,15 +429,15 @@ async function remove(id: string) {
             {{ $t('app.cancel') }}
           </button>
           <button
-            type="button"
+            type="submit"
             :disabled="formInvalid || busy"
             class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-            @click="save"
+            @click.prevent="save"
           >
             {{ $t('app.save') }}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   </SettingsPanel>
 </template>

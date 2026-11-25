@@ -5,7 +5,7 @@ import { MapPin } from '@lucide/vue'
 import type { Occurrence } from '@/api'
 import { groupByDay, isPast, type AgendaEntry } from '@/services/agenda'
 import { dayKey } from '@/services/days'
-import { formatTime } from '@/services/datetime'
+import { formatTime, newEventStart } from '@/services/datetime'
 import { resourceIcon } from '@/services/resourceIcons'
 
 /**
@@ -87,7 +87,7 @@ function isDeclined(occ: Occurrence): boolean {
 }
 
 function create(date: Date) {
-  if (props.canCreate) emit('create', date)
+  if (props.canCreate) emit('create', newEventStart(date))
 }
 </script>
 

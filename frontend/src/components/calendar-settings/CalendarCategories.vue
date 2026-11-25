@@ -5,8 +5,10 @@ import { Pencil, Trash2 } from '@lucide/vue'
 import * as api from '@/api'
 import IconButton from '@/components/IconButton.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import SortableHeader from '@/components/SortableHeader.vue'
 import { useAction } from '@/composables/useAction'
 import { useLoader } from '@/composables/useLoader'
+import { useTableSort } from '@/composables/useTableSort'
 import { confirm } from '@/services/dialog'
 
 interface CategoryForm {
@@ -28,6 +30,10 @@ const categories = ref<api.Category[]>([])
 const form = ref<CategoryForm | null>(null)
 
 const { loading } = useLoader(load)
+const { sorted, sortBy, sortOf } = useTableSort(categories, {
+  name: (category) => category.name,
+  description: (category) => category.description,
+})
 
 async function load() {
   categories.value = await api.listCategories(props.calendarId)
@@ -85,13 +91,15 @@ async function remove(id: string) {
         <thead class="bg-surface-muted text-left text-xs uppercase text-gray-500">
           <tr>
             <th class="w-16 px-4 py-2">{{ $t('app.color') }}</th>
-            <th class="px-4 py-2">{{ $t('app.nameLabel') }}</th>
-            <th class="px-4 py-2">{{ $t('event.description') }}</th>
+            <SortableHeader :sort="sortOf('name')" @sort="sortBy('name')">{{ $t('app.nameLabel') }}</SortableHeader>
+            <SortableHeader :sort="sortOf('description')" @sort="sortBy('description')">{{
+              $t('event.description')
+            }}</SortableHeader>
             <th class="px-4 py-2 text-right">{{ $t('app.actions') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-line">
-          <tr v-for="category in categories" :key="category.id" class="group hover:bg-hover">
+          <tr v-for="category in sorted" :key="category.id" class="group hover:bg-hover">
             <td class="px-4 py-2" data-lead>
               <span class="block h-5 w-5 rounded" :style="{ backgroundColor: category.color }"></span>
             </td>
@@ -121,7 +129,9 @@ async function remove(id: string) {
       <div class="border-b border-line px-6 py-4">
         <h3 class="font-semibold text-gray-700">{{ form.id ? $t('app.editCategory') : $t('app.addCategory') }}</h3>
       </div>
-      <div class="space-y-4 p-6">
+      <!-- A form, so that Enter in a field saves: it clicks the submit button, whose handler saves and
+           cancels the submission. Comboboxes keep Enter for their options. -->
+      <form class="space-y-4 p-6" @submit.prevent>
         <label class="block">
           <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.nameLabel') }}</span>
           <input v-model="form.name" class="w-full rounded-lg border border-line px-3 py-2" />
@@ -143,15 +153,15 @@ async function remove(id: string) {
             {{ $t('app.cancel') }}
           </button>
           <button
-            type="button"
+            type="submit"
             :disabled="!form.name || busy"
             class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-            @click="save"
+            @click.prevent="save"
           >
             {{ $t('app.save') }}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   </SettingsPanel>
 </template>

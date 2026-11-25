@@ -131,7 +131,8 @@ describe('CalendarWeekStack', () => {
     const days = wrapper.findAll('.week-stack-day')
     await days[1]!.get('.week-stack-date').trigger('click')
     await days[3]!.get('.week-stack-events').trigger('click')
-    expect(wrapper.emitted('create')).toEqual([[new Date(2026, 9, 13)], [new Date(2026, 9, 15)]])
+    // At the start of the working day rather than at midnight.
+    expect(wrapper.emitted('create')).toEqual([[new Date(2026, 9, 13, 9)], [new Date(2026, 9, 15, 9)]])
   })
 
   it('adds nothing for those who may not add events', async () => {

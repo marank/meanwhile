@@ -5,7 +5,7 @@ const app: MessageSchema['app'] = {
   isLocationHint:
     'Wird im Feld „Veranstaltungsort“ eines Termins angeboten statt unter „Ressource buchen“. Wer ihn dort wählt, bucht ihn; er ist dann wie jede Ressource nur einmal gleichzeitig vergeben.',
   locationBadge: 'Veranstaltungsort',
-  accountGeneralDescription: 'Dein Name, Sprache, Farbschema und Datumsformate.',
+  accountGeneralDescription: 'Ihr Name, Ihre Sprache, Ihr Farbschema und Ihre Datumsformate.',
   profile: 'Profil',
   account: 'Kontoeinstellungen',
   logout: 'Abmelden',
@@ -82,6 +82,7 @@ const app: MessageSchema['app'] = {
   allCalendars: 'Alle Kalender',
   createFolder: 'Ordner erstellen',
   moreActions: 'Weitere Aktionen',
+  calendarActions: 'Aktionen für „{name}“',
   publicCalendars: 'Öffentliche Kalender',
   publicCalendarsHint: 'Öffentliche Kalender erscheinen in Ihrer Seitenleiste, sobald Sie sie hinzufügen.',
   searchPublicCalendars: 'Kalender suchen …',
@@ -112,6 +113,8 @@ const app: MessageSchema['app'] = {
   status: 'Status',
   active: 'Aktiv',
   inactive: 'Inaktiv',
+  invited: 'Eingeladen',
+  invitedHint: 'Hat noch kein Passwort über die Einladung festgelegt',
   requiresApproval: 'Genehmigung erforderlich',
   noCategories: 'Noch keine Kategorien vorhanden.',
   noResources: 'Noch keine Ressourcen vorhanden.',
@@ -141,7 +144,7 @@ const app: MessageSchema['app'] = {
   urlCopied: 'URL kopiert.',
   feedUrl: 'Feed-URL',
   feedUrlHelp:
-    'Abonniere eine schreibgeschützte Version dieses Kalenders. Diese URL gehört nur dir und funktioniert nicht mehr, sobald du keinen Zugriff auf den Kalender mehr hast; behandle sie vertraulich.',
+    'Abonnieren Sie eine schreibgeschützte Version dieses Kalenders. Diese URL gehört nur Ihnen und funktioniert nicht mehr, sobald Sie keinen Zugriff auf den Kalender mehr haben; behandeln Sie sie vertraulich.',
   caldavUrl: 'CalDAV-URL',
   caldavUrlHelp:
     'Verwenden Sie diese Adresse, um den Kalender mit einer CalDAV-kompatiblen App zu verbinden und zu synchronisieren. Melden Sie sich dort mit Ihrer E-Mail-Adresse und einem App-Passwort an.',
@@ -175,7 +178,8 @@ const app: MessageSchema['app'] = {
   removeMember: 'Mitglied entfernen',
   noMembers: 'Noch keine Mitglieder vorhanden.',
   publicCalendar: 'Öffentlicher Kalender',
-  publicCalendarHelp: 'Jeder kann diesen Kalender ansehen.',
+  publicCalendarHelp:
+    'Alle Benutzer dieser App können den Kalender finden, ansehen und in ihre Seitenleiste übernehmen; nicht öffentlich im Internet.',
   publicRole: 'Standardrolle für öffentlichen Zugriff',
   groupAccess: 'Gruppenzugriff',
   noGroupAccess: 'Kein Gruppenzugriff konfiguriert.',
@@ -244,7 +248,7 @@ const app: MessageSchema['app'] = {
   approverRemoved: 'Genehmiger entfernt.',
   rotateFeedTitle: 'Feed-Token neu erzeugen?',
   rotateFeedText:
-    'Deine Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr. Andere Mitglieder behalten ihre eigenen URLs.',
+    'Ihre Abonnements mit der aktuellen URL funktionieren anschließend nicht mehr. Andere Mitglieder behalten ihre eigenen URLs.',
   feedRotated: 'Feed-Token neu erzeugt.',
   menu: 'Menü',
   appearance: 'Darstellung',

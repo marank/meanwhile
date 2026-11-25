@@ -100,12 +100,14 @@ export async function changePassword(currentPassword: string, newPassword: strin
   })
 }
 
-/** Calls an allauth endpoint whose 401 answer is part of the flow (a next step, or "now sign in"). */
-async function authFlowStep(path: string, body: unknown) {
+/** Calls an allauth endpoint whose 401 answer is part of the flow (a next step, or "now sign in");
+ * true if it signed the user in. */
+async function authFlowStep(path: string, body: unknown): Promise<boolean> {
   try {
     await api(path, { method: 'POST', body })
+    return true
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return
+    if (error instanceof ApiError && error.status === 401) return false
     throw error
   }
 }
@@ -115,7 +117,8 @@ export async function requestPasswordReset(email: string) {
   await api('/api/auth/v1/auth/password/request', { method: 'POST', body: { email } })
 }
 
-/** Sets a new password with the key from that link; afterwards the user signs in with it. */
+/** Sets a new password with the key from that link; true if that signed the user in (it does, see
+ * ACCOUNT_LOGIN_ON_PASSWORD_RESET), replacing the browser's session. */
 export const resetPassword = (key: string, password: string) =>
   authFlowStep('/api/auth/v1/auth/password/reset', { key, password })
 

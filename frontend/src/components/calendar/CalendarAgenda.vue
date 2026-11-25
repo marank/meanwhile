@@ -5,7 +5,7 @@ import { CalendarX, Clock, MapPin, Plus, Repeat, Search, X } from '@lucide/vue'
 import type { Occurrence } from '@/api'
 import { groupByDay, isPast, matchesSearch, type AgendaDay, type AgendaEntry } from '@/services/agenda'
 import { dayKey } from '@/services/days'
-import { formatTime, monthName } from '@/services/datetime'
+import { formatTime, monthName, newEventStart } from '@/services/datetime'
 import { resourceIcon } from '@/services/resourceIcons'
 
 const props = defineProps<{
@@ -72,8 +72,7 @@ function times(entry: AgendaEntry): { main: string; sub?: string } {
 
 /** A new event starts today when the month shown has it, else on the month's first day. */
 function newEventDate(): Date {
-  if (!showsToday.value) return props.rangeStart
-  return new Date(now.value.getFullYear(), now.value.getMonth(), now.value.getDate())
+  return newEventStart(showsToday.value ? now.value : props.rangeStart, now.value)
 }
 
 function isDeclined(occ: Occurrence): boolean {

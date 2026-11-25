@@ -300,7 +300,9 @@ describe('api endpoints', () => {
 
   it('takes the 401 after resetting a password as success, but not other errors', async () => {
     const backend = fakeBackend({ 'POST /api/auth/v1/auth/password/reset': reply(401) })
-    await expect(api.resetPassword('key', 'pw')).resolves.toBeUndefined()
+    await expect(api.resetPassword('key', 'pw')).resolves.toBe(false)
+    backend.on('POST /api/auth/v1/auth/password/reset', { status: 200, data: { user: {} } })
+    await expect(api.resetPassword('key', 'pw')).resolves.toBe(true)
     expect(backend.requests[0]!.body).toEqual({ key: 'key', password: 'pw' })
     backend.on('POST /api/auth/v1/auth/password/reset', reply(400, { errors: [] }))
     await expect(api.resetPassword('key', 'pw')).rejects.toMatchObject({ status: 400 })

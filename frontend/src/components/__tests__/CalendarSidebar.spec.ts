@@ -217,6 +217,19 @@ describe('CalendarSidebar', () => {
     expect(wrapper.find('[role="menu"]').exists()).toBe(false)
   })
 
+  it('opens the same menu from the button on a row, for those who never right-click', async () => {
+    const wrapper = await render()
+    const button = (id: string) => row(wrapper, id).find('button[aria-haspopup="menu"]')
+    expect(button('shared').exists()).toBe(false)
+    expect(button('holidays').attributes('aria-label')).toBe('Actions for “Holidays”')
+
+    await button('managed').trigger('click', { clientX: 30, clientY: 20 })
+    await flushPromises()
+    expect(menuEntries(wrapper)).toEqual(['Rename', 'Settings'])
+    expect(wrapper.get<HTMLElement>('[role="menu"]').element.style.left).toBe('30px')
+    expect(router.currentRoute.value.fullPath).toBe('/calendar/managed')
+  })
+
   it('takes an added public calendar out of the sidebar', async () => {
     backend.on('DELETE /api/calendars/holidays/subscription', undefined)
     const wrapper = await render()

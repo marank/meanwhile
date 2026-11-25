@@ -480,8 +480,10 @@ describe('CalendarView', () => {
       expect(modal(wrapper).exists()).toBe(false)
       expect(eventRequests()).toHaveLength(before + 1)
 
-      fullCalendar.options!.dateClick({ date: new Date(2026, 9, 21) })
+      // A whole day clicked in the month view: at the start of the working day, not at midnight.
+      fullCalendar.options!.dateClick({ date: new Date(2026, 9, 21), allDay: true })
       await flushPromises()
+      expect(modal(wrapper).props('defaultStart')).toEqual(new Date(2026, 9, 21, 9))
       await click(wrapper, '.modal-delete')
       expect(modal(wrapper).exists()).toBe(false)
       expect(eventRequests()).toHaveLength(before + 2)
@@ -759,7 +761,8 @@ describe('CalendarView', () => {
       expect(modal(wrapper).props('eventId')).toBe('e5')
       await click(wrapper, '.modal-cancel')
       await clickText(wrapper, 'New event')
-      expect(modal(wrapper).props()).toMatchObject({ eventId: null, defaultStart: new Date(2026, 9, 14) })
+      // Today, at the next full hour.
+      expect(modal(wrapper).props()).toMatchObject({ eventId: null, defaultStart: new Date(2026, 9, 14, 13) })
 
       // Saved, the month is loaded again.
       const before = eventRequests().length
@@ -838,7 +841,8 @@ describe('CalendarView', () => {
       expect(modal(wrapper).props('eventId')).toBe('e1')
       await click(wrapper, '.modal-cancel')
       await click(wrapper, '.week-stack-date')
-      expect(modal(wrapper).props()).toMatchObject({ eventId: null, defaultStart: new Date(2026, 9, 12) })
+      // Another day, at the start of the working day.
+      expect(modal(wrapper).props()).toMatchObject({ eventId: null, defaultStart: new Date(2026, 9, 12, 9) })
       const before = eventRequests().length
       await click(wrapper, '.modal-save')
       expect(eventRequests()).toHaveLength(before + 1)

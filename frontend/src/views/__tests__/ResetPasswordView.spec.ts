@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
 import { i18n } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
+import { makeUser } from './session'
 import ResetPasswordView from '../ResetPasswordView.vue'
 
 let wrapper: VueWrapper
 let backend: FakeBackend
+let router: Router
 
 async function render(resetKey?: string, invite = false) {
-  const router = createRouter({
+  router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/:any(.*)', component: { template: '<div />' } }],
   })
@@ -78,6 +81,18 @@ describe('ResetPasswordView', () => {
         password: 'a new secret',
       })
       expect(wrapper.get('[role="status"]').text()).toBe('Your password has been changed. You can sign in with it now.')
+    })
+
+    it('signs the user in with it, in place of whoever was signed in in this browser', async () => {
+      backend.on('POST /api/auth/v1/auth/password/reset', { status: 200, data: { user: makeUser() } })
+      const auth = useAuthStore()
+      auth.user = makeUser({ id: 'someone-else', email: 'other@example.test' })
+      await render('abc-123', true)
+      await wrapper.get('#new-password').setValue('a new secret')
+      await submit()
+      expect(auth.user).toBeNull()
+      expect(router.currentRoute.value.path).toBe('/calendar')
+      expect(wrapper.find('[role="status"]').exists()).toBe(false)
     })
 
     it('welcomes new users from their invitation to choose a password', async () => {

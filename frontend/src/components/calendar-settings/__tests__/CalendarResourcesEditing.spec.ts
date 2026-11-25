@@ -96,7 +96,8 @@ describe('calendar resources: list and editing', () => {
   it('offers no changes to those who cannot manage the calendar', async () => {
     const { wrapper } = await render(false)
     expect(wrapper.findComponent(SearchableSelect).exists()).toBe(false)
-    expect(wrapper.findAll('button')).toHaveLength(0)
+    // Sorting the list changes nothing.
+    expect(wrapper.findAll('button:not(thead button)')).toHaveLength(0)
   })
 
   it('adds and removes default approvers', async () => {

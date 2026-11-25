@@ -3,7 +3,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { User } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { i18n } from '@/i18n'
-import { daysAgo, formatCalendarDate, formatDate, formatTimeAgo, toDateInputValue, toTimeInputValue } from '../datetime'
+import {
+  daysAgo,
+  formatCalendarDate,
+  formatDate,
+  formatTimeAgo,
+  newEventStart,
+  toDateInputValue,
+  toTimeInputValue,
+} from '../datetime'
 
 describe('date input values', () => {
   it('use the local date and time', () => {
@@ -64,5 +72,20 @@ describe('formatTimeAgo', () => {
   it('counts calendar days, not 24 hours', () => {
     expect(daysAgo(new Date(2026, 0, 4, 23, 59), new Date(2026, 0, 5, 0, 1))).toBe(1)
     expect(daysAgo(new Date(2026, 0, 5, 0, 1), new Date(2026, 0, 5, 23, 59))).toBe(0)
+  })
+})
+
+describe('newEventStart', () => {
+  const at = (hour: number, minute = 0) => new Date(2026, 10, 25, hour, minute)
+
+  it('starts other days at the start of the working day', () => {
+    expect(newEventStart(new Date(2026, 10, 26), at(14, 20))).toEqual(new Date(2026, 10, 26, 9))
+    expect(newEventStart(new Date(2026, 10, 24), at(14, 20))).toEqual(new Date(2026, 10, 24, 9))
+  })
+
+  it('starts today at the next full hour, not before the working day and still today', () => {
+    expect(newEventStart(new Date(2026, 10, 25), at(14, 20))).toEqual(at(15))
+    expect(newEventStart(new Date(2026, 10, 25), at(6, 30))).toEqual(at(9))
+    expect(newEventStart(new Date(2026, 10, 25), at(23, 30))).toEqual(at(23))
   })
 })
