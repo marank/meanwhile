@@ -35,7 +35,8 @@ only call its recipes, so a check is changed in one place.
 - `just api-types` after any API change (schema → `frontend/openapi.json` → `frontend/src/api/schema.d.ts`);
   commit both. CI fails when they drift.
 - `just migrations` after model changes; commit the migrations.
-- `just messages` after new backend texts; translate every entry of `backend/locale/de/LC_MESSAGES/django.po`.
+- `just messages` after new backend texts; translate every entry of `backend/locale/de/LC_MESSAGES/django.po`,
+  and in `backend/locale/de_Informal` (German with "du") those whose German says "Sie"/"Ihr".
 - Frontend: **pnpm** only. Backend: `uv add` / `uv add --dev`.
 - Claude Code formats and lints each file right after editing it (`.claude/settings.json` runs
   `scripts/lint_file.py`); what is left comes back to the agent to fix, not to silence.
@@ -102,7 +103,8 @@ only call its recipes, so a check is changed in one place.
 - API calls only through `src/api/` (`client.ts` sends the CSRF header, `index.ts` one function per
   endpoint). Types come from the generated `src/api/schema.d.ts`; never edit it by hand.
 - Every user-facing text through vue-i18n, in `src/i18n/locales/en/<area>.ts` **and** `de/<area>.ts`
-  (one file per area; a test checks both have the same keys).
+  (one file per area; a test checks both have the same keys). `de-informal/<area>.ts` (German with
+  "du") holds only the keys whose German says "Sie"/"Ihr", the rest comes from `de`; a test checks that too.
 - Tailwind for styling. No inline `<script>`, no remote scripts or styles: the CSP only allows our origin.
 - Expose state semantically (`aria-pressed`, `aria-current`, `aria-expanded`, `data-*`) rather than
   only through classes; tests check those, not Tailwind classes.

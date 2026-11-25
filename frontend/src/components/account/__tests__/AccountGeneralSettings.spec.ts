@@ -64,7 +64,7 @@ describe('account general settings', () => {
     await choose(wrapper, 1, 'Dark')
     await choose(wrapper, 2, '12-hour')
     await choose(wrapper, 3, '2026-12-31')
-    await choose(wrapper, 0, 'Deutsch')
+    await choose(wrapper, 0, 'Deutsch (Sie)')
     await buttonNamed(wrapper, 'Save').trigger('click')
     await flushPromises()
     expect(backend.calls('PATCH /api/users/me')[0]!.body).toEqual({
@@ -81,10 +81,24 @@ describe('account general settings', () => {
     wrapper.unmount()
   })
 
+  it('offers the German that says du, and speaks it once saved', async () => {
+    const wrapper = render()
+    await choose(wrapper, 0, 'Deutsch (Du)')
+    await buttonNamed(wrapper, 'Save').trigger('click')
+    await flushPromises()
+    expect(backend.calls('PATCH /api/users/me')[0]!.body).toMatchObject({ language: 'de-informal' })
+    expect(i18n.global.locale.value).toBe('de-informal')
+    expect(document.documentElement.lang).toBe('de')
+    expect(i18n.global.t('auth.inviteTitle')).toBe('Wähle dein Passwort')
+    // Texts that don't address the reader are the formal German's.
+    expect(toastTexts()).toEqual(['Einstellungen gespeichert.'])
+    wrapper.unmount()
+  })
+
   it('reports a failed save and keeps the language', async () => {
     backend.on('PATCH /api/users/me', reply(500))
     const wrapper = render()
-    await choose(wrapper, 0, 'Deutsch')
+    await choose(wrapper, 0, 'Deutsch (Sie)')
     await buttonNamed(wrapper, 'Save').trigger('click')
     await flushPromises()
     expect(toastTexts()).toEqual(['Could not save the changes.'])

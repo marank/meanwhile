@@ -54,7 +54,12 @@ def sender(name: str | None = None, app: str | None = None) -> str:
 
 def language_of(user: User | None, fallback: str = "en") -> str:
     language = (user.language if user else "") or fallback
-    return language if language in ("en", "de") else "en"
+    return language if language in dict(settings.LANGUAGES) else "en"
+
+
+def base_language(language: str) -> str:
+    """The language a variant is written in ("de-informal" → "de"), for dates and the page's lang."""
+    return language.partition("-")[0]
 
 
 def app_link(path: str) -> str:
@@ -155,8 +160,9 @@ class Reader:
     @classmethod
     def of(cls, user: User | None, language: str, timezone: str) -> Reader:
         clock = user.time_format if user else "auto"
-        twelve = clock == "12h" or (clock == "auto" and language == "en")
-        return cls(language, (user.timezone if user else "") or timezone or "UTC", twelve)
+        base = base_language(language)
+        twelve = clock == "12h" or (clock == "auto" and base == "en")
+        return cls(base, (user.timezone if user else "") or timezone or "UTC", twelve)
 
 
 def _date(day: date, reader: Reader) -> str:
@@ -562,7 +568,7 @@ def _html(
         else "".join(body)
     )
     return (
-        f'<!DOCTYPE html><html lang="{language}"><head><meta charset="utf-8">'
+        f'<!DOCTYPE html><html lang="{base_language(language)}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
         f"<title>{escape(subject)}</title><style>:root {{ color-scheme: light dark; }} {_DARK_STYLE}</style></head>"

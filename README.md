@@ -3,7 +3,8 @@
 Meanwhile is a group calendar for teams and organisations that want to keep their dates on their
 own server. People share calendars with each other, book rooms and equipment (with approval where
 needed), invite participants by email and keep everything in sync with the calendar apps on their
-phones and computers. It runs self-hosted with Docker, in English and German.
+phones and computers. It runs self-hosted with Docker, in English and German (formal "Sie" or
+informal "du").
 
 ![Month view with shared team, marketing, holiday and personal calendars](docs/images/screenshot-month.png)
 

@@ -21,6 +21,7 @@ import '@fullcalendar/vue3/themes/classic/palette.css'
 import type { Occurrence } from '@/api'
 import type { GridRange, GridViewType } from '@/composables/useCalendarNavigation'
 import { SLOT_HEIGHT } from '@/composables/useCalendarDisplay'
+import { baseLanguage } from '@/i18n'
 import { contrastColor } from '@/services/color'
 import { hour12, newEventStart } from '@/services/datetime'
 import { eventLabel, eventParts, renderEventContent } from '@/services/eventContent'
@@ -113,7 +114,7 @@ const calendarOptions = computed(() => ({
   // The toolbar is our own (CalendarToolbar), so it can hold month and year fields.
   headerToolbar: false as const,
   height: '100%',
-  locale: locale.value === 'de' ? deLocale : 'en',
+  locale: baseLanguage(locale.value) === 'de' ? deLocale : 'en',
   firstDay: props.display.first_weekday,
   viewClass: 'calendar-view',
   dayHeaderClass: 'calendar-header',

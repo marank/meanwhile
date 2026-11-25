@@ -67,10 +67,11 @@ api-types: api-schema
 api-schema:
     uv run python manage.py export_openapi_schema --api apps.core.api.api --indent 2 --output ../frontend/openapi.json
 
-# After new backend texts; then translate backend/locale/de/LC_MESSAGES/django.po
+# After new backend texts; then translate backend/locale/de/LC_MESSAGES/django.po, and in
+# locale/de_Informal the ones that address the reader (the rest falls back to the formal German)
 [working-directory: 'backend']
 messages:
-    uv run python manage.py makemessages -l de --no-location --ignore=.venv
+    uv run python manage.py makemessages -l de -l de_Informal --no-location --ignore=.venv
 
 [working-directory: 'backend']
 compile-messages:
@@ -99,7 +100,7 @@ check-backend:
     uv run python scripts/check_licenses.py
     uv run python manage.py makemigrations --check --dry-run
     uv run python manage.py check --fail-level WARNING
-    uv run python manage.py makemessages -l de --no-location --ignore=.venv
+    uv run python manage.py makemessages -l de -l de_Informal --no-location --ignore=.venv
     uv run python scripts/check_translations.py
     uv run python manage.py compilemessages --ignore=.venv
     uv run python scripts/check_openapi.py

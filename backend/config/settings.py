@@ -267,7 +267,9 @@ USE_I18N = True
 # locale/de. No LocaleMiddleware: the app's language is a user setting the SPA applies itself, and
 # the browser's Accept-Language must not turn the API's and allauth's messages into another one;
 # the SPA names its language in X-Language instead (apps.core.middleware.request_language).
-LANGUAGES = [("en", "English"), ("de", "Deutsch")]
+# "de-informal" addresses the reader with "du"; its catalogue (locale/de_Informal) holds only those
+# texts and falls back to the formal German for the rest.
+LANGUAGES = [("en", "English"), ("de", "Deutsch"), ("de-informal", "Deutsch (Du)")]
 LOCALE_PATHS = [BASE_DIR / "locale"]
 USE_TZ = True
 

@@ -3987,7 +3987,8 @@
               {
                 "enum": [
                   "en",
-                  "de"
+                  "de",
+                  "de-informal"
                 ],
                 "type": "string"
               },

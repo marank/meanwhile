@@ -67,7 +67,7 @@ or `--pdb`. Natively they run on SQLite, with `DB_HOST` on PostgreSQL like CI.
 | `just check` | Before every push: exactly what CI runs (backend, deploy settings, frontend, workflows) |
 | `just api-types` | After API changes: schema → `frontend/openapi.json` → `src/api/schema.d.ts`; commit both |
 | `just migrations` | After model changes; commit the migrations |
-| `just messages` | After new backend texts; translate `backend/locale/de/LC_MESSAGES/django.po` |
+| `just messages` | After new backend texts; translate `backend/locale/de/LC_MESSAGES/django.po` (and in `de_Informal` the texts that say "Sie") |
 | `just sync-env` | After pulling: adds new entries of `.env.example` to `.env` |
 | `just check-eol` | Whether Python, Debian, Node.js, PostgreSQL or Django lose support within 180 days (CI runs it weekly) |
 

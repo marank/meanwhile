@@ -173,6 +173,27 @@ def test_emails_are_written_in_the_language_of_the_recipient(world: World) -> No
     assert "Ablehnen:" in message.body
 
 
+def test_the_informal_german_says_du_with_the_formal_ones_dates(world: World) -> None:
+    other = world["users"]["other"]
+    res = world["api"]["other"].patch(
+        "/users/me", {"language": "de-informal", "time_format": "24h", "timezone": "Europe/Berlin"}
+    )
+    assert res.status_code == 200, res.content
+    invite(world, create(world), other.email)
+    [message] = to(other.email)
+    assert message.subject.startswith("Einladung: Planning @ Mo., 7. Jan. 2030, 10:00")
+    assert "Nimmst du teil? Antworte in deinem Mailprogramm" in message.body
+    assert "Du erhältst diese E-Mail, weil" in message.body
+    # Texts that don't address the reader come from the formal German.
+    assert "Zusagen" in message.body
+    assert '<html lang="de">' in html_of(message)
+
+
+def test_a_language_the_app_does_not_offer_is_refused(world: World) -> None:
+    res = world["api"]["other"].patch("/users/me", {"language": "de-formal"})
+    assert res.status_code == 422, res.content
+
+
 def test_changes_participants_see_are_sent_as_update_with_a_higher_sequence(world: World) -> None:
     event = create(world)
     invite(world, event)

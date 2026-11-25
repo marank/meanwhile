@@ -84,7 +84,7 @@ class UserUpdate(Schema):
     time_format: TimeFormat | None = None
     date_format: DateFormat | None = None
     timezone: TimeZoneName | None = None
-    language: Literal["en", "de"] | None = None
+    language: Literal["en", "de", "de-informal"] | None = None
     email_notifications: EmailNotificationsUpdate | None = None
 
 

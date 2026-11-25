@@ -1229,7 +1229,7 @@ export interface components {
       /** Timezone */
       timezone?: string | null
       /** Language */
-      language?: ('en' | 'de') | null
+      language?: ('en' | 'de' | 'de-informal') | null
       email_notifications?: components['schemas']['EmailNotificationsUpdate'] | null
     }
     /** OverviewSettingsOut */

@@ -18,7 +18,8 @@ const { busy: changingPassword, run: runPasswordChange } = useAction()
 
 const languages: Array<{ value: Locale; label: string }> = [
   { value: 'en', label: 'English' },
-  { value: 'de', label: 'Deutsch' },
+  { value: 'de', label: 'Deutsch (Sie)' },
+  { value: 'de-informal', label: 'Deutsch (Du)' },
 ]
 const themeOptions = computed<SelectOption<ThemePreference>[]>(() => [
   { value: 'system', label: t('app.themeSystem') },

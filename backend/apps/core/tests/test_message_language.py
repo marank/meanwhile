@@ -57,3 +57,19 @@ def test_password_rules_come_in_the_named_language() -> None:
     assert res.status_code == 400, res.content
     messages = [error["message"].strip() for error in res.json()["errors"]]
     assert "Dieses Passwort ist komplett numerisch." in messages
+
+
+def test_the_informal_german_says_du_and_is_the_formal_one_elsewhere() -> None:
+    admin = make_user("admin")
+    admin.is_admin = True
+    admin.save()
+    client = Client()
+    client.force_login(admin)
+    res = client.delete(f"/api/admin/users/{admin.id}", headers={"x_language": "de-informal"})
+    assert res.status_code == 403, res.content
+    assert res.json()["detail"] == "Du kannst dich nicht selbst löschen"
+    # Texts that don't address the reader come from the formal German.
+    assert (
+        add_existing_user(client, x_language="de-informal")
+        == "Es gibt bereits einen Benutzer mit dieser E-Mail-Adresse"
+    )
