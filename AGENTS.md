@@ -149,7 +149,7 @@ only call its recipes, so a check is changed in one place.
 Actions are pinned to commit SHAs, images to tag and digest, lock files are committed; Dependabot
 moves them weekly. It does **not** see, so bump by hand now and then:
 - `TRIVY_IMAGE` (tag and digest) and `POSTGRES_IMAGE` in `.github/workflows/build.yaml`
-  (Postgres together with `compose.yml`).
+  (Postgres together with `compose.yml` and the backend job's `services` image).
 - `ARG PG_MAJOR` (follows compose's Postgres major) and `ARG SUPERVISOR_VERSION` in the `Dockerfile`.
 - actionlint and zizmor in the `justfile`, `rust-just==…` in the workflows.
 - pnpm's `packageManager` field, if Dependabot leaves it alone (`pnpm self-update`, commit).

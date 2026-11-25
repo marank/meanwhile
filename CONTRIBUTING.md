@@ -29,7 +29,7 @@ from logs and screenshots. **Security issues** never go into a public issue — 
 
 ## Development
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js 24 with pnpm (`npm install -g pnpm`),
+Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js 26 with pnpm (`npm install -g pnpm`),
 just ≥ 1.42 (`uv tool install rust-just`, `winget install Casey.Just` or `brew install just`),
 and GNU gettext for the translation checks (`winget install mlocati.GetText`,
 `brew install gettext`, `apt install gettext`). Docker only for the image and the optional services.

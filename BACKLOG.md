@@ -46,10 +46,7 @@ Features and improvements proposed for future releases.
 
 ### Code quality
 
-26. **oxlint warnings fail CI** — `pnpm lint` passes with warnings, so they pile up unnoticed in the CI log. Run oxlint with `--deny-warnings` in `frontend/package.json` (the `lint` script, which CI and the VS Code check task run). Two warnings are there today: `unicorn(no-useless-spread)` in `saveParticipants` (`frontend/src/components/event/EventModal.vue`). The copies are deliberate (the loops go over a snapshot while the lists shrink), so silence the rule there with a comment rather than removing them.
-27. **Node 26 LTS** — Node 26 is the active LTS; the images and CI still use 24 (maintained until April 2027). Move the Dockerfiles, CI (`node-version`) and `@tsconfig/node*` together, and the Dependabot ignore of odd majors stays.
-28. **Self-repository syntax in release.yaml** — switch `uses: ./.github/workflows/build.yaml` to `$/.github/workflows/build.yaml` and drop the zizmor ignore once actionlint accepts it.
-29. **Operator docs** — the README carries setup, configuration and operation; a VitePress site (English and German) would give operators and users a place of their own.
+26. **Operator docs** — operation is documented in `docs/operations.md` and the settings in `.env.example`; a VitePress site (English and German) would give operators and users a place of their own.
 
 ## Known v1 limitations
 

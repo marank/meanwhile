@@ -39,7 +39,7 @@ permissions: {}
 env:
   REGISTRY: ghcr.io
   # Started with `docker run` below; Dependabot does not see them. Bump TRIVY_IMAGE (tag and
-  # digest) by hand, POSTGRES_IMAGE together with compose.yml.
+  # digest) by hand, POSTGRES_IMAGE together with compose.yml and the backend job's service.
   TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
   POSTGRES_IMAGE: postgres:18-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
 
@@ -118,7 +118,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           # No dependency caches (see the backend job).
           package-manager-cache: false
 
