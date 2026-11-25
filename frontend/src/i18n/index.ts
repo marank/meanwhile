@@ -14,7 +14,7 @@ declare module 'vue-i18n' {
 const locales = ['en', 'de', 'de-informal'] as const
 export type Locale = (typeof locales)[number]
 
-function isLocale(value: string | null): value is Locale {
+export function isLocale(value: string | null | undefined): value is Locale {
   return locales.some((locale) => locale === value)
 }
 

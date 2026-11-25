@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import * as api from '@/api'
-import { i18n } from '@/i18n'
+import { i18n, isLocale, setLocale } from '@/i18n'
 import { browserTimeZone } from '@/services/datetime'
 import { realtime } from '@/services/realtime'
 import { useCalendarStore } from './calendars'
@@ -47,15 +47,20 @@ export const useAuthStore = defineStore('auth', () => {
   const stopListening = realtime.on('unauthenticated', () => void recheckSession())
   onScopeDispose(stopListening)
 
-  // The server reads times that calendar apps send without a zone in the user's zone, and
-  // writes emails in the user's language, so it learns both whenever they differ.
+  // The server reads times that calendar apps send without a zone in the user's zone, so it learns
+  // the browser's whenever they differ. The language is the account's, chosen in its settings: the
+  // browser takes it on, as another person may have used it before. Only an account without one yet
+  // (new, or from before the setting) takes the browser's, which emails are then written in.
   watch(user, (current) => {
     if (!current) return
     const changes: api.ProfileUpdate = {}
     const zone = browserTimeZone()
     if (zone && current.timezone !== zone) changes.timezone = zone
-    const language = i18n.global.locale.value
-    if (current.language !== language) changes.language = language
+    if (isLocale(current.language)) {
+      if (current.language !== i18n.global.locale.value) setLocale(current.language)
+    } else {
+      changes.language = i18n.global.locale.value
+    }
     if (Object.keys(changes).length) {
       api.updateProfile(changes).then(
         (updated) => {

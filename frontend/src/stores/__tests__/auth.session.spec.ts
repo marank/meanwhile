@@ -65,10 +65,10 @@ describe('auth store session', () => {
     expect(store.user?.display_name).toBe('Ada')
   })
 
-  it('tells the server the time zone and language when they differ', async () => {
+  it("tells the server the browser's time zone, and its language to an account without one", async () => {
     backend.on('POST /api/auth/v1/auth/login', {
       status: 200,
-      data: { user: user({ timezone: null, language: 'de' }) },
+      data: { user: user({ timezone: null, language: '' }) },
     })
     const store = useAuthStore()
     await store.login('a@example.com', 'secret')
@@ -76,13 +76,23 @@ describe('auth store session', () => {
     expect(backend.calls('PATCH /api/users/me')[0]!.body).toEqual({ timezone: browserTimeZone(), language: 'en' })
   })
 
-  it('stays signed in when telling the server the language fails', async () => {
+  it("speaks the account's language, not the one the browser had from someone before", async () => {
+    i18n.global.locale.value = 'de-informal'
     backend.on('POST /api/auth/v1/auth/login', { status: 200, data: { user: user({ language: 'de' }) } })
+    const store = useAuthStore()
+    await store.login('a@example.com', 'secret')
+    await vi.waitFor(() => expect(i18n.global.locale.value).toBe('de'))
+    expect(localStorage.getItem('locale')).toBe('de')
+    expect(backend.calls('PATCH /api/users/me')).toHaveLength(0)
+  })
+
+  it('stays signed in when telling the server the language fails', async () => {
+    backend.on('POST /api/auth/v1/auth/login', { status: 200, data: { user: user({ language: '' }) } })
     backend.on('PATCH /api/users/me', reply(500))
     const store = useAuthStore()
     await store.login('a@example.com', 'secret')
     await vi.waitFor(() => expect(backend.calls('PATCH /api/users/me')).toHaveLength(1))
-    expect(store.user?.language).toBe('de')
+    expect(store.user?.language).toBe('')
   })
 
   it('updates the profile', async () => {
