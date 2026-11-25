@@ -287,7 +287,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "default": {
-            "()": "apps.core.log_filters.UTCFormatter",
+            "()": "apps.core.log_filters.OffsetFormatter",
             "format": "{asctime} {levelname} {name}: {message}",
             "style": "{",
         }

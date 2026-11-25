@@ -20,12 +20,14 @@ class HideJobArguments(logging.Filter):
         return True
 
 
-class UTCFormatter(logging.Formatter):
+class OffsetFormatter(logging.Formatter):
     """
-    Times in UTC, like nginx's and supervisord's lines in the container's output. Django sets the
-    process's local zone to TIME_ZONE, which would put the app's lines an hour or two off theirs.
+    Times in the server's zone (TIME_ZONE, which Django and the container's entrypoint make the local
+    one) with their offset to UTC, e.g. "2026-11-25 14:05:12,345 +0100": easy to read, and unambiguous
+    in the hour that the end of daylight saving time repeats.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.converter = time.gmtime
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        moment = self.converter(record.created)
+        stamp = time.strftime(datefmt or "%Y-%m-%d %H:%M:%S", moment)
+        return f"{stamp},{int(record.msecs):03d} {time.strftime('%z', moment)}"

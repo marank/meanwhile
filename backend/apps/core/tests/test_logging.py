@@ -1,5 +1,5 @@
 """
-The log in the container's output: times in UTC like nginx's and supervisord's lines, and the
+The log in the container's output: times in the server's zone with their offset to UTC, and the
 embedded CalDAV server only with what needs attention.
 """
 
@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.core.log_filters import UTCFormatter
+from apps.core.log_filters import OffsetFormatter
 
 
 @pytest.fixture
@@ -29,12 +29,17 @@ def berlin() -> Iterator[None]:
 
 
 @pytest.mark.usefixtures("berlin")
-def test_times_are_utc_whatever_the_local_zone() -> None:
-    record = logging.makeLogRecord({"msg": "started", "levelname": "INFO", "name": "app"})
-    record.created = datetime(2026, 11, 25, 11, 9, 44, tzinfo=UTC).timestamp()
-    record.msecs = 0
-    line = UTCFormatter("{asctime} {message}", style="{").format(record)
-    assert line == "2026-11-25 11:09:44,000 started"
+def test_times_are_local_with_their_offset() -> None:
+    def line(moment: datetime) -> str:
+        record = logging.makeLogRecord({"msg": "started", "levelname": "INFO", "name": "app"})
+        record.created = moment.timestamp()
+        record.msecs = 0
+        return OffsetFormatter("{asctime} {message}", style="{").format(record)
+
+    assert line(datetime(2026, 11, 25, 11, 9, 44, tzinfo=UTC)) == "2026-11-25 12:09:44,000 +0100 started"
+    # The hour daylight saving time repeats is told apart by the offset.
+    assert line(datetime(2026, 10, 25, 0, 30, tzinfo=UTC)) == "2026-10-25 02:30:00,000 +0200 started"
+    assert line(datetime(2026, 10, 25, 1, 30, tzinfo=UTC)) == "2026-10-25 02:30:00,000 +0100 started"
 
 
 def test_the_caldav_server_logs_only_warnings_at_info() -> None:
