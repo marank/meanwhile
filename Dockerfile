@@ -25,7 +25,7 @@ RUN pnpm build-only
 
 # --- uv ---------------------------------------------------------------------------------------
 # Only mounted while the venv is built; the final image has no package installer for the app.
-FROM ghcr.io/astral-sh/uv:0.13@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
+FROM ghcr.io/astral-sh/uv:0.13@sha256:a3ea1357342c1a4bf9a0c53a3deb1b55379aefa037338d8113d5771efa01774f AS uv
 
 # --- App --------------------------------------------------------------------------------------
 # Named "runtime": CI builds it without cache (no-cache-filters), so system package updates are
