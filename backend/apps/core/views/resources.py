@@ -5,6 +5,7 @@ Calendar resource endpoints.
 from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -38,7 +39,7 @@ def list_resources(request: AuthedRequest, calendar_id: str) -> QuerySet[Resourc
 @router.post("/calendars/{calendar_id}/resources", response=ResourceOut)
 @transaction.atomic
 def create_resource(request: AuthedRequest, calendar_id: str, payload: ResourceCreate) -> Resource:
-    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, gettext("Full access required"))
     return Resource.objects.create(
         calendar=calendar,
         name=payload.name,
@@ -54,13 +55,13 @@ def create_resource(request: AuthedRequest, calendar_id: str, payload: ResourceC
 @router.patch("/calendars/{calendar_id}/resources/{resource_id}", response=ResourceOut)
 @transaction.atomic
 def update_resource(request: AuthedRequest, calendar_id: str, resource_id: str, payload: ResourceUpdate) -> Resource:
-    calendar, membership = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
+    calendar, membership = get_member_calendar(calendar_id, request.user, Role.FULL, gettext("Full access required"))
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     data = payload.dict(exclude_unset=True)
     # Whether bookings need approval is the approvers' business, as are the approvers themselves.
     changes_approval = "requires_approval" in data and data["requires_approval"] != resource.requires_approval
     if changes_approval and not can_manage(membership):
-        raise HttpError(403, "Only who manages the calendar can change whether bookings need approval")
+        raise HttpError(403, gettext("Only who manages the calendar can change whether bookings need approval"))
     for attr, value in data.items():
         setattr(resource, attr, value)
     resource.save()
@@ -69,7 +70,7 @@ def update_resource(request: AuthedRequest, calendar_id: str, resource_id: str, 
 
 @router.delete("/calendars/{calendar_id}/resources/{resource_id}", response=OkOut)
 def delete_resource(request: AuthedRequest, calendar_id: str, resource_id: str) -> dict[str, bool]:
-    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, gettext("Full access required"))
     # Archive instead of deleting so existing bookings keep their resource.
     Resource.objects.filter(id=resource_id, calendar=calendar).update(archived_at=timezone.now())
     return {"ok": True}
@@ -80,7 +81,7 @@ def delete_resource(request: AuthedRequest, calendar_id: str, resource_id: str) 
     response=list[ApproverOut],
 )
 def list_resource_approvers(request: AuthedRequest, calendar_id: str, resource_id: str) -> list[ApproverOut]:
-    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, "Full access required")
+    calendar, _ = get_member_calendar(calendar_id, request.user, Role.FULL, gettext("Full access required"))
     resource = Resource.objects.get(id=resource_id, calendar=calendar)
     return approvers_of(ResourceApprover, resource=resource)
 

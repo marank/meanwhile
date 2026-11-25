@@ -6,6 +6,7 @@ same address; the page undoes it with DELETE.
 """
 
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -19,7 +20,7 @@ router = Router()
 def _subscription(token: str) -> Subscription:
     found = read_token(token, set(EMAIL_KINDS))
     if found is None:
-        raise HttpError(404, "This link is not valid")
+        raise HttpError(404, gettext("This link is not valid"))
     return found
 
 

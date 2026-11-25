@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from django.db import transaction
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import Event, User
@@ -62,7 +63,7 @@ def change_occurrence(series: Event, rid: datetime, actor: User, data: dict[str,
         # A changed occurrence at a time the rule doesn't produce (a CalDAV client may store
         # one): there is no "following" to split off from it.
         raise HttpError(
-            422, "This occurrence is no longer part of the series' rule; change it alone or the whole series"
+            422, gettext("This occurrence is no longer part of the series' rule; change it alone or the whole series")
         )
     if scope == "following" and index > 0:
         following = split(series, rid)

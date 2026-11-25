@@ -7,6 +7,7 @@ from typing import Any
 
 from django.core.cache import cache
 from django.db.models import Q
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import Calendar, Category, Event, EventParticipant, Resource, User
@@ -50,7 +51,7 @@ MAX_INVITATIONS_PER_HOUR = 100
 
 def create_event(user: User, calendar: Calendar, payload: EventCreate) -> Event:
     if calendar.force_all_day and not payload.all_day:
-        raise HttpError(422, "This calendar only allows all-day events")
+        raise HttpError(422, gettext("This calendar only allows all-day events"))
     start = as_utc(payload.start)
     end = as_utc(payload.end)
     _check_times(start, end, payload.all_day)
@@ -92,7 +93,7 @@ def create_event(user: User, calendar: Calendar, payload: EventCreate) -> Event:
 def update_event(user: User, event: Event, data: dict[str, Any]) -> None:
     """Applies the fields in `data` to the event, with the checks and side effects of an edit."""
     if event.calendar.force_all_day and data.get("all_day") is False:
-        raise HttpError(422, "This calendar only allows all-day events")
+        raise HttpError(422, gettext("This calendar only allows all-day events"))
     if event.parent_id:
         # A changed occurrence takes its recurrence from the series.
         data.pop("rrule", None)
@@ -248,7 +249,7 @@ def add_participant(event: Event, current_user: User, data: EventParticipantCrea
     if data.user_id is not None:
         user = User.objects.filter(id=data.user_id).first()
         if user is None:
-            raise HttpError(404, "User not found")
+            raise HttpError(404, gettext("User not found"))
         email = user.email.lower()
     else:
         email = str(data.email).lower()
@@ -258,7 +259,7 @@ def add_participant(event: Event, current_user: User, data: EventParticipantCrea
     if user:
         q |= Q(event=event, user=user)
     if EventParticipant.objects.filter(q).exists():
-        raise HttpError(400, "Participant already exists")
+        raise HttpError(400, gettext("Participant already exists"))
     _count_invitation(current_user)
 
     participant = EventParticipant.objects.create(
@@ -283,13 +284,13 @@ def _tracked_values(event: Event) -> dict[str, Any]:
 
 def _check_times(start: datetime, end: datetime, all_day: bool) -> None:
     if end < start or (end == start and not all_day):
-        raise HttpError(422, "end must not precede start for all-day events and must be after start otherwise")
+        raise HttpError(422, gettext("end must not precede start for all-day events and must be after start otherwise"))
 
 
 def _category(calendar: Calendar, category_id: str) -> Category:
     category = Category.objects.filter(id=category_id, calendar=calendar).first()
     if category is None:
-        raise HttpError(404, "Category not found")
+        raise HttpError(404, gettext("Category not found"))
     return category
 
 
@@ -301,7 +302,7 @@ def _bookable(calendar: Calendar, resource_id: str | None, location: bool) -> Re
         id=resource_id, calendar=calendar, is_active=True, archived_at__isnull=True, is_location=location
     ).first()
     if resource is None:
-        raise HttpError(404, "Location not found" if location else "Resource not found")
+        raise HttpError(404, gettext("Location not found") if location else gettext("Resource not found"))
     return resource
 
 
@@ -312,7 +313,7 @@ def _check_booking_conflicts(event: Event) -> None:
             409,
             # Structured, which apps.core.api.http_error passes through; Ninja types the message as a str.
             {  # type: ignore[arg-type]
-                "message": "This booking conflicts with an approved booking",
+                "message": gettext("This booking conflicts with an approved booking"),
                 "conflicts": [str(c.id) for c in conflicts],
             },
         )
@@ -339,4 +340,4 @@ def _count_invitation(user: User) -> None:
         cache.add(key, 1, timeout=3600)
         return
     if count > MAX_INVITATIONS_PER_HOUR:
-        raise HttpError(429, "Too many invitations; try again in an hour")
+        raise HttpError(429, gettext("Too many invitations; try again in an hour"))

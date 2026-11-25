@@ -8,6 +8,7 @@ from uuid import UUID
 
 from django.db import transaction
 from django.db.models import Q
+from django.utils.translation import gettext
 from ninja import Query, Router
 from ninja.errors import HttpError
 
@@ -138,7 +139,7 @@ def _parse_range(start: datetime, end: datetime) -> tuple[datetime, datetime]:
     range_start = as_utc(start)
     range_end = as_utc(end)
     if range_start >= range_end:
-        raise HttpError(422, "end must be after start")
+        raise HttpError(422, gettext("end must be after start"))
     return range_start, range_end
 
 
@@ -184,9 +185,9 @@ def _modifiable_event(event_id: str, user: User) -> tuple[Event, MembershipInfo]
     event = Event.objects.select_related("calendar").get(id=event_id)
     membership = get_membership(event.calendar, user)
     if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
+        raise HttpError(403, gettext("Not a member of this calendar"))
     if not can_modify_event(event, str(user.id), membership.role):
-        raise HttpError(403, "You do not have permission to edit this event")
+        raise HttpError(403, gettext("You do not have permission to edit this event"))
     return event, membership
 
 
@@ -195,7 +196,7 @@ def update_event(request: AuthedRequest, event_id: str, payload: EventUpdate) ->
     event, _ = _modifiable_event(event_id, request.user)
     data = payload.dict(exclude_unset=True)
     if event.parent_id and data.get("rrule"):
-        raise HttpError(422, "A changed occurrence of a series can't repeat itself")
+        raise HttpError(422, gettext("A changed occurrence of a series can't repeat itself"))
     with transaction.atomic():
         events.update_event(request.user, event, data)
     return EventOut.model_validate(serialize_event(event))
@@ -211,9 +212,9 @@ def delete_event(request: AuthedRequest, event_id: str) -> dict[str, bool]:
 def _series_occurrence(event_id: str, user: User, recurrence_id: datetime) -> Event:
     series, _ = _modifiable_event(event_id, user)
     if not is_series(series) or series.parent_id:
-        raise HttpError(422, "This event is not a series")
+        raise HttpError(422, gettext("This event is not a series"))
     if not is_occurrence(series, recurrence_id):
-        raise HttpError(404, "The series has no occurrence at that time")
+        raise HttpError(404, gettext("The series has no occurrence at that time"))
     return series
 
 
@@ -295,7 +296,7 @@ def list_event_participants(request: AuthedRequest, event_id: str) -> list[dict[
 def add_event_participant(request: AuthedRequest, event_id: str, payload: EventParticipantCreate) -> dict[str, Any]:
     event, membership = _participant_event(event_id, request.user)
     if not can_modify_event(event, str(request.user.id), membership.role):
-        raise HttpError(403, "You cannot modify this event")
+        raise HttpError(403, gettext("You cannot modify this event"))
     return _serialize_participant(participants.invite(event, request.user, payload))
 
 
@@ -305,7 +306,7 @@ def update_my_participation(request: AuthedRequest, event_id: str, payload: Even
     try:
         participant = EventParticipant.objects.select_related("user").get(event_id=event_id, user=request.user)
     except EventParticipant.DoesNotExist:
-        raise HttpError(404, "You are not a participant of this event") from None
+        raise HttpError(404, gettext("You are not a participant of this event")) from None
     with transaction.atomic():
         record_answer(participant, payload.status)
     return _serialize_participant(participant)
@@ -320,7 +321,7 @@ def update_event_participant(
     membership = get_membership(event.calendar, request.user)
     can_modify = membership is not None and can_modify_event(event, str(request.user.id), membership.role)
     if not (can_modify or participant.user_id == request.user.id):
-        raise HttpError(403, "You cannot update this participant")
+        raise HttpError(403, gettext("You cannot update this participant"))
     participants.set_status(participant, request.user, payload.status)
     return _serialize_participant(participant)
 
@@ -332,6 +333,6 @@ def delete_event_participant(request: AuthedRequest, event_id: str, participant_
     membership = get_membership(event.calendar, request.user)
     can_modify = membership is not None and can_modify_event(event, str(request.user.id), membership.role)
     if not (can_modify or participant.user_id == request.user.id):
-        raise HttpError(403, "You cannot remove this participant")
+        raise HttpError(403, gettext("You cannot remove this participant"))
     participants.remove(event, participant, request.user)
     return {"ok": True}

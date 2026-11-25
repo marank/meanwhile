@@ -8,6 +8,7 @@ from uuid import UUID
 
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -113,6 +114,6 @@ def mark_read(request: AuthedRequest, notification_id: str) -> dict[str, Any]:
 def delete_notification(request: AuthedRequest, notification_id: str) -> dict[str, bool]:
     notification = Notification.objects.get(id=notification_id, user=request.user)
     if notification.type in UNDELETABLE_TYPES:
-        raise HttpError(400, "This notification cannot be deleted")
+        raise HttpError(400, gettext("This notification cannot be deleted"))
     notification.delete()
     return {"ok": True}

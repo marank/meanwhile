@@ -5,6 +5,7 @@ Availability endpoint: when people and resources are taken, for planning an even
 from datetime import timedelta
 from typing import Any
 
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -28,7 +29,7 @@ def availability(request: AuthedRequest, data: AvailabilityIn) -> dict[str, Any]
     start, end = as_utc(data.start), as_utc(data.end)
     user_ids, resource_ids, exclude_event_id = data.user_ids, data.resource_ids, data.exclude_event_id
     if not start < end <= start + MAX_RANGE:
-        raise HttpError(422, "end must be after start and at most 62 days later")
+        raise HttpError(422, gettext("end must be after start and at most 62 days later"))
     users = User.objects.filter(id__in=user_ids, is_active=True).order_by("display_name")
     resources = [
         r

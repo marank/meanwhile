@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse
+from django.utils.translation import gettext
 from ninja import NinjaAPI
 from ninja.errors import HttpError
 from ninja.security import django_auth
@@ -45,14 +46,14 @@ def not_found(request: HttpRequest, exc: ObjectDoesNotExist) -> HttpResponse:
 @api.exception_handler(ValidationError)
 def malformed_id(request: HttpRequest, exc: ValidationError) -> HttpResponse:
     # An id that isn't even a UUID (Calendar.objects.get(id="nope")) names nothing, like an unknown one.
-    return api.create_response(request, {"detail": "Object not found"}, status=404)
+    return api.create_response(request, {"detail": gettext("Object not found")}, status=404)
 
 
 @api.exception_handler(IntegrityError)
 def conflict(request: HttpRequest, exc: IntegrityError) -> HttpResponse:
     # A unique constraint caught what a view's check let through, e.g. two requests adding the same
     # member at once: the second one learns it is already there.
-    return api.create_response(request, {"detail": "This already exists or was just changed"}, status=409)
+    return api.create_response(request, {"detail": gettext("This already exists or was just changed")}, status=409)
 
 
 # Register routers

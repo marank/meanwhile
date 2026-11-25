@@ -3,6 +3,7 @@ Direct members of a calendar: granting a role, changing it and taking it away, w
 and clean-ups that go with it. Memberships from a group or a public calendar: apps.core.services.memberships.
 """
 
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import (
@@ -21,9 +22,9 @@ from apps.core.services.permissions import get_direct_membership, get_membership
 
 def add_member(calendar: Calendar, actor: User, user_id: str, role: str) -> CalendarMember:
     if role == Role.OWNER:
-        raise HttpError(400, "Cannot add a second owner")
+        raise HttpError(400, gettext("Cannot add a second owner"))
     if get_direct_membership(calendar.id, user_id):
-        raise HttpError(400, "User is already a member")
+        raise HttpError(400, gettext("User is already a member"))
 
     user = User.objects.get(id=user_id)
     # Who has the calendar through a group or added it keeps its place in their sidebar.
@@ -49,16 +50,16 @@ def add_member(calendar: Calendar, actor: User, user_id: str, role: str) -> Cale
 def _direct_member(calendar: Calendar, user_id: str) -> CalendarMember:
     member = get_direct_membership(calendar.id, user_id)
     if member is None:
-        raise HttpError(404, "Member not found")
+        raise HttpError(404, gettext("Member not found"))
     return member
 
 
 def change_role(calendar: Calendar, actor: User, user_id: str, role: str) -> CalendarMember:
     member = _direct_member(calendar, user_id)
     if member.role == Role.OWNER:
-        raise HttpError(400, "Owner role cannot be changed")
+        raise HttpError(400, gettext("Owner role cannot be changed"))
     if role == Role.OWNER:
-        raise HttpError(400, "Cannot make a second owner")
+        raise HttpError(400, gettext("Cannot make a second owner"))
     if member.role != role:
         promoted = member.role is None or role_weight(role) > role_weight(member.role)
         member.role = role
@@ -77,7 +78,7 @@ def change_role(calendar: Calendar, actor: User, user_id: str, role: str) -> Cal
 def remove_member(calendar: Calendar, user_id: str) -> None:
     member = _direct_member(calendar, user_id)
     if member.role == Role.OWNER:
-        raise HttpError(400, "Cannot remove the owner")
+        raise HttpError(400, gettext("Cannot remove the owner"))
     user = member.user
     # What the user still has through a group (or, a public calendar in their sidebar, its public role)
     # takes the membership's place; with nothing left it goes.

@@ -2,6 +2,7 @@
 Comments on events, and who hears of a new one.
 """
 
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import Event, EventComment, User
@@ -13,7 +14,7 @@ def add_comment(event: Event, author: User, body: str) -> EventComment:
     """Adds the comment and tells the event's creator and who commented before."""
     body = body.strip()
     if not body:
-        raise HttpError(422, "Comment must not be empty")
+        raise HttpError(422, gettext("Comment must not be empty"))
     comment = EventComment.objects.create(event=event, author=author, body=body)
     previous_commenters = EventComment.objects.filter(event=event).values_list("author_id", flat=True).distinct()
     # Only who may still see the event: the notification carries the comment.

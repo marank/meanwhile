@@ -4,6 +4,7 @@ Global search endpoint.
 
 from typing import Any, Literal
 
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -40,7 +41,7 @@ def search(
         return search_groups(q, limit)
     # The others search within a calendar.
     if calendar_id is None:
-        raise HttpError(422, "calendar_id is required for this entity")
+        raise HttpError(422, gettext("calendar_id is required for this entity"))
     get_member_calendar(calendar_id, request.user)
     if entity in {"resources", "locations"}:
         # "locations": the resources offered in an event's location field; "resources" the others.

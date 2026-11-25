@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from django.db.models import Q, QuerySet
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models.base import AnyId, EventStatus, MembershipSource, Role
@@ -147,7 +148,7 @@ def can_manage(member: MembershipInfo) -> bool:
 
 
 def get_member_calendar(
-    calendar_id: str, user: User, role: str = Role.READ, denied: str = "Your role doesn't allow this"
+    calendar_id: str, user: User, role: str = Role.READ, denied: str | None = None
 ) -> tuple[Calendar, MembershipInfo]:
     """The calendar and the user's membership of it, which must have at least `role`.
 
@@ -157,9 +158,9 @@ def get_member_calendar(
     calendar = Calendar.objects.get(id=calendar_id)
     membership = get_membership(calendar, user)
     if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
+        raise HttpError(403, gettext("Not a member of this calendar"))
     if not has_at_least_role(membership, role):
-        raise HttpError(403, denied)
+        raise HttpError(403, denied or gettext("Your role doesn't allow this"))
     return calendar, membership
 
 
@@ -167,10 +168,10 @@ def get_visible_event(event_id: str, user: User) -> tuple[Event, MembershipInfo]
     event = Event.objects.select_related("creator").get(id=event_id)
     membership = get_membership(event.calendar, user)
     if membership is None:
-        raise HttpError(404, "Event not found")
+        raise HttpError(404, gettext("Event not found"))
 
     if not can_see_event(event, user, membership):
-        raise HttpError(404, "Event not found")
+        raise HttpError(404, gettext("Event not found"))
     return event, membership
 
 

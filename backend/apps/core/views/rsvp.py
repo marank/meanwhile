@@ -7,6 +7,7 @@ from uuid import UUID
 
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -30,7 +31,7 @@ def _participant(token: str) -> EventParticipant:
         .first()
     )
     if participant is None:
-        raise HttpError(404, "This invitation no longer exists")
+        raise HttpError(404, gettext("This invitation no longer exists"))
     return participant
 
 
@@ -99,7 +100,7 @@ def get_invitation(request: HttpRequest, token: str) -> RsvpOut:
 def answer_invitation(request: HttpRequest, token: str, payload: RsvpAnswer) -> RsvpOut:
     participant = _participant(token)
     if participant.event.status in _GONE:
-        raise HttpError(409, "This event has been cancelled")
+        raise HttpError(409, gettext("This event has been cancelled"))
     with transaction.atomic():
         record_answer(participant, payload.status)
     return _serialize(participant, request)

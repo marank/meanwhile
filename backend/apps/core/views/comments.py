@@ -4,6 +4,7 @@ Event comments and activity endpoints.
 
 from typing import Any
 
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -38,7 +39,7 @@ def list_comments(request: AuthedRequest, event_id: str) -> list[dict[str, Any]]
 def create_comment(request: AuthedRequest, event_id: str, payload: CommentCreate) -> dict[str, Any]:
     event, membership = get_visible_event(event_id, request.user)
     if not has_at_least_role(membership, Role.OWN):
-        raise HttpError(403, "You do not have permission to comment")
+        raise HttpError(403, gettext("You do not have permission to comment"))
     return _serialize_comment(comments.add_comment(event, request.user, payload.body))
 
 
@@ -48,7 +49,7 @@ def delete_comment(request: AuthedRequest, event_id: str, comment_id: str) -> di
     membership = get_membership(comment.event.calendar, request.user)
     may_moderate = membership is not None and has_at_least_role(membership, Role.FULL)
     if comment.author_id != request.user.id and not may_moderate:
-        raise HttpError(403, "You do not have permission to delete this comment")
+        raise HttpError(403, gettext("You do not have permission to delete this comment"))
     comment.delete()
     return {"ok": True}
 

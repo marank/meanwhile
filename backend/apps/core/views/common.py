@@ -5,6 +5,7 @@ Common view helpers.
 from typing import Any
 
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import CalendarApprover, Event, ResourceApprover, User
@@ -22,7 +23,7 @@ class AuthedRequest(HttpRequest):
 def require_admin(request: AuthedRequest) -> None:
     # Signed in, as every endpoint requires (apps.core.api).
     if not request.user.is_admin:
-        raise HttpError(403, "Admin access required")
+        raise HttpError(403, gettext("Admin access required"))
 
 
 def approvers_of(approver_model: type[CalendarApprover] | type[ResourceApprover], **owner: object) -> list[ApproverOut]:

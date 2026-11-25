@@ -7,6 +7,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -132,7 +133,7 @@ def public_calendars(request: AuthedRequest) -> list[dict[str, Any]]:
 def _public_calendar(calendar_id: str) -> Calendar:
     calendar = Calendar.objects.filter(id=calendar_id, is_public=True).first()
     if calendar is None:
-        raise HttpError(404, "Calendar not found")
+        raise HttpError(404, gettext("Calendar not found"))
     return calendar
 
 
@@ -334,7 +335,7 @@ def add_calendar_group(request: AuthedRequest, calendar_id: str, payload: Calend
     )
     group = UserGroup.objects.get(id=payload.group_id)
     if CalendarGroup.objects.filter(calendar=calendar, group=group).exists():
-        raise HttpError(400, "Group is already linked to this calendar")
+        raise HttpError(400, gettext("Group is already linked to this calendar"))
     link = CalendarGroup.objects.create(calendar=calendar, group=group, role=payload.role)
     return _serialize_group_link(link)
 

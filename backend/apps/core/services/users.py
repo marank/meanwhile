@@ -5,6 +5,7 @@ Changing accounts: the admin's user management and the user's own profile.
 import secrets
 from typing import Any
 
+from django.utils.translation import gettext, gettext_noop
 from ninja.errors import HttpError
 
 from apps.core.models import User, UserGroup
@@ -18,13 +19,13 @@ def user_to_change(actor: User, user_id: str) -> User:
     only superusers change those, so an app admin can't take one over by its email or password."""
     user = User.objects.prefetch_related("groups").get(id=user_id)
     if user.is_superuser and not actor.is_superuser:
-        raise HttpError(403, "Only superusers can change superusers")
+        raise HttpError(403, gettext("Only superusers can change superusers"))
     return user
 
 
 def create_user(data: AdminUserCreate) -> User:
     if User.objects.filter(email__iexact=data.email).exists():
-        raise HttpError(400, "A user with this email already exists")
+        raise HttpError(400, gettext("A user with this email already exists"))
     user = User(
         email=data.email,
         display_name=data.display_name,
@@ -41,13 +42,20 @@ def create_user(data: AdminUserCreate) -> User:
     return user
 
 
+# The rights admins can't take from themselves, and what they are told when they try.
+OWN_FLAG_MESSAGES = {
+    "is_admin": gettext_noop("You cannot take away your own admin rights"),
+    "is_active": gettext_noop("You cannot deactivate yourself"),
+}
+
+
 def update_user(actor: User, user_id: str, data: dict[str, Any]) -> User:
     """Changes what `data` names (the PATCH's set fields); admins can't take their own rights away."""
     user = user_to_change(actor, user_id)
     if user.id == actor.id:
-        for flag in ("is_admin", "is_active"):
+        for flag, message in OWN_FLAG_MESSAGES.items():
             if data.get(flag) is False:
-                raise HttpError(403, f"Cannot remove your own {flag}")
+                raise HttpError(403, gettext(message))
     group_ids = data.pop("group_ids", None)
     for attr, value in data.items():
         if attr == "password":
@@ -62,7 +70,7 @@ def update_user(actor: User, user_id: str, data: dict[str, Any]) -> User:
 
 def delete_user(actor: User, user_id: str) -> None:
     if str(actor.id) == user_id:
-        raise HttpError(403, "Cannot delete yourself")
+        raise HttpError(403, gettext("Cannot delete yourself"))
     if User.objects.filter(id=user_id).exists():
         user_to_change(actor, user_id).delete()
 

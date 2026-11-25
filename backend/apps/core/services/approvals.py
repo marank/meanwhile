@@ -5,6 +5,7 @@ iTIP messages to participants, the activity log and notifications).
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import Event, User
@@ -37,7 +38,7 @@ def _require_no_conflicts(event: Event) -> None:
             409,
             # Structured, which apps.core.api.http_error passes through; Ninja types the message as a str.
             {  # type: ignore[arg-type]
-                "message": "Approval conflicts with an existing approved booking",
+                "message": gettext("Approval conflicts with an existing approved booking"),
                 "conflicts": [str(c.id) for c in conflicts],
             },
         )
@@ -61,12 +62,12 @@ def approve(event_id: str, user: User, note: str) -> Event:
     projector); the event is approved once none is left."""
     event = _locked_event(event_id)
     if event.status != EventStatus.PENDING:
-        raise HttpError(400, "Event is not pending")
+        raise HttpError(400, gettext("Event is not pending"))
     if get_membership(event.calendar, user) is None:
-        raise HttpError(403, "Not a member of this calendar")
+        raise HttpError(403, gettext("Not a member of this calendar"))
     decided = decidable_resources(event, str(user.id))
     if not decided:
-        raise HttpError(403, "You cannot approve this booking")
+        raise HttpError(403, gettext("You cannot approve this booking"))
     decided_ids = {str(r.pk) for r in decided}
     remaining = [i for i in event.awaiting_approval or [] if str(i) not in decided_ids]
     if not remaining:
@@ -113,11 +114,11 @@ def _decide_changed_occurrences(series: Event, previous_status: str, decided_ids
 def reject(event_id: str, user: User, note: str) -> Event:
     event = _locked_event(event_id)
     if event.status != EventStatus.PENDING:
-        raise HttpError(400, "Event is not pending")
+        raise HttpError(400, gettext("Event is not pending"))
     if get_membership(event.calendar, user) is None:
-        raise HttpError(403, "Not a member of this calendar")
+        raise HttpError(403, gettext("Not a member of this calendar"))
     if not is_in_approver_pool(event, user.id):
-        raise HttpError(403, "You cannot reject this booking")
+        raise HttpError(403, gettext("You cannot reject this booking"))
 
     previous_status = event.status
     event.status = EventStatus.REJECTED
@@ -138,9 +139,9 @@ def cancel(event_id: str, user: User) -> Event:
     event = _locked_event(event_id)
     membership = get_membership(event.calendar, user)
     if membership is None:
-        raise HttpError(403, "Not a member of this calendar")
+        raise HttpError(403, gettext("Not a member of this calendar"))
     if not can_modify_event(event, user.id, membership.role):
-        raise HttpError(403, "You cannot cancel this event")
+        raise HttpError(403, gettext("You cannot cancel this event"))
 
     had_booking = event.status in {EventStatus.PENDING, EventStatus.APPROVED} and bool(booked_resources(event))
     previous_status = event.status

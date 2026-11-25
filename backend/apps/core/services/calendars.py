@@ -5,6 +5,7 @@ Creating calendars and changing their details.
 from typing import Any
 
 from django.db import IntegrityError, transaction
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import Calendar, CalendarMember, User, as_uuid
@@ -46,12 +47,12 @@ def create_calendar(
 def _require_free_url_path(calendar: Calendar, url_path: str) -> None:
     # Taken by the app's own URLs: /calendar/folder/<id> and /calendar/all.
     if url_path in {"folder", "all"}:
-        raise HttpError(422, "This calendar URL is reserved")
+        raise HttpError(422, gettext("This calendar URL is reserved"))
     others = Calendar.objects.exclude(id=calendar.id)
     if others.filter(url_path=url_path).exists():
-        raise HttpError(409, "This calendar URL is already in use")
+        raise HttpError(409, gettext("This calendar URL is already in use"))
     if (path_id := as_uuid(url_path)) and others.filter(id=path_id).exists():
-        raise HttpError(409, "This calendar URL is already in use")
+        raise HttpError(409, gettext("This calendar URL is already in use"))
 
 
 def update_calendar(calendar: Calendar, data: dict[str, Any]) -> Calendar:
@@ -67,6 +68,6 @@ def update_calendar(calendar: Calendar, data: dict[str, Any]) -> Calendar:
             calendar.save()
     except IntegrityError as error:
         if "url_path" in data:
-            raise HttpError(409, "This calendar URL is already in use") from error
+            raise HttpError(409, gettext("This calendar URL is already in use")) from error
         raise
     return calendar

@@ -6,35 +6,30 @@ msgid ""
 msgstr ""
 "Project-Id-Version: meanwhile\n"
 "Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-25 11:26+0000\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Approval"
-msgstr "Genehmigung"
-
-msgid "Branding"
-msgstr "Erscheinungsbild"
-
-msgid "CalDAV"
-msgstr "CalDAV"
-
-msgid "Calendar defaults"
-msgstr "Kalender-Standards"
-
-msgid "Colors (dark)"
-msgstr "Farben (dunkel)"
+msgid "Week layout"
+msgstr "Wochenansicht"
 
 msgid "Colors (light)"
 msgstr "Farben (hell)"
 
-msgid "Comment"
-msgstr "Kommentar"
+msgid "Colors (dark)"
+msgstr "Farben (dunkel)"
 
-msgid "Dates"
-msgstr "Daten"
+msgid "Personal info"
+msgstr "Persönliche Informationen"
+
+msgid "Permissions"
+msgstr "Berechtigungen"
+
+msgid "Preferences"
+msgstr "Einstellungen"
 
 msgid "Important dates"
 msgstr "Wichtige Daten"
@@ -42,35 +37,112 @@ msgstr "Wichtige Daten"
 msgid "Members"
 msgstr "Mitglieder"
 
-msgid "Permissions"
-msgstr "Berechtigungen"
+msgid "Branding"
+msgstr "Erscheinungsbild"
 
-msgid "Personal info"
-msgstr "Persönliche Informationen"
-
-msgid "Preferences"
-msgstr "Einstellungen"
-
-msgid "Read"
-msgstr "Gelesen"
-
-msgid "Recurrence"
-msgstr "Wiederholung"
-
-msgid "Recurring"
-msgstr "Wiederkehrend"
+msgid "Calendar defaults"
+msgstr "Kalender-Standards"
 
 msgid "Sharing"
 msgstr "Freigabe"
 
-msgid "Week layout"
-msgstr "Wochenansicht"
+msgid "CalDAV"
+msgstr "CalDAV"
+
+msgid "Dates"
+msgstr "Daten"
 
 msgid "When"
 msgstr "Wann"
 
+msgid "Recurrence"
+msgstr "Wiederholung"
+
 msgid "Where"
 msgstr "Wo"
+
+msgid "Approval"
+msgstr "Genehmigung"
+
+msgid "Recurring"
+msgstr "Wiederkehrend"
+
+msgid "Comment"
+msgstr "Kommentar"
+
+msgid "Read"
+msgstr "Gelesen"
+
+msgid "Object not found"
+msgstr "Nicht gefunden"
+
+msgid "This already exists or was just changed"
+msgstr "Das gibt es bereits oder es wurde gerade geändert"
+
+msgid "Approval conflicts with an existing approved booking"
+msgstr "Die Genehmigung überschneidet sich mit einer bereits genehmigten Buchung"
+
+msgid "Event is not pending"
+msgstr "Der Termin wartet nicht auf eine Genehmigung"
+
+msgid "Not a member of this calendar"
+msgstr "Sie haben keinen Zugriff auf diesen Kalender"
+
+msgid "You cannot approve this booking"
+msgstr "Sie können diese Buchung nicht genehmigen"
+
+msgid "You cannot reject this booking"
+msgstr "Sie können diese Buchung nicht ablehnen"
+
+msgid "You cannot cancel this event"
+msgstr "Sie können diesen Termin nicht absagen"
+
+msgid "Approver must be a calendar member"
+msgstr "Genehmigende müssen Zugriff auf den Kalender haben"
+
+msgid "This calendar URL is reserved"
+msgstr "Diese Kalender-Adresse ist reserviert"
+
+msgid "This calendar URL is already in use"
+msgstr "Diese Kalender-Adresse ist bereits vergeben"
+
+msgid "Comment must not be empty"
+msgstr "Der Kommentar darf nicht leer sein"
+
+msgid "This calendar only allows all-day events"
+msgstr "In diesem Kalender sind nur ganztägige Termine erlaubt"
+
+msgid "User not found"
+msgstr "Benutzer nicht gefunden"
+
+msgid "Participant already exists"
+msgstr "Diese Person nimmt bereits teil"
+
+msgid ""
+"end must not precede start for all-day events and must be after start "
+"otherwise"
+msgstr "Das Ende darf bei ganztägigen Terminen nicht vor dem Beginn liegen und muss sonst nach dem Beginn liegen"
+
+msgid "Category not found"
+msgstr "Kategorie nicht gefunden"
+
+msgid "Location not found"
+msgstr "Ort nicht gefunden"
+
+msgid "Resource not found"
+msgstr "Ressource nicht gefunden"
+
+msgid "This booking conflicts with an approved booking"
+msgstr "Diese Buchung überschneidet sich mit einer genehmigten Buchung"
+
+msgid "Too many invitations; try again in an hour"
+msgstr "Zu viele Einladungen; bitte in einer Stunde erneut versuchen"
+
+msgid "Folder not found"
+msgstr "Ordner nicht gefunden"
+
+msgid "A folder cannot be moved into itself"
+msgstr "Ein Ordner kann nicht in sich selbst verschoben werden"
 
 #, python-brace-format
 msgctxt "email"
@@ -101,7 +173,9 @@ msgstr "{app} öffnen"
 #, python-brace-format
 msgctxt "email"
 msgid "You get this email because {organizer} invited you to this event."
-msgstr "Sie erhalten diese E-Mail, weil {organizer} Sie zu diesem Termin eingeladen hat."
+msgstr ""
+"Sie erhalten diese E-Mail, weil {organizer} Sie zu diesem Termin eingeladen "
+"hat."
 
 msgctxt "email"
 msgid "You get this email because you organize this event."
@@ -109,8 +183,12 @@ msgstr "Sie erhalten diese E-Mail, weil Sie diesen Termin organisieren."
 
 #, python-brace-format
 msgctxt "email"
-msgid "You get this email because you approve bookings in the calendar \"{calendar}\"."
-msgstr "Sie erhalten diese E-Mail, weil Sie Buchungen im Kalender „{calendar}“ genehmigen."
+msgid ""
+"You get this email because you approve bookings in the calendar "
+"\"{calendar}\"."
+msgstr ""
+"Sie erhalten diese E-Mail, weil Sie Buchungen im Kalender „{calendar}“ "
+"genehmigen."
 
 msgctxt "email"
 msgid "You get this email because you asked for this booking."
@@ -118,31 +196,46 @@ msgstr "Sie erhalten diese E-Mail, weil Sie diese Buchung angefragt haben."
 
 msgctxt "email"
 msgid "You get this email because you created or commented on this event."
-msgstr "Sie erhalten diese E-Mail, weil Sie diesen Termin erstellt oder kommentiert haben."
+msgstr ""
+"Sie erhalten diese E-Mail, weil Sie diesen Termin erstellt oder kommentiert "
+"haben."
 
 #, python-brace-format
 msgctxt "email"
-msgid "You get this email because you were added to the calendar \"{calendar}\"."
-msgstr "Sie erhalten diese E-Mail, weil Sie zum Kalender „{calendar}“ hinzugefügt wurden."
+msgid ""
+"You get this email because you were added to the calendar \"{calendar}\"."
+msgstr ""
+"Sie erhalten diese E-Mail, weil Sie zum Kalender „{calendar}“ hinzugefügt "
+"wurden."
 
 #, python-brace-format
 msgctxt "email"
-msgid "You get this email because you are a member of the calendar \"{calendar}\"."
-msgstr "Sie erhalten diese E-Mail, weil Sie Mitglied im Kalender „{calendar}“ sind."
+msgid ""
+"You get this email because you are a member of the calendar \"{calendar}\"."
+msgstr ""
+"Sie erhalten diese E-Mail, weil Sie Mitglied im Kalender „{calendar}“ sind."
 
 msgctxt "email"
 msgid "You get this email because you set a reminder for this event."
-msgstr "Sie erhalten diese E-Mail, weil Sie eine Erinnerung an diesen Termin eingerichtet haben."
+msgstr ""
+"Sie erhalten diese E-Mail, weil Sie eine Erinnerung an diesen Termin "
+"eingerichtet haben."
 
 #, python-brace-format
 msgctxt "email"
 msgid "You get this email because {actor} created an account for you in {app}."
-msgstr "Sie erhalten diese E-Mail, weil {actor} für Sie ein Konto bei {app} angelegt hat."
+msgstr ""
+"Sie erhalten diese E-Mail, weil {actor} für Sie ein Konto bei {app} angelegt "
+"hat."
 
 #, python-brace-format
 msgctxt "email"
-msgid "You get this email because a new password for {app} was requested for this address."
-msgstr "Sie erhalten diese E-Mail, weil für diese Adresse ein neues Passwort für {app} angefordert wurde."
+msgid ""
+"You get this email because a new password for {app} was requested for this "
+"address."
+msgstr ""
+"Sie erhalten diese E-Mail, weil für diese Adresse ein neues Passwort für "
+"{app} angefordert wurde."
 
 msgctxt "email"
 msgid "Someone"
@@ -215,7 +308,9 @@ msgstr "Alle Rechte, auch den Kalender löschen"
 
 msgctxt "email"
 msgid "Can create and edit all events, and change settings and access"
-msgstr "Kann alle Termine erstellen und bearbeiten sowie Einstellungen und Zugriff ändern"
+msgstr ""
+"Kann alle Termine erstellen und bearbeiten sowie Einstellungen und Zugriff "
+"ändern"
 
 msgctxt "email"
 msgid "Can create and edit all events"
@@ -425,8 +520,11 @@ msgid "{organizer} removed you from \"{title}\"."
 msgstr "{organizer} hat Sie von „{title}“ ausgeladen."
 
 msgctxt "email"
-msgid "Will you attend? Answer in your mail program, or with one of the links below."
-msgstr "Nehmen Sie teil? Antworten Sie in Ihrem Mailprogramm oder über einen der Links unten."
+msgid ""
+"Will you attend? Answer in your mail program, or with one of the links below."
+msgstr ""
+"Nehmen Sie teil? Antworten Sie in Ihrem Mailprogramm oder über einen der "
+"Links unten."
 
 #, python-brace-format
 msgctxt "email"
@@ -512,13 +610,21 @@ msgid "{actor} invited you to {app}."
 msgstr "{actor} hat Sie zu {app} eingeladen."
 
 msgctxt "email"
-msgid "To get started, set a password using the button below. For security, the link is only valid for a limited time; you can request a new one at any time with \"Forgot your password?\" on the sign-in page."
-msgstr "Legen Sie zuerst über den Button unten ein Passwort fest. Der Link ist aus Sicherheitsgründen nur begrenzt gültig; über „Passwort vergessen?“ auf der Anmeldeseite können Sie jederzeit einen neuen anfordern."
+msgid ""
+"To get started, set a password using the button below. For security, the "
+"link is only valid for a limited time; you can request a new one at any time "
+"with \"Forgot your password?\" on the sign-in page."
+msgstr ""
+"Legen Sie zuerst über den Button unten ein Passwort fest. Der Link ist aus "
+"Sicherheitsgründen nur begrenzt gültig; über „Passwort vergessen?“ auf der "
+"Anmeldeseite können Sie jederzeit einen neuen anfordern."
 
 #, python-brace-format
 msgctxt "email"
 msgid "Sign in with this email address and the password you got from {actor}."
-msgstr "Melden Sie sich mit dieser E-Mail-Adresse und dem Passwort an, das Sie von {actor} bekommen haben."
+msgstr ""
+"Melden Sie sich mit dieser E-Mail-Adresse und dem Passwort an, das Sie von "
+"{actor} bekommen haben."
 
 msgctxt "email"
 msgid "Email"
@@ -544,13 +650,132 @@ msgstr "Passwort zurücksetzen"
 
 #, python-brace-format
 msgctxt "email"
-msgid "Someone asked to reset the password of your account in {app}. Choose a new one using the button below."
-msgstr "Für Ihr Konto bei {app} wurde angefordert, das Passwort zurückzusetzen. Über den Button unten legen Sie ein neues fest."
+msgid ""
+"Someone asked to reset the password of your account in {app}. Choose a new "
+"one using the button below."
+msgstr ""
+"Für Ihr Konto bei {app} wurde angefordert, das Passwort zurückzusetzen. Über "
+"den Button unten legen Sie ein neues fest."
 
 msgctxt "email"
-msgid "For security, the link is only valid for a limited time and works once. If you didn't ask for this, ignore this email; your password stays as it is."
-msgstr "Der Link ist aus Sicherheitsgründen nur begrenzt gültig und funktioniert einmal. Wenn Sie das nicht angefordert haben, ignorieren Sie diese E-Mail; Ihr Passwort bleibt unverändert."
+msgid ""
+"For security, the link is only valid for a limited time and works once. If "
+"you didn't ask for this, ignore this email; your password stays as it is."
+msgstr ""
+"Der Link ist aus Sicherheitsgründen nur begrenzt gültig und funktioniert "
+"einmal. Wenn Sie das nicht angefordert haben, ignorieren Sie diese E-Mail; "
+"Ihr Passwort bleibt unverändert."
 
 msgctxt "email"
 msgid "Choose new password"
 msgstr "Neues Passwort festlegen"
+
+msgid "Cannot add a second owner"
+msgstr "Ein Kalender kann nur einen Eigentümer haben"
+
+msgid "User is already a member"
+msgstr "Die Person hat bereits Zugriff"
+
+msgid "Member not found"
+msgstr "Mitglied nicht gefunden"
+
+msgid "Owner role cannot be changed"
+msgstr "Die Rolle des Eigentümers kann nicht geändert werden"
+
+msgid "Cannot make a second owner"
+msgstr "Ein Kalender kann nur einen Eigentümer haben"
+
+msgid "Cannot remove the owner"
+msgstr "Der Eigentümer kann nicht entfernt werden"
+
+msgid ""
+"This occurrence is no longer part of the series' rule; change it alone or "
+"the whole series"
+msgstr "Dieser Termin gehört nicht mehr zur Regel der Serie; ändern Sie ihn einzeln oder die ganze Serie"
+
+msgid "Your role doesn't allow this"
+msgstr "Ihre Rolle erlaubt das nicht"
+
+msgid "Event not found"
+msgstr "Termin nicht gefunden"
+
+msgid "Only superusers can change superusers"
+msgstr "Nur Superuser können Superuser ändern"
+
+msgid "A user with this email already exists"
+msgstr "Es gibt bereits einen Benutzer mit dieser E-Mail-Adresse"
+
+msgid "You cannot take away your own admin rights"
+msgstr "Sie können sich die Admin-Rechte nicht selbst entziehen"
+
+msgid "You cannot deactivate yourself"
+msgstr "Sie können sich nicht selbst deaktivieren"
+
+msgid "Cannot delete yourself"
+msgstr "Sie können sich nicht selbst löschen"
+
+msgid "end must be after start and at most 62 days later"
+msgstr "Das Ende muss nach dem Beginn und höchstens 62 Tage später liegen"
+
+msgid "Calendar not found"
+msgstr "Kalender nicht gefunden"
+
+msgid "Group is already linked to this calendar"
+msgstr "Die Gruppe hat bereits Zugriff auf diesen Kalender"
+
+msgid "Full access required"
+msgstr "Dafür ist die Rolle „Alle Termine“ nötig"
+
+msgid "You do not have permission to comment"
+msgstr "Sie dürfen hier nicht kommentieren"
+
+msgid "You do not have permission to delete this comment"
+msgstr "Sie dürfen diesen Kommentar nicht löschen"
+
+msgid "Admin access required"
+msgstr "Dafür sind Admin-Rechte nötig"
+
+msgid "end must be after start"
+msgstr "Das Ende muss nach dem Beginn liegen"
+
+msgid "You do not have permission to edit this event"
+msgstr "Sie dürfen diesen Termin nicht bearbeiten"
+
+msgid "A changed occurrence of a series can't repeat itself"
+msgstr "Ein einzeln geänderter Termin einer Serie kann sich nicht selbst wiederholen"
+
+msgid "This event is not a series"
+msgstr "Dieser Termin ist keine Serie"
+
+msgid "The series has no occurrence at that time"
+msgstr "Die Serie hat zu dieser Zeit keinen Termin"
+
+msgid "You cannot modify this event"
+msgstr "Sie können diesen Termin nicht ändern"
+
+msgid "You are not a participant of this event"
+msgstr "Sie nehmen an diesem Termin nicht teil"
+
+msgid "You cannot update this participant"
+msgstr "Sie können diese teilnehmende Person nicht ändern"
+
+msgid "You cannot remove this participant"
+msgstr "Sie können diese teilnehmende Person nicht entfernen"
+
+msgid "This notification cannot be deleted"
+msgstr "Diese Mitteilung kann nicht gelöscht werden"
+
+msgid "Only who manages the calendar can change whether bookings need approval"
+msgstr "Nur wer den Kalender verwaltet, kann ändern, ob Buchungen eine Genehmigung brauchen"
+
+msgid "This invitation no longer exists"
+msgstr "Diese Einladung gibt es nicht mehr"
+
+msgid "This event has been cancelled"
+msgstr "Dieser Termin wurde abgesagt"
+
+msgid "calendar_id is required for this entity"
+msgstr "calendar_id ist hierfür erforderlich"
+
+msgid "This link is not valid"
+msgstr "Dieser Link ist nicht gültig"

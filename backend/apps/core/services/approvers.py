@@ -4,6 +4,7 @@ Who decides on bookings: a calendar's default approvers and a resource's own.
 
 from uuid import UUID
 
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import Calendar, CalendarApprover, Resource, ResourceApprover, User, as_uuid
@@ -22,7 +23,7 @@ def replace_approvers[A: (CalendarApprover, ResourceApprover)](
     wanted: list[UUID] = []
     for user_id in dict.fromkeys(as_uuid(user_id) for user_id in user_ids):
         if user_id is None or get_direct_membership(calendar_id, user_id) is None:
-            raise HttpError(400, "Approver must be a calendar member")
+            raise HttpError(400, gettext("Approver must be a calendar member"))
         wanted.append(user_id)
     current = approver_model.objects.filter(**{owner_field: owner})
     current.exclude(user_id__in=wanted).delete()

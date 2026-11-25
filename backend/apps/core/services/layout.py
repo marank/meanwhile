@@ -5,6 +5,7 @@ The user's layout: their folders, and where their calendars sit among them (the 
 from typing import Any
 
 from django.db import transaction
+from django.utils.translation import gettext
 from ninja.errors import HttpError
 
 from apps.core.models import CalendarMember, Folder, User, as_uuid
@@ -20,7 +21,7 @@ def _folder_parents(user: User) -> dict[str, str | None]:
 
 def _require_own_folder(parents: dict[str, str | None], folder_id: str | None) -> None:
     if folder_id is not None and folder_id not in parents:
-        raise HttpError(404, "Folder not found")
+        raise HttpError(404, gettext("Folder not found"))
 
 
 def _require_no_cycle(parents: dict[str, str | None]) -> None:
@@ -29,7 +30,7 @@ def _require_no_cycle(parents: dict[str, str | None]) -> None:
         current = parents[start]
         while current is not None:
             if current in seen:
-                raise HttpError(400, "A folder cannot be moved into itself")
+                raise HttpError(400, gettext("A folder cannot be moved into itself"))
             seen.add(current)
             current = parents.get(current)
 
