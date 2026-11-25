@@ -285,7 +285,13 @@ LOG_LEVEL = env_str("LOG_LEVEL", "INFO").upper()
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {"default": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"}},
+    "formatters": {
+        "default": {
+            "()": "apps.core.log_filters.UTCFormatter",
+            "format": "{asctime} {levelname} {name}: {message}",
+            "style": "{",
+        }
+    },
     "filters": {"hide_job_arguments": {"()": "apps.core.log_filters.HideJobArguments"}},
     "handlers": {
         "console": {"class": "logging.StreamHandler", "formatter": "default", "filters": ["hide_job_arguments"]}
@@ -296,6 +302,9 @@ LOGGING = {
         # They list every task and periodic job at each start, of every management command too.
         "procrastinate.blueprints": {"level": "WARNING"},
         "procrastinate.periodic": {"level": "WARNING"},
+        # The embedded CalDAV server lists its settings at every start and logs each request (which
+        # nginx's access log has too); its warnings and errors still show, everything with LOG_LEVEL=DEBUG.
+        "radicale": {"level": "WARNING" if LOG_LEVEL == "INFO" else LOG_LEVEL},
     },
 }
 

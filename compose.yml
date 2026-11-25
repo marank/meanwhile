@@ -1,6 +1,6 @@
 # PostgreSQL, Redis, the app and the worker. Needs only a .env next to it: save .env.example as
 # .env, fill it in, `docker compose up -d`. The app serves the frontend and the backend on APP_BIND over HTTP; HTTPS
-# is terminated in front of it (see README, "Deployment with Docker").
+# is terminated in front of it (see docs/operations.md, "Reverse proxy and TLS").
 name: meanwhile
 
 # Unprivileged, without any capabilities, and nothing writable but /tmp (and the volumes).

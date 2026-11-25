@@ -6,9 +6,13 @@ APP_URLS host (Django only accepts its own hosts) and, for https URLs, marked as
 
 The https marker only counts when nginx trusts 127.0.0.1 (TRUSTED_PROXIES); otherwise
 nginx overwrites it and Django sees plain http, which /api/health is exempt for.
+
+While uvicorn is still starting, the probe fails without asking nginx, which would log a 502
+error for it: Docker probes every few seconds from the container's start (--start-period).
 """
 
 import os
+import socket
 import sys
 import urllib.error
 import urllib.request
@@ -20,9 +24,25 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None  # report 301/302 as they are
 
 
+# Where nginx passes the app's requests on to (supervisord.conf, django_proxy.conf).
+UVICORN = ("127.0.0.1", 8000)
+
+
+def uvicorn_listens() -> bool:
+    try:
+        with socket.create_connection(UVICORN, timeout=2):
+            return True
+    except OSError:
+        return False
+
+
 def main() -> int:
     path = sys.argv[1] if len(sys.argv) > 1 else "/api/health"
     expected = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+
+    if not uvicorn_listens():
+        print(f"{path}: uvicorn is not listening yet")
+        return 1
 
     first_url = (os.environ.get("APP_URLS") or "http://localhost").split(",")[0].strip()
     parts = urlsplit(first_url)

@@ -1,6 +1,7 @@
-"""Filters for the log output (config.settings.LOGGING)."""
+"""Filters and the format of the log output (config.settings.LOGGING)."""
 
 import logging
+import time
 from typing import Any
 
 
@@ -17,3 +18,14 @@ class HideJobArguments(logging.Filter):
             record.msg = str(record.msg).replace(job["call_string"], short)
             record.job = {**job, "task_kwargs": None, "call_string": short}
         return True
+
+
+class UTCFormatter(logging.Formatter):
+    """
+    Times in UTC, like nginx's and supervisord's lines in the container's output. Django sets the
+    process's local zone to TIME_ZONE, which would put the app's lines an hour or two off theirs.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.converter = time.gmtime
