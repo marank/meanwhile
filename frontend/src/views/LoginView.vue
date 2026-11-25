@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLogo from '@/components/AppLogo.vue'
@@ -14,6 +14,7 @@ const auth = useAuthStore()
 const settings = useSettingsStore()
 const router = useRouter()
 const route = useRoute()
+const rulesId = useId()
 const { t } = useI18n()
 
 const isRegister = computed(() => props.mode === 'register')
@@ -74,16 +75,21 @@ async function submit() {
           <input v-model="displayName" type="text" required class="w-full px-3 py-2 border border-line rounded-lg" />
         </label>
 
-        <label class="block">
-          <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.password') }}</span>
-          <input
-            v-model="password"
-            type="password"
-            required
-            minlength="8"
-            class="w-full px-3 py-2 border border-line rounded-lg"
-          />
-        </label>
+        <div>
+          <label class="block">
+            <span class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.password') }}</span>
+            <input
+              v-model="password"
+              type="password"
+              required
+              minlength="8"
+              :aria-describedby="isRegister ? rulesId : undefined"
+              class="w-full px-3 py-2 border border-line rounded-lg"
+            />
+          </label>
+          <!-- After the label, so it describes the field instead of becoming part of its name. -->
+          <p v-if="isRegister" :id="rulesId" class="mt-1 text-xs text-gray-500">{{ $t('auth.passwordRules') }}</p>
+        </div>
 
         <p v-if="error" class="text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-200 p-2 rounded">
           {{ error }}

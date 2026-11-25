@@ -134,6 +134,8 @@ describe('LoginView', () => {
     expect(fieldOf('Email')).toBe('email')
     expect(fieldOf('Display name')).toBe('text')
     expect(fieldOf('Password')).toBe('password')
+    const rules = wrapper.get('input[type="password"]').attributes('aria-describedby')!
+    expect(wrapper.get(`[id="${rules}"]`).text()).toContain('At least 8 characters')
   })
 
   it('registers with a display name and shows the calendar', async () => {

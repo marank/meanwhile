@@ -7,6 +7,8 @@ const auth: Overlay<MessageSchema['auth']> = {
     'Gib deine E-Mail-Adresse ein. Gehört sie zu einem Konto, schicken wir dir einen Link, mit dem du ein neues Passwort festlegst.',
   resetSent:
     'Gehört die Adresse zu einem Konto, ist ein Link für ein neues Passwort unterwegs. Sieh in deinem Postfach nach.',
+  passwordRules:
+    'Mindestens 8 Zeichen, nicht nur Ziffern und nicht zu ähnlich zu deinem Namen oder deiner E-Mail-Adresse.',
   resetDone: 'Dein Passwort wurde geändert. Du kannst dich jetzt damit anmelden.',
   resetInvalid: 'Dieser Link ist ungültig, schon benutzt oder abgelaufen. Fordere einen neuen an.',
 }

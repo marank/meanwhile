@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as api from '@/api'
 import type { User } from '@/api'
@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, type ThemePreference } from '@/stores/theme'
 
 const { t, locale } = useI18n()
+const rulesId = useId()
 const auth = useAuthStore()
 const theme = useThemeStore()
 const { busy, run } = useAction()
@@ -105,17 +106,22 @@ function save() {
               class="w-full rounded-lg border border-line px-3 py-2"
             />
           </label>
-          <label class="block">
-            <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('auth.newPassword') }}</span>
-            <input
-              v-model="passwords.next"
-              type="password"
-              autocomplete="new-password"
-              required
-              minlength="8"
-              class="w-full rounded-lg border border-line px-3 py-2"
-            />
-          </label>
+          <div>
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('auth.newPassword') }}</span>
+              <input
+                v-model="passwords.next"
+                type="password"
+                autocomplete="new-password"
+                required
+                minlength="8"
+                :aria-describedby="rulesId"
+                class="w-full rounded-lg border border-line px-3 py-2"
+              />
+            </label>
+            <!-- After the label, so it describes the field instead of becoming part of its name. -->
+            <p :id="rulesId" class="mt-1 text-xs text-gray-500">{{ $t('auth.passwordRules') }}</p>
+          </div>
         </div>
         <button
           type="submit"

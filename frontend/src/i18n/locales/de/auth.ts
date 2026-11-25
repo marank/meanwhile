@@ -19,6 +19,8 @@ const auth: MessageSchema['auth'] = {
   resetSent:
     'Gehört die Adresse zu einem Konto, ist ein Link für ein neues Passwort unterwegs. Sehen Sie in Ihrem Postfach nach.',
   newPassword: 'Neues Passwort',
+  passwordRules:
+    'Mindestens 8 Zeichen, nicht nur Ziffern und nicht zu ähnlich zu Ihrem Namen oder Ihrer E-Mail-Adresse.',
   currentPassword: 'Aktuelles Passwort',
   setPassword: 'Passwort setzen',
   resetDone: 'Ihr Passwort wurde geändert. Sie können sich jetzt damit anmelden.',

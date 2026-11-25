@@ -15,6 +15,7 @@ export default {
   resetSend: 'Send link',
   resetSent: 'If the address belongs to an account, a link to set a new password is on its way. Check your inbox.',
   newPassword: 'New password',
+  passwordRules: 'At least 8 characters, not only digits, and not too close to your name or email address.',
   currentPassword: 'Current password',
   setPassword: 'Set password',
   resetDone: 'Your password has been changed. You can sign in with it now.',

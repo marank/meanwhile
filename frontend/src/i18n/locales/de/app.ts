@@ -41,7 +41,7 @@ const app: MessageSchema['app'] = {
   weekendDaysHelp:
     'Ausgewählte Tage erhalten die Wochenendfarbe und werden ausgeblendet, wenn Wochenenden deaktiviert sind.',
   showWeekends: 'Wochenenden anzeigen',
-  showWeekendsHelp: 'Samstag und Sonntag in den Kalenderansichten anzeigen.',
+  showWeekendsHelp: 'Die oben gewählten Wochenendtage in den Kalenderansichten anzeigen.',
   showWeekNumbers: 'Kalenderwochen anzeigen',
   showWeekNumbersHelp: 'Wochennummern in den Kalenderansichten anzeigen.',
   dateTime: 'Datum & Uhrzeit',
@@ -82,6 +82,8 @@ const app: MessageSchema['app'] = {
   allCalendars: 'Alle Kalender',
   createFolder: 'Ordner erstellen',
   moreActions: 'Weitere Aktionen',
+  chooseImage: 'Bild auswählen',
+  changeImage: 'Anderes Bild wählen',
   calendarActions: 'Aktionen für „{name}“',
   publicCalendars: 'Öffentliche Kalender',
   publicCalendarsHint: 'Öffentliche Kalender erscheinen in Ihrer Seitenleiste, sobald Sie sie hinzufügen.',

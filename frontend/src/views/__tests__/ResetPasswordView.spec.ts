@@ -98,6 +98,11 @@ describe('ResetPasswordView', () => {
     it('welcomes new users from their invitation to choose a password', async () => {
       await render('abc-123', true)
       expect(wrapper.get('h2').text()).toBe('Choose your password')
+      // The rules are told before the server would refuse a password.
+      const rules = wrapper.get('#new-password').attributes('aria-describedby')!
+      expect(wrapper.get(`[id="${rules}"]`).text()).toBe(
+        'At least 8 characters, not only digits, and not too close to your name or email address.',
+      )
       expect(wrapper.get('button[type="submit"]').text()).toBe('Set password')
     })
 

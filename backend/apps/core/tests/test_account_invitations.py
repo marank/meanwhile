@@ -3,6 +3,8 @@ Accounts an admin creates, with or without a password, and the email that invite
 """
 
 import re
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from django.core import mail
@@ -10,6 +12,7 @@ from django.test import Client
 from pytest_django.fixtures import Settings
 
 from apps.core.models import User
+from apps.core.services import accounts
 from apps.core.tests.helpers import Api, make_user
 
 pytestmark = pytest.mark.django_db
@@ -106,3 +109,18 @@ def test_only_admins_invite_and_never_superusers(admin_api: Api) -> None:
     boss.save()
     assert admin_api.post(f"/admin/users/{boss.id}/invite").status_code == 403
     assert mail.outbox == []
+
+
+def test_the_invitation_says_until_when_its_link_works(
+    admin_api: Api, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The admin's language, zone and clock, as the new account has none of them yet.
+    admin_api.user.language = "de"
+    admin_api.user.timezone = "Europe/Berlin"
+    admin_api.user.save()
+    settings.PASSWORD_RESET_TIMEOUT = 3 * 24 * 3600
+    user = create(admin_api)
+    sent_at = datetime(2026, 11, 25, 11, 10, tzinfo=UTC)
+    monkeypatch.setattr(accounts, "timezone", SimpleNamespace(now=lambda: sent_at))
+    admin_api.post(f"/admin/users/{user.id}/invite")
+    assert "nur bis Sa., 28. Nov. 2026, 12:10 (Europe/Berlin);" in str(mail.outbox[-1].body)

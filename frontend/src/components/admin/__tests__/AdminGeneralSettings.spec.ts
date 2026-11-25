@@ -42,6 +42,7 @@ describe('image upload field', () => {
         removeLabel: 'Remove logo',
         'onUpdate:modelValue': (value: string | null) => wrapper.setProps({ modelValue: value }),
       },
+      global: { plugins: [i18n] },
     })
     return wrapper
   }
@@ -56,6 +57,8 @@ describe('image upload field', () => {
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.text()).toContain('No logo')
     expect(wrapper.find('button').exists()).toBe(false)
+    // The picker is a button-like label of our own, not the browser's "No file chosen".
+    expect(wrapper.get('label').text()).toBe('Choose image')
   })
 
   it('takes a picked file as a data URL', async () => {
@@ -66,6 +69,7 @@ describe('image upload field', () => {
     )
     await vi.waitFor(() => expect(wrapper.emitted('update:modelValue')).toEqual([['data:image/png;base64,aGk=']]))
     expect(wrapper.find('img').exists()).toBe(true)
+    expect(wrapper.get('label').text()).toBe('Choose another')
   })
 
   it('ignores an empty pick', async () => {

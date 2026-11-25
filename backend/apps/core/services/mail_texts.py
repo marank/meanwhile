@@ -129,7 +129,7 @@ TEXTS: dict[str, Promise] = {
     "account_invite_body": pgettext_lazy("email", "{actor} invited you to {app}."),
     "account_invite_choose_password": pgettext_lazy(
         "email",
-        'To get started, set a password using the button below. For security, the link is only valid for a limited time; you can request a new one at any time with "Forgot your password?" on the sign-in page.',
+        'To get started, set a password using the button below. For security, the link only works until {until}; you can request a new one at any time with "Forgot your password?" on the sign-in page.',
     ),
     "account_invite_sign_in": pgettext_lazy(
         "email", "Sign in with this email address and the password you got from {actor}."
@@ -145,7 +145,7 @@ TEXTS: dict[str, Promise] = {
     ),
     "password_reset_validity": pgettext_lazy(
         "email",
-        "For security, the link is only valid for a limited time and works once. If you didn't ask for this, ignore this email; your password stays as it is.",
+        "For security, the link works once and only until {until}. If you didn't ask for this, ignore this email; your password stays as it is.",
     ),
     "password_reset_button": pgettext_lazy("email", "Choose new password"),
 }

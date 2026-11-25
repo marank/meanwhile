@@ -47,15 +47,16 @@ async function onChange(event: Event) {
         <img v-if="image" :src="image" alt="" class="max-h-full max-w-full object-contain" />
         <template v-else>{{ emptyLabel }}</template>
       </div>
-      <div>
-        <input
-          type="file"
-          accept="image/*"
-          :aria-labelledby="labelId"
-          class="block text-sm text-gray-600"
-          @change="onChange"
-        />
-        <button v-if="image" type="button" class="mt-2 text-sm text-red-600 hover:underline" @click="image = null">
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- A button of our own instead of the browser's file field ("Choose file / No file chosen"),
+             which can't be styled; the field stays, invisible, for the keyboard and screen readers. -->
+        <label
+          class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-sm text-gray-700 focus-within:ring-2 focus-within:ring-blue-500 hover:bg-hover"
+        >
+          <input type="file" accept="image/*" :aria-labelledby="labelId" class="sr-only" @change="onChange" />
+          {{ image ? $t('app.changeImage') : $t('app.chooseImage') }}
+        </label>
+        <button v-if="image" type="button" class="text-sm text-red-600 hover:underline" @click="image = null">
           {{ removeLabel }}
         </button>
       </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import * as api from '@/api'
@@ -15,6 +15,7 @@ import { useSettingsStore } from '@/stores/settings'
 const props = defineProps<{ resetKey?: string; invite?: boolean }>()
 
 const settings = useSettingsStore()
+const rulesId = useId()
 const auth = useAuthStore()
 const router = useRouter()
 const { t } = useI18n()
@@ -78,8 +79,10 @@ async function submit() {
             autocomplete="new-password"
             required
             minlength="8"
+            :aria-describedby="rulesId"
             class="w-full px-3 py-2 border border-line rounded-lg"
           />
+          <span :id="rulesId" class="mt-1 block text-xs text-gray-500">{{ $t('auth.passwordRules') }}</span>
         </div>
         <template v-else>
           <p class="text-sm text-gray-600">{{ $t('auth.resetRequestHelp') }}</p>
