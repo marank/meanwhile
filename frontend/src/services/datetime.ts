@@ -94,17 +94,19 @@ export function toTimeInputValue(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-const WORKDAY_START_HOUR = 9
+/** The hour the day starts at for a user who hasn't chosen one (User.day_start). */
+export const DEFAULT_DAY_START = 9
 const LAST_START_HOUR = 23
 
 /**
  * When a new event on `day` starts if only the day was picked (a click on it in the month view, the
- * agenda's "new event"): at the start of the working day, or today at the next full hour after that.
+ * agenda's "new event"): when the user's day starts (`dayStart`, an hour), or today at the next
+ * full hour after that.
  */
-export function newEventStart(day: Date, now = new Date()): Date {
-  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), WORKDAY_START_HOUR)
+export function newEventStart(day: Date, dayStart = DEFAULT_DAY_START, now = new Date()): Date {
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), dayStart)
   if (toDateInputValue(day) === toDateInputValue(now)) {
-    start.setHours(Math.min(Math.max(WORKDAY_START_HOUR, now.getHours() + 1), LAST_START_HOUR))
+    start.setHours(Math.min(Math.max(dayStart, now.getHours() + 1), LAST_START_HOUR))
   }
   return start
 }

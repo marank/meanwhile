@@ -9,6 +9,8 @@ import EventModal from '@/components/event/EventModal.vue'
 import { ALL_CALENDARS, useCalendarStore } from '@/stores/calendars'
 import { useEventStore } from '@/stores/events'
 import { useOverviewStore } from '@/stores/overview'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 import { seriesOccurrence, type OccurrenceRef } from '@/services/occurrences'
 import { parseCalendarQuery } from '@/services/calendarUrl'
 import { useCalendarDisplay } from '@/composables/useCalendarDisplay'
@@ -33,6 +35,7 @@ const route = useRoute()
 const calendarStore = useCalendarStore()
 const eventStore = useEventStore()
 const overviewStore = useOverviewStore()
+const { dayStart } = storeToRefs(useAuthStore())
 
 // The URL decides what is shown: /calendar/all, /calendar/<id-or-readable-path> or /calendar/folder/<id>.
 // /calendar alone (opening the app) shows what was shown last, or else the first calendar; null meanwhile.
@@ -199,6 +202,7 @@ const calendarStyle = computed(() => ({
         <CalendarAgenda
           v-if="listMode"
           ref="agendaRef"
+          :day-start="dayStart"
           :occurrences="eventStore.occurrences"
           :range-start="listMonth"
           :range-end="listEnd"
@@ -210,6 +214,7 @@ const calendarStyle = computed(() => ({
         />
         <CalendarWeekStack
           v-else-if="stackMode"
+          :day-start="dayStart"
           :occurrences="eventStore.occurrences"
           :week-start="stackStart"
           :hidden-days="hiddenDays"
@@ -222,6 +227,7 @@ const calendarStyle = computed(() => ({
         <CalendarGrid
           v-else
           ref="gridRef"
+          :day-start="dayStart"
           :occurrences="eventStore.occurrences"
           :color-of="eventColor"
           :display="displaySettings"

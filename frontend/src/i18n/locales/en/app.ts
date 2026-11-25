@@ -44,6 +44,8 @@ export default {
   dateTime: 'Date & time',
   timeFormat: 'Time format',
   dateFormat: 'Date format',
+  dayStart: 'Day starts at',
+  dayStartHelp: 'New events on a day picked in the month view or the list start at this time at the earliest.',
   formatAuto: 'Automatic (browser locale)',
   format24h: '24-hour',
   format12h: '12-hour',

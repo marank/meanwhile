@@ -78,14 +78,15 @@ describe('formatTimeAgo', () => {
 describe('newEventStart', () => {
   const at = (hour: number, minute = 0) => new Date(2026, 10, 25, hour, minute)
 
-  it('starts other days at the start of the working day', () => {
-    expect(newEventStart(new Date(2026, 10, 26), at(14, 20))).toEqual(new Date(2026, 10, 26, 9))
-    expect(newEventStart(new Date(2026, 10, 24), at(14, 20))).toEqual(new Date(2026, 10, 24, 9))
+  it('starts other days when the day starts, at nine unless the user chose another hour', () => {
+    expect(newEventStart(new Date(2026, 10, 26), undefined, at(14, 20))).toEqual(new Date(2026, 10, 26, 9))
+    expect(newEventStart(new Date(2026, 10, 24), 7, at(14, 20))).toEqual(new Date(2026, 10, 24, 7))
   })
 
-  it('starts today at the next full hour, not before the working day and still today', () => {
-    expect(newEventStart(new Date(2026, 10, 25), at(14, 20))).toEqual(at(15))
-    expect(newEventStart(new Date(2026, 10, 25), at(6, 30))).toEqual(at(9))
-    expect(newEventStart(new Date(2026, 10, 25), at(23, 30))).toEqual(at(23))
+  it('starts today at the next full hour, not before the day starts and still today', () => {
+    expect(newEventStart(new Date(2026, 10, 25), 9, at(14, 20))).toEqual(at(15))
+    expect(newEventStart(new Date(2026, 10, 25), 9, at(6, 30))).toEqual(at(9))
+    expect(newEventStart(new Date(2026, 10, 25), 6, at(5, 30))).toEqual(at(6))
+    expect(newEventStart(new Date(2026, 10, 25), 9, at(23, 30))).toEqual(at(23))
   })
 })

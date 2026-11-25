@@ -53,7 +53,10 @@ class CustomUserAdmin(UserAdmin[models.User]):
             _("Permissions"),
             {"fields": ("is_admin", "is_superuser", "is_active", "groups")},
         ),
-        (_("Preferences"), {"fields": ("language", "timezone", "time_format", "date_format", "email_notifications")}),
+        (
+            _("Preferences"),
+            {"fields": ("language", "timezone", "time_format", "date_format", "day_start", "email_notifications")},
+        ),
         (_("Important dates"), {"fields": ("last_login", "date_joined", "created_at", "updated_at")}),
     )
     add_fieldsets = (

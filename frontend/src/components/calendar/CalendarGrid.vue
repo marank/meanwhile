@@ -36,6 +36,8 @@ const props = defineProps<{
   initialView: GridViewType
   initialDate?: Date
   canCreate: boolean
+  /** The hour the user's day starts, where a new event on a picked day begins (User.day_start). */
+  dayStart?: number
 }>()
 
 const emit = defineEmits<{
@@ -143,7 +145,8 @@ const calendarOptions = computed(() => ({
   dayLaneClass: (info: { dow: number; isToday: boolean }) => `${dayCellClass(info)} calendar-day-lane`,
   datesSet: handleDatesSet,
   // A day of the month view comes at midnight; a slot of the week view at its time.
-  dateClick: (info: DateClickInfo) => emit('create', info.allDay ? newEventStart(info.date) : info.date),
+  dateClick: (info: DateClickInfo) =>
+    emit('create', info.allDay ? newEventStart(info.date, props.dayStart) : info.date),
   selectable: props.canCreate,
   selectMirror: props.canCreate,
   select: (info: DateSelectInfo) => {

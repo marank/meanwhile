@@ -56,6 +56,8 @@ class User(UUIDModel, TimestampedModel, AbstractUser):
         choices=[("auto", "auto"), ("dmy", "dmy"), ("mdy", "mdy"), ("ymd", "ymd")],
         default="auto",
     )
+    # The hour the user's day starts (0-23): new events on a day picked as a whole start then.
+    day_start = models.PositiveSmallIntegerField(default=9)
     # IANA zone of the user's browser, kept current by the app; empty until first seen.
     # Times that clients send without a zone ("floating") are read in it.
     timezone = models.CharField(max_length=64, blank=True, default="")

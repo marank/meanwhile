@@ -18,6 +18,8 @@ const props = defineProps<{
   /** The calendar's name, for lists that show several calendars; null when only one is shown. */
   calendarNameOf: ((occurrence: Occurrence) => string) | null
   canCreate: boolean
+  /** The hour the user's day starts, where a new event on a picked day begins (User.day_start). */
+  dayStart?: number
 }>()
 
 const emit = defineEmits<{
@@ -72,7 +74,7 @@ function times(entry: AgendaEntry): { main: string; sub?: string } {
 
 /** A new event starts today when the month shown has it, else on the month's first day. */
 function newEventDate(): Date {
-  return newEventStart(showsToday.value ? now.value : props.rangeStart, now.value)
+  return newEventStart(showsToday.value ? now.value : props.rangeStart, props.dayStart, now.value)
 }
 
 function isDeclined(occ: Occurrence): boolean {

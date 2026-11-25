@@ -7,6 +7,7 @@ import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import { useAction } from '@/composables/useAction'
 import { setLocale, type Locale } from '@/i18n'
+import { DEFAULT_DAY_START, formatTime } from '@/services/datetime'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, type ThemePreference } from '@/stores/theme'
 
@@ -39,12 +40,18 @@ const dateFormats = computed<SelectOption<User['date_format']>[]>(() => [
   { value: 'ymd', label: '2026-12-31' },
 ])
 
+// Every hour of the day, in the user's time format.
+const dayStarts = computed<SelectOption<number>[]>(() =>
+  Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatTime(new Date(2000, 0, 1, hour)) })),
+)
+
 const form = ref({
   displayName: auth.user?.display_name ?? '',
   language: locale.value as Locale,
   theme: theme.preference,
   timeFormat: auth.user?.time_format ?? ('auto' as User['time_format']),
   dateFormat: auth.user?.date_format ?? ('auto' as User['date_format']),
+  dayStart: auth.user?.day_start ?? DEFAULT_DAY_START,
 })
 
 const passwords = ref({ current: '', next: '' })
@@ -68,6 +75,7 @@ function save() {
         display_name: value.displayName,
         time_format: value.timeFormat,
         date_format: value.dateFormat,
+        day_start: value.dayStart,
         language: value.language,
       })
       setLocale(value.language)
@@ -157,6 +165,13 @@ function save() {
             <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.dateFormat') }}</span>
             <AppSelect v-model="form.dateFormat" :options="dateFormats" />
           </label>
+          <div>
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-gray-700">{{ $t('app.dayStart') }}</span>
+              <AppSelect v-model="form.dayStart" :options="dayStarts" />
+            </label>
+            <p class="mt-1 text-xs text-gray-500">{{ $t('app.dayStartHelp') }}</p>
+          </div>
         </div>
       </section>
     </div>

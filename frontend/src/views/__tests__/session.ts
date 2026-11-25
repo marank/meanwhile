@@ -15,6 +15,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     date_format: 'ymd',
     timezone: browserTimeZone(),
     language: 'en',
+    day_start: 9,
     ...overrides,
   } as User
 }

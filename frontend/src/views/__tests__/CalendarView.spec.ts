@@ -9,6 +9,7 @@ import { dialog, submitDialog } from '@/services/dialog'
 import { browserTimeZone } from '@/services/datetime'
 import { realtime } from '@/services/realtime'
 import { toasts } from '@/services/toast'
+import { useAuthStore } from '@/stores/auth'
 import { useCalendarStore } from '@/stores/calendars'
 import { useThemeStore } from '@/stores/theme'
 import { fakeBackend, reply, type FakeBackend } from '@/__tests__/fakeBackend'
@@ -24,6 +25,7 @@ import {
 import { event } from '@/components/event/__tests__/helpers'
 import CalendarView from '../CalendarView.vue'
 import { fullCalendar } from './fullCalendarStub'
+import { makeUser } from './session'
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- FullCalendar's callback arguments, built by hand. */
 
@@ -484,6 +486,13 @@ describe('CalendarView', () => {
       fullCalendar.options!.dateClick({ date: new Date(2026, 9, 21), allDay: true })
       await flushPromises()
       expect(modal(wrapper).props('defaultStart')).toEqual(new Date(2026, 9, 21, 9))
+      await click(wrapper, '.modal-cancel')
+      // Or when the user's day starts.
+      useAuthStore().user = makeUser({ day_start: 7 })
+      await flushPromises()
+      fullCalendar.options!.dateClick({ date: new Date(2026, 9, 21), allDay: true })
+      await flushPromises()
+      expect(modal(wrapper).props('defaultStart')).toEqual(new Date(2026, 9, 21, 7))
       await click(wrapper, '.modal-delete')
       expect(modal(wrapper).exists()).toBe(false)
       expect(eventRequests()).toHaveLength(before + 2)

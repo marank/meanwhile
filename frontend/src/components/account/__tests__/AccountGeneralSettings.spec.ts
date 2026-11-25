@@ -54,6 +54,7 @@ describe('account general settings', () => {
       'System',
       '24-hour',
       'Automatic (browser locale)',
+      '09:00',
     ])
     wrapper.unmount()
   })
@@ -64,6 +65,8 @@ describe('account general settings', () => {
     await choose(wrapper, 1, 'Dark')
     await choose(wrapper, 2, '12-hour')
     await choose(wrapper, 3, '2026-12-31')
+    // When the day starts, for new events on a picked day; the hours in the saved time format.
+    await choose(wrapper, 4, '07:00')
     await choose(wrapper, 0, 'Deutsch (Sie)')
     await buttonNamed(wrapper, 'Save').trigger('click')
     await flushPromises()
@@ -71,13 +74,23 @@ describe('account general settings', () => {
       display_name: 'Annie',
       time_format: '12h',
       date_format: 'ymd',
+      day_start: 7,
       language: 'de',
     })
+    expect(useAuthStore().dayStart).toBe(7)
     expect(useAuthStore().user!.display_name).toBe('Annie')
     expect(i18n.global.locale.value).toBe('de')
     expect(useThemeStore().preference).toBe('dark')
     expect(toastTexts()).toEqual([i18n.global.t('app.settingsSaved')])
     expect(toastTexts()[0]).not.toBe('Settings saved.')
+    wrapper.unmount()
+  })
+
+  it('explains what the day start is for', () => {
+    const wrapper = render()
+    expect(wrapper.text()).toContain(
+      'New events on a day picked in the month view or the list start at this time at the earliest.',
+    )
     wrapper.unmount()
   })
 

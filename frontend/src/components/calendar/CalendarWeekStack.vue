@@ -22,6 +22,8 @@ const props = defineProps<{
   weekendDays: number[]
   colorOf: (occurrence: Occurrence) => string
   canCreate: boolean
+  /** The hour the user's day starts, where a new event on a picked day begins (User.day_start). */
+  dayStart?: number
 }>()
 
 const emit = defineEmits<{
@@ -87,7 +89,7 @@ function isDeclined(occ: Occurrence): boolean {
 }
 
 function create(date: Date) {
-  if (props.canCreate) emit('create', newEventStart(date))
+  if (props.canCreate) emit('create', newEventStart(date, props.dayStart))
 }
 </script>
 

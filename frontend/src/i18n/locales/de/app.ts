@@ -47,6 +47,9 @@ const app: MessageSchema['app'] = {
   dateTime: 'Datum & Uhrzeit',
   timeFormat: 'Zeitformat',
   dateFormat: 'Datumsformat',
+  dayStart: 'Tagesbeginn',
+  dayStartHelp:
+    'Neue Termine an einem Tag, der in der Monatsansicht oder Liste gewählt wird, beginnen frühestens zu dieser Uhrzeit.',
   formatAuto: 'Automatisch (Browsersprache)',
   format24h: '24-Stunden',
   format12h: '12-Stunden',

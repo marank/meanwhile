@@ -72,6 +72,7 @@ class ProfileOut(UserOut):
     """The signed-in user, as /users/me and the login and signup answers (apps.core.headless_adapter) show them."""
 
     email_notifications: EmailNotifications
+    day_start: int
 
     @staticmethod
     def resolve_email_notifications(obj: User) -> dict[str, bool]:
@@ -85,6 +86,7 @@ class UserUpdate(Schema):
     date_format: DateFormat | None = None
     timezone: TimeZoneName | None = None
     language: Literal["en", "de", "de-informal"] | None = None
+    day_start: int | None = Field(None, ge=0, le=23)
     email_notifications: EmailNotificationsUpdate | None = None
 
 

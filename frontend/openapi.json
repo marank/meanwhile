@@ -3811,6 +3811,10 @@
           },
           "email_notifications": {
             "$ref": "#/components/schemas/EmailNotifications"
+          },
+          "day_start": {
+            "title": "Day Start",
+            "type": "integer"
           }
         },
         "required": [
@@ -3824,7 +3828,8 @@
           "timezone",
           "language",
           "created_at",
-          "email_notifications"
+          "email_notifications",
+          "day_start"
         ],
         "title": "ProfileOut",
         "type": "object"
@@ -3997,6 +4002,19 @@
               }
             ],
             "title": "Language"
+          },
+          "day_start": {
+            "anyOf": [
+              {
+                "maximum": 23,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Start"
           },
           "email_notifications": {
             "anyOf": [

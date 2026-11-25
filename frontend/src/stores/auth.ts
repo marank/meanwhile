@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import * as api from '@/api'
 import { i18n, isLocale, setLocale } from '@/i18n'
-import { browserTimeZone } from '@/services/datetime'
+import { browserTimeZone, DEFAULT_DAY_START } from '@/services/datetime'
 import { realtime } from '@/services/realtime'
 import { useCalendarStore } from './calendars'
 import { useEventStore } from './events'
@@ -16,6 +16,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!user.value)
   const isAdmin = computed(() => !!user.value?.is_admin)
+  /** The hour the user's day starts, where new events on a picked day begin. */
+  const dayStart = computed(() => user.value?.day_start ?? DEFAULT_DAY_START)
 
   // Live updates while signed in; signing out (or the session ending) closes the connection.
   watch(
@@ -128,5 +130,17 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = await api.updateProfile(data)
   }
 
-  return { user, isLoggedIn, isAdmin, init, prepareCsrf, login, register, logout, clearSession, updateProfile }
+  return {
+    user,
+    isLoggedIn,
+    isAdmin,
+    dayStart,
+    init,
+    prepareCsrf,
+    login,
+    register,
+    logout,
+    clearSession,
+    updateProfile,
+  }
 })

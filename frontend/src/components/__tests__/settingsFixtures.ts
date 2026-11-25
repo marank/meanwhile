@@ -53,6 +53,7 @@ export function user(overrides: Partial<api.User> = {}): api.User {
     date_format: 'auto',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     language: 'en',
+    day_start: 9,
     email_notifications: {
       invitations: true,
       responses: true,

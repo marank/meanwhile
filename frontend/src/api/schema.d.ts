@@ -1198,6 +1198,8 @@ export interface components {
        */
       created_at: string
       email_notifications: components['schemas']['EmailNotifications']
+      /** Day Start */
+      day_start: number
     }
     /** EmailNotificationsUpdate */
     EmailNotificationsUpdate: {
@@ -1230,6 +1232,8 @@ export interface components {
       timezone?: string | null
       /** Language */
       language?: ('en' | 'de' | 'de-informal') | null
+      /** Day Start */
+      day_start?: number | null
       email_notifications?: components['schemas']['EmailNotificationsUpdate'] | null
     }
     /** OverviewSettingsOut */
