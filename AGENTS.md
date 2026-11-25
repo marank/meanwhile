@@ -167,7 +167,8 @@ Checked against django-spa-defaults 1.8.0 (2026-11-21).
 - DOCKER-03: met with `docker/smoke-test` probing `/api/auth/v1/auth/session` for 401, allauth
   headless's counterpart of `/api/auth/me`.
 - BE-11: settled: `DEBUG` defaults to off, `config/env.py` refuses a weak `SECRET_KEY` without it.
-- BE-13: settled: allauth's emails go out through `mail.send` as jobs; `imip_reply` is a
+- BE-13: settled: allauth sends no emails of its own (`AccountAdapter.send_mail` drops them); the
+  password reset link is the app's own email, sent through `mail.send` as a job; `imip_reply` is a
   development command, not a request.
 - BE-14: settled: writes with follow-ups go through `services/` (approvals, members, approvers, users,
   occurrences, participants, comments, layout); views keep plain writes of their own object, whose
